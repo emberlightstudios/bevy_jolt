@@ -1,4 +1,4 @@
-use bevy_jolt::{JoltWorld, OBJECT_LAYER_MOVING, OBJECT_LAYER_NON_MOVING};
+use bevy_jolt::{CollisionLayers, JoltMotion, JoltWorld};
 use bevy::prelude::Vec3;
 
 fn main() {
@@ -9,10 +9,10 @@ fn main() {
     let box_body_id = jolt_world.create_box(
         Vec3::new(0.5, 0.5, 0.5),
         Vec3::new(-1.0, 3.0, 0.0),
-        OBJECT_LAYER_MOVING,
-        false,
+        CollisionLayers::MOVING,
+        JoltMotion::Dynamic,
     );
-    let capsule_body_id = jolt_world.create_capsule(0.5, 0.3, Vec3::new(1.0, 4.0, 0.0), OBJECT_LAYER_MOVING);
+    let capsule_body_id = jolt_world.create_capsule(0.5, 0.3, Vec3::new(1.0, 4.0, 0.0), CollisionLayers::MOVING);
 
     let fixed_delta_time = 1.0 / 60.0;
     let mut physics_step = 0;
@@ -73,8 +73,8 @@ fn main() {
     let wall_body_id = jolt_world.create_box(
         Vec3::new(1.0, 1.0, 0.2),
         Vec3::new(0.0, 2.0, -3.0),
-        OBJECT_LAYER_NON_MOVING,
-        true,
+        CollisionLayers::NON_MOVING,
+        JoltMotion::Static,
     );
     for _ in 0..60 {
         jolt_world.update(fixed_delta_time, 1);

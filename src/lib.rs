@@ -4,12 +4,16 @@
 //! body API, and the Bevy schedule wiring. New subsystems (character,
 //! vehicle, soft body, ...) get their own modules.
 
+mod body_sync;
 mod debug_draw;
+mod joint_sync;
 mod physics_world;
 mod plugin;
 
-pub use crate::debug_draw::{JoltDebugDraw, JoltDebugPlugin};
-pub use crate::physics_world::{BodySnapshot, JoltWorld, PhysicsShape, RayHit};
-pub use crate::plugin::{JoltPhysicsWorld, JoltPlugin};
-pub use jolt_sys::{OBJECT_LAYER_MOVING, OBJECT_LAYER_NON_MOVING};
+pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, PreviousBodyTransform};
+pub use crate::debug_draw::JoltDebugPlugin;
+pub use crate::joint_sync::{JointKind, JoltJoint, JoltJointId};
+pub use crate::physics_world::{BodySnapshot, CollisionLayers, JoltWorld, PhysicsShape, RayHit};
+pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStepConfig, step_physics_world};
+pub use jolt_sys::MAX_OBJECT_LAYERS;
 

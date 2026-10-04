@@ -19,30 +19,24 @@ const PLANE_NORMAL_COLOR: Color = Color::Srgba(RED);
 const PLANE_GRID_HALF_CELLS: i32 = 5;
 const PLANE_GRID_CELL_SIZE: f32 = 1.0;
 
-/// Draws all physics shapes with Bevy gizmos. Off by default: add the plugin,
-/// nothing appears until something inserts this resource.
-#[derive(Resource, Default)]
-pub struct JoltDebugDraw;
-
+/// Adds wireframe drawing of every physics shape. Drawing starts as soon as
+/// the plugin is added: no manual setup needed.
 pub struct JoltDebugPlugin;
 
 impl Plugin for JoltDebugPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<JoltDebugDraw>();
         app.add_systems(Update, draw_physics_shapes);
     }
 }
 
 fn draw_physics_shapes(
-    _debug_draw: Res<JoltDebugDraw>,
     physics_world: Res<JoltPhysicsWorld>,
     mut gizmos: Gizmos,
 ) {
 
-    for (body_id_raw, body_shape) in physics_world.physics_world.body_shapes().iter() {
-        let (body_position, body_rotation) =
-            physics_world.physics_world.body_full_transform(*body_id_raw);
-        let body_active = physics_world.physics_world.body_is_active(*body_id_raw);
+    for (body_id_raw, body_shape) in physics_world.body_shapes().iter() {
+        let (body_position, body_rotation) = physics_world.body_full_transform(*body_id_raw);
+        let body_active = physics_world.body_is_active(*body_id_raw);
         match *body_shape {
             PhysicsShape::Box { half_extents } => {
                 let debug_color = body_debug_color(body_active);

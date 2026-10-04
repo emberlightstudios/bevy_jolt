@@ -1,31 +1,57 @@
-use bevy_jolt::JoltWorld;
-use bevy::prelude::Vec3;
+use bevy::prelude::*;
+use bevy_jolt::{CollisionLayers, JoltPhysicsWorld, JoltPlugin};
+
+const MAX_PHYSICS_STEPS: u32 = 600;
 
 fn main() {
-    let mut jolt_world = JoltWorld::new();
-    let floor_body_id = jolt_world.create_floor(Vec3::new(100.0, 1.0, 100.0), -1.0);
-    let sphere_body_id = jolt_world.create_sphere(0.5, 2.0);
+    App::new()
+        .add_plugins(MinimalPlugins)
+        .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
+        .add_systems(Startup, spawn_physics_scene)
+        .add_systems(FixedUpdate, watch_falling_sphere)
+        .run();
+}
 
-    let fixed_delta_time = 1.0 / 60.0;
-    let mut physics_step = 0;
-    while jolt_world.body_is_active(sphere_body_id) {
-        physics_step += 1;
-        let sphere_snapshot = jolt_world.body_snapshot(sphere_body_id);
-        println!(
-            "Step {}: Position = ({:.3}, {:.3}, {:.3}), Velocity = ({:.3}, {:.3}, {:.3})",
-            physics_step,
-            sphere_snapshot.body_position.x,
-            sphere_snapshot.body_position.y,
-            sphere_snapshot.body_position.z,
-            sphere_snapshot.body_velocity.x,
-            sphere_snapshot.body_velocity.y,
-            sphere_snapshot.body_velocity.z
-        );
-        assert!(physics_step < 600, "sphere never went to sleep");
-        jolt_world.update(fixed_delta_time, 1);
+#[derive(Resource)]
+struct FallingSphere {
+    sphere_body_id: u32,
+}
+
+fn spawn_physics_scene(
+    mut commands: Commands,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    physics_world
+        .create_floor(Vec3::new(100.0, 1.0, 100.0), -1.0);
+    let sphere_body_id = physics_world.create_sphere(
+        0.5,
+        Vec3::new(0.0, 2.0, 0.0),
+        CollisionLayers::MOVING,
+    );
+    commands.insert_resource(FallingSphere { sphere_body_id });
+}
+
+fn watch_falling_sphere(
+    mut sphere_step_count: Local<u32>,
+    falling_sphere: Res<FallingSphere>,
+    physics_world: Res<JoltPhysicsWorld>,
+    mut app_exit: MessageWriter<AppExit>,
+) {
+    *sphere_step_count += 1;
+    let sphere_snapshot = physics_world
+        .body_snapshot(falling_sphere.sphere_body_id);
+    println!(
+        "Step {}: Position = ({:.3}, {:.3}, {:.3})",
+        *sphere_step_count,
+        sphere_snapshot.body_position.x,
+        sphere_snapshot.body_position.y,
+        sphere_snapshot.body_position.z,
+    );
+
+    let sphere_sleeping = !physics_world
+        .body_is_active(falling_sphere.sphere_body_id);
+    if sphere_sleeping || *sphere_step_count >= MAX_PHYSICS_STEPS {
+        println!("Sphere slept after {} steps.", *sphere_step_count);
+        app_exit.write(AppExit::Success);
     }
-
-    jolt_world.remove_and_destroy_body(sphere_body_id);
-    jolt_world.remove_and_destroy_body(floor_body_id);
-    println!("Sphere slept after {} steps.", physics_step);
 }

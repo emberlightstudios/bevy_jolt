@@ -1,14 +1,12 @@
 use bevy::prelude::*;
-use bevy_jolt::{JoltDebugDraw, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin, OBJECT_LAYER_MOVING};
+use bevy_jolt::{CollisionLayers, JoltDebugPlugin, JoltMotion, JoltPhysicsWorld, JoltPlugin};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(JoltPlugin)
+        .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
-        .insert_resource(JoltDebugDraw)
         .add_systems(Startup, spawn_physics_scene)
-        .add_systems(Update, step_physics_world)
         .run();
 }
 
@@ -29,25 +27,22 @@ fn spawn_physics_scene(
     ));
 
     physics_world
-        .physics_world
-        .create_plane(Vec3::Y, 0.0, 50.0, OBJECT_LAYER_MOVING);
-    physics_world.physics_world.create_box(
+        .create_plane(Vec3::Y, 0.0, 50.0, CollisionLayers::NON_MOVING);
+    physics_world.create_box(
         Vec3::splat(0.5),
         Vec3::new(-1.0, 3.0, 0.0),
-        OBJECT_LAYER_MOVING,
-        false,
+        CollisionLayers::MOVING,
+        JoltMotion::Dynamic,
     );
-    physics_world.physics_world.create_capsule(
+    physics_world.create_capsule(
         0.5,
         0.3,
         Vec3::new(1.0, 4.0, 0.0),
-        OBJECT_LAYER_MOVING,
+        CollisionLayers::MOVING,
     );
-    physics_world
-        .physics_world
-        .create_sphere(0.5, 5.0);
-}
-
-fn step_physics_world(mut physics_world: ResMut<JoltPhysicsWorld>) {
-    physics_world.physics_world.update(1.0 / 60.0, 1);
+    physics_world.create_sphere(
+        0.5,
+        Vec3::new(0.0, 5.0, 0.0),
+        CollisionLayers::MOVING,
+    );
 }
