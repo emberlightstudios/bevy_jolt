@@ -14,10 +14,10 @@ use jolt_sys::{
     bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
     bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_six_dof_slider,
     bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
-    bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_init, bjolt_kick_body,
-    bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body, bjolt_set_angular_velocity,
-    bjolt_set_linear_velocity, bjolt_set_velocity, bjolt_vehicle_drive,
-    bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_update,
+    bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_gravity_factor, bjolt_init,
+    bjolt_kick_body, bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body,
+    bjolt_set_angular_velocity, bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_velocity,
+    bjolt_vehicle_drive, bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_update,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -192,6 +192,7 @@ impl JoltWorld {
         spawn_position: Vec3,
         object_layer: u16,
         density_kg_per_m3: f32,
+        gravity_factor: f32,
     ) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_sphere(
@@ -202,6 +203,7 @@ impl JoltWorld {
                 spawn_position.z,
                 object_layer,
                 density_kg_per_m3,
+                gravity_factor,
             )
         };
         self.body_shapes
@@ -246,6 +248,7 @@ impl JoltWorld {
         object_layer: u16,
         motion: JoltMotion,
         density_kg_per_m3: f32,
+        gravity_factor: f32,
     ) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_box(
@@ -259,6 +262,7 @@ impl JoltWorld {
                 object_layer,
                 motion as u8,
                 density_kg_per_m3,
+                gravity_factor,
             )
         };
         self.body_shapes.insert(
@@ -302,6 +306,7 @@ impl JoltWorld {
         spawn_position: Vec3,
         object_layer: u16,
         density_kg_per_m3: f32,
+        gravity_factor: f32,
     ) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_capsule(
@@ -313,6 +318,7 @@ impl JoltWorld {
                 spawn_position.z,
                 object_layer,
                 density_kg_per_m3,
+                gravity_factor,
             )
         };
         self.body_shapes.insert(
@@ -332,6 +338,7 @@ impl JoltWorld {
         spawn_position: Vec3,
         object_layer: u16,
         density_kg_per_m3: f32,
+        gravity_factor: f32,
     ) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_cylinder(
@@ -343,6 +350,7 @@ impl JoltWorld {
                 spawn_position.z,
                 object_layer,
                 density_kg_per_m3,
+                gravity_factor,
             )
         };
         self.body_shapes.insert(
@@ -363,6 +371,7 @@ impl JoltWorld {
         spawn_position: Vec3,
         object_layer: u16,
         density_kg_per_m3: f32,
+        gravity_factor: f32,
     ) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_tapered_cylinder(
@@ -375,6 +384,7 @@ impl JoltWorld {
                 spawn_position.z,
                 object_layer,
                 density_kg_per_m3,
+                gravity_factor,
             )
         };
         self.body_shapes.insert(
@@ -396,6 +406,7 @@ impl JoltWorld {
         spawn_position: Vec3,
         object_layer: u16,
         density_kg_per_m3: f32,
+        gravity_factor: f32,
     ) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_tapered_capsule(
@@ -408,6 +419,7 @@ impl JoltWorld {
                 spawn_position.z,
                 object_layer,
                 density_kg_per_m3,
+                gravity_factor,
             )
         };
         self.body_shapes.insert(
@@ -944,6 +956,18 @@ impl JoltWorld {
 
     pub fn body_is_active(&self, body_id_raw: u32) -> bool {
         unsafe { bjolt_body_is_active(self.world_ptr, body_id_raw) }
+    }
+
+    /// Live gravity multiplier for one body (1 = normal). Reads the motion
+    /// properties, so it reflects both the spawn value and later sets.
+    pub fn body_gravity_factor(&self, body_id_raw: u32) -> f32 {
+        unsafe { bjolt_gravity_factor(self.world_ptr, body_id_raw) }
+    }
+
+    /// Changes the gravity multiplier on a live body (0 floats, 2 pulls
+    /// double). Takes effect on the next step, no re-bake needed.
+    pub fn set_body_gravity_factor(&mut self, body_id_raw: u32, gravity_factor: f32) {
+        unsafe { bjolt_set_gravity_factor(self.world_ptr, body_id_raw, gravity_factor) }
     }
 
     pub fn body_snapshot(&self, body_id_raw: u32) -> BodySnapshot {

@@ -22,6 +22,7 @@ pub struct JoltBody {
     pub motion: JoltMotion,
     pub object_layer: u16,
     pub density_kg_per_m3: f32,
+    pub gravity_factor: f32,
 }
 
 /// Jolt motion type: static never moves, kinematic moves by velocity and
@@ -37,11 +38,15 @@ impl JoltBody {
     /// Default density: water-like, matches Jolt's own default.
     pub const DEFAULT_DENSITY: f32 = 1000.0;
 
+    /// Default gravity pull: full world gravity, matches Jolt's own default.
+    pub const DEFAULT_GRAVITY: f32 = 1.0;
+
     pub fn dynamic(object_layer: u16) -> Self {
         Self {
             motion: JoltMotion::Dynamic,
             object_layer,
             density_kg_per_m3: Self::DEFAULT_DENSITY,
+            gravity_factor: Self::DEFAULT_GRAVITY,
         }
     }
 
@@ -50,6 +55,7 @@ impl JoltBody {
             motion: JoltMotion::Static,
             object_layer,
             density_kg_per_m3: Self::DEFAULT_DENSITY,
+            gravity_factor: Self::DEFAULT_GRAVITY,
         }
     }
 
@@ -58,6 +64,7 @@ impl JoltBody {
             motion: JoltMotion::Kinematic,
             object_layer,
             density_kg_per_m3: Self::DEFAULT_DENSITY,
+            gravity_factor: Self::DEFAULT_GRAVITY,
         }
     }
 
@@ -69,6 +76,18 @@ impl JoltBody {
             density_kg_per_m3
         );
         self.density_kg_per_m3 = density_kg_per_m3;
+        self
+    }
+
+    /// Scale world gravity for this body: 0 floats, 1 is normal, 2 pulls
+    /// twice as hard. Must be finite and non-negative.
+    pub fn with_gravity(mut self, gravity_factor: f32) -> Self {
+        assert!(
+            gravity_factor.is_finite() && gravity_factor >= 0.0,
+            "gravity factor must be non-negative, got {}",
+            gravity_factor
+        );
+        self.gravity_factor = gravity_factor;
         self
     }
 }
@@ -172,12 +191,14 @@ pub fn spawn_jolt_body(
             body.object_layer,
             body.motion,
             body.density_kg_per_m3,
+            body.gravity_factor,
         ),
         PhysicsShape::Sphere { sphere_radius } => physics_world.create_sphere(
             sphere_radius,
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
+            body.gravity_factor,
         ),
         PhysicsShape::Capsule {
             capsule_half_height,
@@ -188,6 +209,7 @@ pub fn spawn_jolt_body(
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
+            body.gravity_factor,
         ),
         PhysicsShape::Cylinder {
             cylinder_half_height,
@@ -198,6 +220,7 @@ pub fn spawn_jolt_body(
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
+            body.gravity_factor,
         ),
         PhysicsShape::TaperedCylinder {
             tapered_half_height,
@@ -210,6 +233,7 @@ pub fn spawn_jolt_body(
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
+            body.gravity_factor,
         ),
         PhysicsShape::TaperedCapsule {
             tapered_half_height,
@@ -222,6 +246,7 @@ pub fn spawn_jolt_body(
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
+            body.gravity_factor,
         ),
         PhysicsShape::Plane {
             surface_normal,
