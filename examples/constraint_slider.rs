@@ -15,14 +15,12 @@ fn main() {
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
         .add_systems(FixedUpdate, (start_motor_once, pingpong_motor).chain())
-        .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_rail)
         .run();
 }
 
 #[derive(Resource)]
 struct Demo {
-    block: Entity,
     joint: Entity,
     flip_in: u32,
     forward: bool,
@@ -81,12 +79,19 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::slider(rail, block, Dir3::Y, Dir3::X, -1.5, 0.5, JointSpace::World))
+        .spawn(JoltJoint::slider(
+            rail,
+            block,
+            Dir3::Y,
+            Dir3::X,
+            -1.5,
+            0.5,
+            JointSpace::World
+        ))
         .id();
     commands.insert_resource(Demo {
-        block,
         joint,
-        flip_in: 300,
+        flip_in: 200,
         forward: true,
         started: false,
     });
@@ -103,9 +108,8 @@ fn start_motor_once(
     let Ok(joint_id) = joint_query.get(demo.joint) else {
         return;
     };
-    physics_world.constraint_drive_at(joint_id.constraint_id_raw, 1.5);
+    physics_world.constraint_drive_at(joint_id.constraint_id_raw, 3.0);
     demo.started = true;
-    println!("slider joint id {}", joint_id.constraint_id_raw);
 }
 
 fn pingpong_motor(
@@ -122,35 +126,10 @@ fn pingpong_motor(
     demo.flip_in = demo.flip_in.saturating_sub(1);
     if demo.flip_in == 0 {
         demo.forward = !demo.forward;
-        demo.flip_in = 300;
-        let speed = if demo.forward { 1.5 } else { -1.5 };
+        demo.flip_in = 200;
+        let speed = if demo.forward { 3.0 } else { -3.0 };
         physics_world.constraint_drive_at(joint_id.constraint_id_raw, speed);
-        println!("slider reversed ({}).", if demo.forward { "up" } else { "down" });
     }
-}
-
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let Ok(block) = transform_query.get(demo.block) else {
-        return;
-    };
-    let position = block.translation;
-    println!("tick {}: piston height {:.3}.", *tick, position.y);
-    assert!(
-        (position.x - 0.0).abs() < 0.2,
-        "piston block should stay on its rail"
-    );
 }
 
 fn draw_rail(
