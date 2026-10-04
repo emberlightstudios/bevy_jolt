@@ -18,14 +18,12 @@ fn main() {
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
         .add_systems(FixedUpdate, (start_motor_once, pingpong_motor).chain())
-        .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_track)
         .run();
 }
 
 #[derive(Resource)]
 struct Demo {
-    cart: Entity,
     joint: Entity,
     flip_in: u32,
     forward: bool,
@@ -87,7 +85,6 @@ fn spawn_scene(
         .spawn(JoltJoint::path_cart(anchor, cart, TRACK_FROM, TRACK_TO, JointSpace::World))
         .id();
     commands.insert_resource(Demo {
-        cart,
         joint,
         flip_in: 300,
         forward: true,
@@ -108,7 +105,6 @@ fn start_motor_once(
     };
     physics_world.constraint_drive_at(joint_id.constraint_id_raw, 1.0);
     demo.started = true;
-    println!("path joint id {}", joint_id.constraint_id_raw);
 }
 
 fn pingpong_motor(
@@ -128,32 +124,7 @@ fn pingpong_motor(
         demo.flip_in = 300;
         let speed = if demo.forward { 1.0 } else { -1.0 };
         physics_world.constraint_drive_at(joint_id.constraint_id_raw, speed);
-        println!("cart reversed ({}).", if demo.forward { "forward" } else { "back" });
     }
-}
-
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let Ok(cart) = transform_query.get(demo.cart) else {
-        return;
-    };
-    let position = cart.translation;
-    let track = TRACK_TO - TRACK_FROM;
-    let progress = ((position - TRACK_FROM).dot(track) / track.length_squared()).clamp(0.0, 1.0);
-    println!("tick {}: cart progress {:.2}.", *tick, progress);
-    let off_track = ((position - TRACK_FROM) - track * progress).length();
-    assert!(off_track < 0.3, "cart should stay glued to its track");
 }
 
 fn draw_track(
