@@ -36,7 +36,7 @@ fn spawn_scene(
 ) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 3.0, 10.0).looking_at(Vec3::new(0.0, 2.5, 0.0), Vec3::Y),
+        Transform::from_xyz(0.0, 3.0, 10.0).looking_at(Vec3::new(0.0, 2.5, 0.0), Dir3::Y),
     ));
     commands.spawn((
         DirectionalLight {
@@ -81,7 +81,7 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::slider(rail, block, Vec3::Y, Vec3::X, -1.5, 0.5, JointSpace::World))
+        .spawn(JoltJoint::slider(rail, block, Dir3::Y, Dir3::X, -1.5, 0.5, JointSpace::World))
         .id();
     commands.insert_resource(Demo {
         block,

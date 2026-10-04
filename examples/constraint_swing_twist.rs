@@ -38,7 +38,7 @@ fn spawn_scene(
 ) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 3.5, 10.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Vec3::Y),
+        Transform::from_xyz(0.0, 3.5, 10.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Dir3::Y),
     ));
     commands.spawn((
         DirectionalLight {
@@ -87,8 +87,8 @@ fn spawn_scene(
             shoulder,
             arm,
             ANCHOR,
-            Vec3::NEG_Y,
-            Vec3::X,
+            Dir3::NEG_Y,
+            Dir3::X,
             0.4,
             0.4,
             -0.5,

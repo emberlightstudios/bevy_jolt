@@ -1,11 +1,10 @@
-//! Cone (shoulder) joint: the mount cube sways slowly side to side while the
-//! ball hangs off it, swinging freely inside the cone. No kicks: the ball
-//! starts displaced and gravity plus the swaying mount do the rest.
+//! Cone (shoulder) joint: the ball's spin is driven directly with an
+//! oscillating angular velocity, swinging freely inside the cone. No kicks:
+//! the joint plus the driven spin do the rest.
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
-    JoltPlugin, JoltShape,
-    JointSpace,
+    CollisionLayers, JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId,
+    JoltPlugin, JoltShape, JointSpace,
 };
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 4.5, 0.0);
@@ -17,7 +16,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(FixedUpdate, sway_anchor.before(bevy_jolt::step_physics_world))
+        .add_systems(Update, sway_anchor)
         .add_systems(PostUpdate, draw_link)
         .run();
 }
@@ -73,15 +72,18 @@ fn spawn_scene(
         ))
         .id();
 
-    let dir = (ANCHOR - BALL_SPAWN).normalize();
+    let dir = Dir3::new(ANCHOR - BALL_SPAWN).expect("cone anchor and ball must differ");
     let ball = commands
         .spawn((
             Mesh3d(meshes.add(Sphere::new(0.3))),
             MeshMaterial3d(materials.add(Color::srgb(0.3, 0.8, 0.6))),
             Transform::from_translation(BALL_SPAWN)
-                .with_rotation(Quat::from_rotation_arc(dir, Vec3::Y)),
+                .with_rotation(Quat::from_rotation_arc(dir.as_vec3(), Vec3::Y)),
             JoltBody::dynamic(CollisionLayers::MOVING),
             JoltShape::sphere(0.3),
+            JoltAngularVelocity {
+                angular_velocity: Vec3::ZERO,
+            },
         ))
         .id();
     let joint = commands
@@ -89,7 +91,7 @@ fn spawn_scene(
             anchor,
             ball,
             ANCHOR,
-            Vec3::Y,
+            Dir3::Y,
             dir,
             0.35,
             JointSpace::World,
@@ -103,21 +105,23 @@ fn spawn_scene(
     });
 }
 
-/// Slow twist: oscillating torque around the ball's own up winds and unwinds
-/// the hanging ball.
+/// Slow twist: oscillating angular velocity around the ball's own up winds
+/// and unwinds the hanging ball. Direct velocity drive (not torque): the
+/// cone still caps the swing while the spin rate is exact.
 fn sway_anchor(
     mut demo: ResMut<Demo>,
-    body_query: Query<(&JoltBodyId, &Transform)>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-    fixed_time: Res<Time<Fixed>>,
+    mut body_query: Query<(&Transform, &mut JoltAngularVelocity)>,
+    render_time: Res<Time>,
 ) {
-    let Ok((ball_id, ball_transform)) = body_query.get(demo.ball) else {
+    let Ok((ball_transform, mut spin)) = body_query.get_mut(demo.ball) else {
         return;
     };
     demo.sway_ticks += 1;
-    let elapsed = demo.sway_ticks as f32 * fixed_time.delta().as_secs_f32();
-    let twist_torque = 2.5 * (0.942 * elapsed).cos();
-    physics_world.apply_force(ball_id.body_id_raw, Vec3::ZERO, ball_transform.up() * twist_torque);
+    // Fixed-hz phase would be nicer, but Update has no fixed delta: advance
+    // by wall clock so the oscillation rate is framerate-independent.
+    let elapsed = render_time.elapsed_secs();
+    let twist_rate = 2.5 * (0.942 * elapsed).cos();
+    spin.angular_velocity = ball_transform.up() * twist_rate;
 }
 
 fn draw_link(

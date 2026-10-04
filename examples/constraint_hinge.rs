@@ -38,7 +38,7 @@ fn spawn_scene(
 ) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 3.5, 10.0).looking_at(Vec3::new(0.5, 2.5, 0.0), Vec3::Y),
+        Transform::from_xyz(0.0, 3.5, 10.0).looking_at(Vec3::new(0.5, 2.5, 0.0), Dir3::Y),
     ));
     commands.spawn((
         DirectionalLight {
@@ -90,7 +90,7 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::hinge(post, panel, HINGE_POINT, Vec3::Z, Vec3::X, JointSpace::World))
+        .spawn(JoltJoint::hinge(post, panel, HINGE_POINT, Dir3::Z, Dir3::X, JointSpace::World))
         .id();
     commands.insert_resource(Demo {
         panel,

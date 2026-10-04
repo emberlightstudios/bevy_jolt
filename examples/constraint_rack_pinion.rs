@@ -39,7 +39,7 @@ fn spawn_scene(
 ) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 3.5, 10.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Vec3::Y),
+        Transform::from_xyz(0.0, 3.5, 10.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Dir3::Y),
     ));
     commands.spawn((
         DirectionalLight {
@@ -97,14 +97,14 @@ fn spawn_scene(
         ))
         .id();
     let hinge = commands
-        .spawn(JoltJoint::hinge(post, pinion, PINION_HINGE, Vec3::Z, Vec3::X, JointSpace::World))
+        .spawn(JoltJoint::hinge(post, pinion, PINION_HINGE, Dir3::Z, Dir3::X, JointSpace::World))
         .id();
     let slider = commands
-        .spawn(JoltJoint::slider(rail, rack, Vec3::Y, Vec3::X, -1.5, 0.5, JointSpace::World))
+        .spawn(JoltJoint::slider(rail, rack, Dir3::Y, Dir3::X, -1.5, 0.5, JointSpace::World))
         .id();
     let joint = commands
         .spawn(JoltJoint::rack_pinion(
-            pinion, rack, Vec3::Z, Vec3::Y, 1.0, hinge, slider, JointSpace::World,
+            pinion, rack, Dir3::Z, Dir3::Y, 1.0, hinge, slider, JointSpace::World,
         ))
         .id();
     commands.insert_resource(Demo {
