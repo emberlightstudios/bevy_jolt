@@ -1,12 +1,15 @@
 //! Rack-and-pinion (jack) joint: a spinning pinion drives a sliding rack.
-//! Gravity drags the rack down so the pinion keeps turning.
+//! Alternating kicks keep the jack pumping up and down.
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPlugin, JoltShape,
-    JointSpace,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
+    JoltShape, JointSpace,
 };
 
-const PINION_HINGE: Vec3 = Vec3::new(-1.0, 4.0, 0.0);
+const PINION_POS: Vec3 = Vec3::new(0.0, 3.0, 0.0);
+const RACK_POS: Vec3 = Vec3::new(0.7, 4.6, 0.0);
+const KICK_EVERY_N_TICKS: u32 = 100;
+const KICK_IMPULSE: f32 = 800.0;
 
 fn main() {
     App::new()
@@ -14,6 +17,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
+        .add_systems(FixedUpdate, kick_rack)
         .add_systems(PostUpdate, draw_link)
         .run();
 }
@@ -22,6 +26,8 @@ fn main() {
 struct Demo {
     rack: Entity,
     joint: Entity,
+    kick_in: u32,
+    push_down: bool,
 }
 
 fn spawn_scene(
@@ -31,7 +37,7 @@ fn spawn_scene(
 ) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 3.5, 10.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Dir3::Y),
+        Transform::from_xyz(5.0, 3.5, 10.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Dir3::Y),
     ));
     commands.spawn((
         DirectionalLight {
@@ -56,50 +62,103 @@ fn spawn_scene(
         },
     ));
 
-    let post = commands
+    // Invisible anchors: the hinge and slider each need a static side, but no
+    // mount geometry. The pinion spins about its own center on Z so the disc
+    // faces the camera; the rack rides alongside it with teeth meshed.
+    let face_rotation = Quat::from_rotation_x(core::f32::consts::FRAC_PI_2);
+    let hinge_anchor = commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.4, 1.0, 0.4))),
-            MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
-            Transform::from_xyz(-1.0, 5.0, 0.0),
-            JoltBody::fixed(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.2, 0.5, 0.2)),
+            Transform::from_translation(PINION_POS),
+            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.1)),
         ))
         .id();
     let pinion = commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 0.3))),
+            Mesh3d(meshes.add(Cylinder::new(0.5, 0.2))),
             MeshMaterial3d(materials.add(Color::srgb(0.8, 0.6, 0.2))),
-            Transform::from_xyz(-1.0, 3.5, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.5, 0.5, 0.15)),
+            Transform::from_translation(PINION_POS).with_rotation(face_rotation),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::cylinder(0.1, 0.5),
+            children![(
+                Mesh3d(meshes.add(Cuboid::new(0.12, 0.9, 0.22))),
+                MeshMaterial3d(materials.add(Color::srgb(0.15, 0.15, 0.2))),
+                Transform::IDENTITY,
+            )],
         ))
         .id();
-    let rail = commands
+    let slider_anchor = commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.5, 0.5, 0.5))),
-            MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
-            Transform::from_xyz(1.0, 4.2, 0.0),
-            JoltBody::fixed(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::splat(0.25)),
+            Transform::from_translation(RACK_POS + Vec3::new(0.0, 1.5, 0.)),
+            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.1)),
         ))
         .id();
     let rack = commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.4, 1.6, 0.4))),
+            Mesh3d(meshes.add(Cuboid::new(0.25, 1.8, 0.25))),
             MeshMaterial3d(materials.add(Color::srgb(0.3, 0.6, 0.9))),
-            Transform::from_xyz(1.0, 2.6, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.2, 0.8, 0.2)),
+            Transform::from_translation(RACK_POS),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::new(0.125, 0.9, 0.125)),
         ))
         .id();
     let hinge = commands
-        .spawn(JoltJoint::hinge(post, pinion, PINION_HINGE, Dir3::Z, Dir3::X, JointSpace::World))
+        .spawn(JoltJoint::hinge(
+            hinge_anchor,
+            pinion,
+            PINION_POS,
+            Dir3::Z,
+            Dir3::X,
+            JointSpace::World,
+        ))
         .id();
     let slider = commands
-        .spawn(JoltJoint::slider(rail, rack, Dir3::Y, Dir3::X, -1.5, 0.5, JointSpace::World))
+        .spawn(JoltJoint::slider(
+            slider_anchor,
+            rack,
+            Dir3::Y,
+            Dir3::X,
+            -1.5,
+            0.5,
+            JointSpace::World,
+        ))
         .id();
     let joint = commands
         .spawn(JoltJoint::rack_pinion(
-            pinion, rack, Dir3::Z, Dir3::Y, 1.0, hinge, slider, JointSpace::World,
+            pinion,
+            rack,
+            Dir3::Z,
+            Dir3::Y,
+            1.0,
+            hinge,
+            slider,
+            JointSpace::World,
         ))
         .id();
-    commands.insert_resource(Demo { rack, joint });
+    commands.insert_resource(Demo {
+        rack,
+        joint,
+        kick_in: 60,
+        push_down: false,
+    });
+}
+
+fn kick_rack(mut demo: ResMut<Demo>, joint_query: Query<(), With<JoltJointId>>, mut commands: Commands) {
+    if joint_query.get(demo.joint).is_err() {
+        return;
+    }
+    demo.kick_in = demo.kick_in.saturating_sub(1);
+    if demo.kick_in == 0 {
+        let push = if demo.push_down {
+            Vec3::new(0.0, -KICK_IMPULSE, 0.0)
+        } else {
+            Vec3::new(0.0, KICK_IMPULSE, 0.0)
+        };
+        commands.trigger(JoltImpulse::linear(demo.rack, push));
+        demo.push_down = !demo.push_down;
+        demo.kick_in = KICK_EVERY_N_TICKS;
+    }
 }
 
 fn draw_link(

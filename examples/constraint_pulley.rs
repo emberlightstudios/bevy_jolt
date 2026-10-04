@@ -1,16 +1,18 @@
 //! Pulley (elevator) joint: two weights share one rope, so one rises as the
-//! other falls. The heavier weight sinks and drags the lighter one up.
+//! other falls. Alternating kicks keep the elevator shuttling.
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPlugin, JoltShape,
-    JointSpace,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
+    JoltShape, JointSpace,
 };
 
 const FIXED1: Vec3 = Vec3::new(-1.0, 6.0, 0.0);
 const FIXED2: Vec3 = Vec3::new(1.0, 6.0, 0.0);
 const BODY1_SPAWN: Vec3 = Vec3::new(-1.0, 4.0, 0.0);
 const BODY2_SPAWN: Vec3 = Vec3::new(1.0, 4.0, 0.0);
+const KICK_EVERY_N_TICKS: u32 = 200;
+const KICK_IMPULSE: f32 = 800.0;
 
 fn main() {
     App::new()
@@ -18,6 +20,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
+        .add_systems(FixedUpdate, kick_weights)
         .add_systems(PostUpdate, draw_ropes)
         .run();
 }
@@ -27,6 +30,8 @@ struct Demo {
     weight1: Entity,
     weight2: Entity,
     joint: Entity,
+    kick_in: u32,
+    pull_first_down: bool,
 }
 
 fn spawn_scene(
@@ -67,7 +72,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.6, 0.6, 0.6))),
             MeshMaterial3d(materials.add(Color::srgb(0.9, 0.4, 0.2))),
             Transform::from_translation(BODY1_SPAWN),
-            JoltBody::dynamic(CollisionLayers::MOVING).with_density(2000.0),
+            JoltBody::dynamic(CollisionLayers::MOVING),
             JoltShape::box_shape(Vec3::splat(0.3)),
         ))
         .id();
@@ -98,7 +103,26 @@ fn spawn_scene(
         weight1,
         weight2,
         joint,
+        kick_in: 60,
+        pull_first_down: true,
     });
+}
+
+fn kick_weights(mut demo: ResMut<Demo>, joint_query: Query<(), With<JoltJointId>>, mut commands: Commands) {
+    if joint_query.get(demo.joint).is_err() {
+        return;
+    }
+    demo.kick_in = demo.kick_in.saturating_sub(1);
+    if demo.kick_in == 0 {
+        let (target, push) = if demo.pull_first_down {
+            (demo.weight1, Vec3::new(0.0, -KICK_IMPULSE, 0.0))
+        } else {
+            (demo.weight2, Vec3::new(0.0, -KICK_IMPULSE, 0.0))
+        };
+        commands.trigger(JoltImpulse::linear(target, push));
+        demo.pull_first_down = !demo.pull_first_down;
+        demo.kick_in = KICK_EVERY_N_TICKS;
+    }
 }
 
 
