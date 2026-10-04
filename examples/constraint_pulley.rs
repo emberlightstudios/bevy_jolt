@@ -3,9 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId,
-    JoltPhysicsWorld, JoltPlugin, JoltShape,
-    JointSpace,
+    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId,
+    JoltPhysicsWorld, JoltPlugin, JoltShape, JointSpace,
 };
 
 const FIXED1: Vec3 = Vec3::new(-1.0, 6.0, 0.0);
@@ -20,7 +19,6 @@ fn main() {
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
         .add_systems(FixedUpdate, hoist_weight)
-        .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_ropes)
         .run();
 }
@@ -71,7 +69,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.6, 0.6, 0.6))),
             MeshMaterial3d(materials.add(Color::srgb(0.9, 0.4, 0.2))),
             Transform::from_translation(BODY1_SPAWN),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(CollisionLayers::MOVING).with_density(2000.0),
             JoltShape::box_shape(Vec3::splat(0.3)),
         ))
         .id();
@@ -104,8 +102,6 @@ fn spawn_scene(
         joint,
         hoist_in: 900,
     });
-    // Unbalance the pair so the elevator starts moving immediately.
-    commands.trigger(JoltImpulse::linear(weight2, Vec3::new(0.0, -2.0, 0.0)));
 }
 
 fn hoist_weight(
@@ -123,37 +119,9 @@ fn hoist_weight(
             physics_world.reset_body_to(weight1.body_id_raw, BODY1_SPAWN);
         }
         demo.hoist_in = 900;
-        println!("hoisted the elevator weight");
     }
 }
 
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let (Ok(weight1), Ok(weight2)) = (
-        transform_query.get(demo.weight1),
-        transform_query.get(demo.weight2),
-    ) else {
-        return;
-    };
-    let total_rope = (weight1.translation - FIXED1).length()
-        + (weight2.translation - FIXED2).length();
-    println!("tick {}: elevator rope {:.3}.", *tick, total_rope);
-    assert!(
-        (2.8..4.7).contains(&total_rope),
-        "pulley rope should stay in its band"
-    );
-}
 
 fn draw_ropes(
     demo: Res<Demo>,

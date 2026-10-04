@@ -10,7 +10,7 @@ use bevy_jolt::{
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 5.0, 0.0);
 const BALL_SPAWN: Vec3 = Vec3::new(0.8, 3.6, 0.0);
-const KICK_EVERY_N_TICKS: u32 = 300;
+const KICK_EVERY_N_TICKS: u32 = 100;
 
 fn main() {
     App::new()
@@ -29,6 +29,7 @@ struct Demo {
     ball: Entity,
     joint: Entity,
     kick_in: u32,
+    next_kick: u8,
 }
 
 fn spawn_scene(
@@ -88,6 +89,7 @@ fn spawn_scene(
         ball,
         joint,
         kick_in: KICK_EVERY_N_TICKS,
+        next_kick: 0,
     });
 }
 
@@ -99,11 +101,11 @@ fn kick_ball(
     if joint_query.get(demo.joint).is_err() {
         return;
     }
-    demo.kick_in = demo.kick_in.saturating_sub(1);
     if demo.kick_in == 0 {
-        commands.trigger(JoltImpulse::linear(demo.ball, Vec3::new(0.0, 2000.0, 0.0)));
+        let target = if demo.next_kick == 0 { demo.ball } else { demo.anchor };
+        demo.next_kick = (demo.next_kick + 1) % 2;
+        commands.trigger(JoltImpulse::linear(target, Vec3::new(0.0, 2000.0, 0.0)));
         demo.kick_in = KICK_EVERY_N_TICKS;
-        println!("kicked the ball");
     }
 }
 
