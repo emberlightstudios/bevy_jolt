@@ -1,0 +1,14 @@
+[package]
+name = "bevy_jolt"
+version = "0.1.0"
+edition = "2021"
+description = "Safe Bevy integration for Jolt Physics (world management, body API, schedule wiring)"
+license = "MIT"
+
+[lib]
+name = "bevy_jolt"
+path = "src/lib.rs"
+
+[dependencies]
+jolt_sys = { path = "../jolt_sys" }
+bevy.workspace = true
