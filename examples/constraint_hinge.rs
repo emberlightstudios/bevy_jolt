@@ -3,7 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltShape, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
+    JoltPlugin, JoltShape,
 };
 
 const HINGE_POINT: Vec3 = Vec3::new(0.0, 3.2, 0.0);
@@ -14,8 +15,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(PreUpdate, create_joint_once)
-        .add_systems(FixedUpdate, pingpong_motor)
+        .add_systems(FixedUpdate, (start_motor_once, pingpong_motor).chain())
         .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_pin)
         .run();
@@ -23,11 +23,11 @@ fn main() {
 
 #[derive(Resource)]
 struct Demo {
-    post: Entity,
     panel: Entity,
-    joint: u32,
+    joint: Entity,
     flip_in: u32,
     forward: bool,
+    started: bool,
 }
 
 fn spawn_scene(
@@ -50,7 +50,8 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
         Text::new("hinge (flap)"),
@@ -67,95 +68,95 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.4, 3.5, 0.4))),
             MeshMaterial3d(materials.add(Color::srgb(0.45, 0.45, 0.5))),
             Transform::from_xyz(0.0, 1.75, -0.6),
-            JoltBody::fixed(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.2, 1.75, 0.2)),
+            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::new(0.2, 1.75, 0.2)),
         ))
         .id();
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.6))),
         MeshMaterial3d(materials.add(Color::srgb(0.45, 0.45, 0.5))),
         Transform::from_xyz(0.0, 3.2, -0.3),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(0.05, 0.05, 0.3)),
+        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltShape::box_shape(Vec3::new(0.05, 0.05, 0.3)),
     ));
     let panel = commands
         .spawn((
             Mesh3d(meshes.add(Cuboid::new(1.6, 2.4, 0.2))),
             MeshMaterial3d(materials.add(Color::srgb(0.6, 0.3, 0.8))),
             Transform::from_xyz(1.1, 3.2, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.8, 1.2, 0.1)),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::new(0.8, 1.2, 0.1)),
         ))
         .id();
+    let joint = commands
+        .spawn(JoltJoint::hinge(post, panel, HINGE_POINT, Vec3::Z, Vec3::X))
+        .id();
     commands.insert_resource(Demo {
-        post,
         panel,
-        joint: 0,
+        joint,
         flip_in: 300,
         forward: true,
+        started: false,
     });
 }
 
-fn create_joint_once(
+fn start_motor_once(
     mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
+    joint_query: Query<&JoltJointId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    if demo.joint != 0 {
+    if demo.started {
         return;
     }
-    let Ok(post) = body_query.get(demo.post) else {
+    let Ok(joint_id) = joint_query.get(demo.joint) else {
         return;
     };
-    let Ok(panel) = body_query.get(demo.panel) else {
-        return;
-    };
-    let joint = physics_world.create_hinge_constraint(
-        post.body_id_raw,
-        panel.body_id_raw,
-        HINGE_POINT,
-        Vec3::Z,
-        Vec3::X,
-    );
-    assert!(joint != 0, "hinge creation failed");
-    demo.joint = joint;
-    physics_world.constraint_drive_at(joint, 1.2);
-    println!("hinge joint id {joint}");
+    physics_world.constraint_drive_at(joint_id.constraint_id_raw, 1.2);
+    demo.started = true;
+    println!("hinge joint id {}", joint_id.constraint_id_raw);
 }
 
-fn pingpong_motor(mut demo: ResMut<Demo>, mut physics_world: ResMut<JoltPhysicsWorld>) {
-    if demo.joint == 0 {
+fn pingpong_motor(
+    mut demo: ResMut<Demo>,
+    joint_query: Query<&JoltJointId>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    if !demo.started {
         return;
     }
+    let Ok(joint_id) = joint_query.get(demo.joint) else {
+        return;
+    };
     demo.flip_in = demo.flip_in.saturating_sub(1);
     if demo.flip_in == 0 {
         demo.forward = !demo.forward;
         demo.flip_in = 300;
         let speed = if demo.forward { 1.2 } else { -1.2 };
-        physics_world
-            .constraint_drive_at(demo.joint, speed);
-        println!("hinge reversed ({}).", if demo.forward { "forward" } else { "back" });
+        physics_world.constraint_drive_at(joint_id.constraint_id_raw, speed);
+        println!(
+            "hinge reversed ({}).",
+            if demo.forward { "forward" } else { "back" }
+        );
     }
 }
 
 fn report(
     mut tick: Local<u32>,
     demo: Res<Demo>,
-    body_query: Query<&JoltBodyId>,
-    physics_world: Res<JoltPhysicsWorld>,
+    transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     *tick += 1;
     if *tick % 300 != 0 {
         return;
     }
-    let position = body_query
-        .get(demo.panel)
-        .map(|id| {
-            physics_world
-                .body_full_transform(id.body_id_raw)
-                .0
-        })
-        .expect("panel should own a Jolt body");
+    let Ok(panel) = transform_query.get(demo.panel) else {
+        return;
+    };
+    let position = panel.translation;
     let radius = (position - HINGE_POINT).length();
     println!("tick {}: hinge radius {:.3}.", *tick, radius);
     assert!(
@@ -168,8 +169,12 @@ fn report(
     );
 }
 
-fn draw_pin(demo: Res<Demo>, mut gizmos: Gizmos) {
-    if demo.joint == 0 {
+fn draw_pin(
+    demo: Res<Demo>,
+    joint_query: Query<(), With<JoltJointId>>,
+    mut gizmos: Gizmos,
+) {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     gizmos.line(

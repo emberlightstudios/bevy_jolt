@@ -1,10 +1,10 @@
 //! Rack-and-pinion (jack) joint: a spinning pinion drives a sliding rack.
 //! Gravity drags the rack down so the pinion keeps turning; every 15s the
 //! rack gets hoisted back up to loop.
-
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltShape, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin,
+    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
+    JoltPlugin, JoltShape,
 };
 
 const PINION_HINGE: Vec3 = Vec3::new(-1.0, 4.0, 0.0);
@@ -16,7 +16,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(PreUpdate, create_joint_once)
+        .add_systems(FixedUpdate, announce_joint_once)
         .add_systems(FixedUpdate, hoist_rack)
         .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_link)
@@ -25,12 +25,10 @@ fn main() {
 
 #[derive(Resource)]
 struct Demo {
-    post: Entity,
-    pinion: Entity,
-    rail: Entity,
     rack: Entity,
-    joint: u32,
+    joint: Entity,
     hoist_in: u32,
+    announced: bool,
 }
 
 fn spawn_scene(
@@ -97,80 +95,48 @@ fn spawn_scene(
             JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.2, 0.8, 0.2)),
         ))
         .id();
+    let hinge = commands
+        .spawn(JoltJoint::hinge(post, pinion, PINION_HINGE, Vec3::Z, Vec3::X))
+        .id();
+    let slider = commands
+        .spawn(JoltJoint::slider(rail, rack, Vec3::Y, Vec3::X, -1.5, 0.5))
+        .id();
+    let joint = commands
+        .spawn(JoltJoint::rack_pinion(
+            pinion, rack, Vec3::Z, Vec3::Y, 1.0, hinge, slider,
+        ))
+        .id();
     commands.insert_resource(Demo {
-        post,
-        pinion,
-        rail,
         rack,
-        joint: 0,
+        joint,
         hoist_in: 900,
+        announced: false,
     });
 }
 
-fn create_joint_once(
-    mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    if demo.joint != 0 {
+fn announce_joint_once(mut demo: ResMut<Demo>, joint_query: Query<&JoltJointId>) {
+    if demo.announced {
         return;
     }
-    let Ok(post) = body_query.get(demo.post) else {
-        return;
-    };
-    let Ok(pinion) = body_query.get(demo.pinion) else {
-        return;
-    };
-    let Ok(rail) = body_query.get(demo.rail) else {
-        return;
-    };
-    let Ok(rack) = body_query.get(demo.rack) else {
-        return;
-    };
-    let world = &mut **physics_world;
-    let hinge = world.create_hinge_constraint(
-        post.body_id_raw,
-        pinion.body_id_raw,
-        PINION_HINGE,
-        Vec3::Z,
-        Vec3::X,
-    );
-    let slider = world.create_slider_constraint(
-        rail.body_id_raw,
-        rack.body_id_raw,
-        Vec3::Y,
-        Vec3::X,
-        -1.5,
-        0.5,
-    );
-    assert!(hinge != 0 && slider != 0, "rack sub-joints failed");
-    let joint = world.create_rack_pinion_constraint(
-        pinion.body_id_raw,
-        rack.body_id_raw,
-        Vec3::Z,
-        Vec3::Y,
-        1.0,
-        hinge,
-        slider,
-    );
-    assert!(joint != 0, "rack-pinion creation failed");
-    demo.joint = joint;
-    println!("rack-pinion joint id {joint} (hinge {hinge}, slider {slider})");
+    if let Ok(joint_id) = joint_query.get(demo.joint) {
+        println!("rack-pinion joint id {}", joint_id.constraint_id_raw);
+        demo.announced = true;
+    }
 }
 
 fn hoist_rack(
     mut demo: ResMut<Demo>,
     body_query: Query<&JoltBodyId>,
+    joint_query: Query<(), With<JoltJointId>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     demo.hoist_in = demo.hoist_in.saturating_sub(1);
     if demo.hoist_in == 0 {
         if let Ok(rack) = body_query.get(demo.rack) {
-            physics_world
-                .reset_body_to(rack.body_id_raw, RACK_SPAWN);
+            physics_world.reset_body_to(rack.body_id_raw, RACK_SPAWN);
         }
         demo.hoist_in = 900;
         println!("hoisted the rack");
@@ -180,34 +146,25 @@ fn hoist_rack(
 fn report(
     mut tick: Local<u32>,
     demo: Res<Demo>,
-    body_query: Query<&JoltBodyId>,
-    physics_world: Res<JoltPhysicsWorld>,
+    transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     *tick += 1;
     if *tick % 300 != 0 {
         return;
     }
-    let bodies = |entity: Entity| {
-        body_query
-            .get(entity)
-            .map(|id| {
-                physics_world
-                    .body_full_transform(id.body_id_raw)
-            })
-            .expect("demo entity should own a Jolt body")
+    let Ok(rack_transform) = transform_query.get(demo.rack) else {
+        return;
     };
-    let (rack_pos, _) = bodies(demo.rack);
-    let (_, pinion_rot) = bodies(demo.pinion);
-    let (_, angle) = pinion_rot.to_axis_angle();
     println!(
-        "tick {}: jack height {:.3}, pinion turned {:.2} rad.",
-        *tick, rack_pos.y, angle
+        "tick {}: jack height {:.3}.",
+        *tick, rack_transform.translation.y
     );
     assert!(
-        (rack_pos.x - 1.0).abs() < 0.25,
+        (rack_transform.translation.x - 1.0).abs() < 0.25,
         "rack should stay on its rail"
     );
 }
@@ -215,20 +172,18 @@ fn report(
 fn draw_link(
     demo: Res<Demo>,
     transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
     mut gizmos: Gizmos,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
-    let (Ok(pinion), Ok(rack)) = (
-        transform_query.get(demo.pinion),
-        transform_query.get(demo.rack),
-    ) else {
+    let Ok(rack) = transform_query.get(demo.rack) else {
         return;
     };
     gizmos.line(
-        pinion.translation,
-        rack.translation,
+        rack.translation + Vec3::new(0.0, 0.8, 0.0),
+        rack.translation - Vec3::new(0.0, 0.8, 0.0),
         Color::srgb(0.6, 0.9, 1.0),
     );
 }

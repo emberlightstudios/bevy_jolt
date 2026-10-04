@@ -22,8 +22,8 @@ fn main() {
 struct Demo {
     platform: Entity,
     ball: Entity,
-    platform_body: u32,
     drive_ticks: u32,
+    ready: bool,
 }
 fn spawn_scene(
     mut commands: Commands,
@@ -79,8 +79,8 @@ fn spawn_scene(
     commands.insert_resource(Demo {
         platform,
         ball,
-        platform_body: 0,
         drive_ticks: 0,
+        ready: false,
     });
 }
 
@@ -95,9 +95,7 @@ fn drive_platform(
     let Ok(platform_id) = body_query.get(demo.platform) else {
         return;
     };
-    if demo.platform_body == 0 {
-        demo.platform_body = platform_id.body_id_raw;
-    }
+    demo.ready = true;
     // Tick-counted time: advances exactly once per Fixed tick, immune to
     // Fixed-time elapsed quirks under load.
     demo.drive_ticks += 1;
@@ -111,41 +109,31 @@ fn drive_platform(
     );
 }
 
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    body_query: Query<&JoltBodyId>,
-    physics_world: Res<JoltPhysicsWorld>,
-) {
-    if demo.platform_body == 0 {
+fn report(mut tick: Local<u32>, demo: Res<Demo>, transform_query: Query<&Transform>) {
+    if !demo.ready {
         return;
     }
     *tick += 1;
     if *tick % 300 != 0 {
         return;
     }
-    let position = |entity: Entity| {
-        body_query
-            .get(entity)
-            .map(|id| {
-                physics_world
-                    .body_full_transform(id.body_id_raw)
-                    .0
-            })
-            .expect("demo entity should own a Jolt body")
+    let (Ok(platform), Ok(ball)) = (
+        transform_query.get(demo.platform),
+        transform_query.get(demo.ball),
+    ) else {
+        return;
     };
-    let platform = position(demo.platform);
-    let ball = position(demo.ball);
     println!(
         "tick {}: platform x={:.2}, ball at ({:.2}, {:.2}).",
-        *tick, platform.x, ball.x, ball.y
+        *tick, platform.translation.x, ball.translation.x, ball.translation.y
     );
     assert!(
-        platform.x.abs() < 2.2,
+        platform.translation.x.abs() < 2.2,
         "platform should stay on its sine track"
     );
     assert!(
-        (ball.y - 2.1).abs() < 0.5 && (ball.x - platform.x).abs() < 3.2,
+        (ball.translation.y - 2.1).abs() < 0.5
+            && (ball.translation.x - platform.translation.x).abs() < 3.2,
         "ball should ride the platform"
     );
 }

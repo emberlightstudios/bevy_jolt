@@ -1,10 +1,10 @@
 //! Gear joint: two discs hang off pivot posts, rotations coupled 2:1.
 //! A disc gets spun every 5s; watch the other counter-rotate twice as fast.
 //! Both discs also get a hinge each, which the gear needs as reference.
-
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltShape, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
+    JoltPlugin, JoltShape,
 };
 
 const HINGE1: Vec3 = Vec3::new(-1.0, 3.5, 0.0);
@@ -16,7 +16,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(PreUpdate, create_joint_once)
+        .add_systems(FixedUpdate, start_motor_once)
         .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_link)
         .run();
@@ -24,11 +24,11 @@ fn main() {
 
 #[derive(Resource)]
 struct Demo {
-    post1: Entity,
     disc1: Entity,
-    post2: Entity,
     disc2: Entity,
-    gear: u32,
+    hinge1: Entity,
+    gear: Entity,
+    started: bool,
 }
 
 fn spawn_scene(
@@ -95,94 +95,83 @@ fn spawn_scene(
             JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.6, 0.6, 0.15)),
         ))
         .id();
+    let hinge1 = commands
+        .spawn(JoltJoint::hinge(post1, disc1, HINGE1, Vec3::Z, Vec3::X))
+        .id();
+    let hinge2 = commands
+        .spawn(JoltJoint::hinge(post2, disc2, HINGE2, Vec3::Z, Vec3::X))
+        .id();
+    let gear = commands
+        .spawn(JoltJoint::gear(disc1, disc2, Vec3::Z, 2.0, hinge1, hinge2))
+        .id();
     commands.insert_resource(Demo {
-        post1,
         disc1,
-        post2,
         disc2,
-        gear: 0,
+        hinge1,
+        gear,
+        started: false,
     });
 }
 
-fn create_joint_once(
+fn start_motor_once(
     mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
+    joint_query: Query<&JoltJointId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    if demo.gear != 0 {
+    if demo.started {
         return;
     }
-    let Ok(post1) = body_query.get(demo.post1) else {
+    let (Ok(hinge_id), Ok(gear_id)) = (
+        joint_query.get(demo.hinge1),
+        joint_query.get(demo.gear),
+    ) else {
         return;
     };
-    let Ok(disc1) = body_query.get(demo.disc1) else {
-        return;
-    };
-    let Ok(post2) = body_query.get(demo.post2) else {
-        return;
-    };
-    let Ok(disc2) = body_query.get(demo.disc2) else {
-        return;
-    };
-    let world = &mut **physics_world;
-    let hinge1 = world.create_hinge_constraint(post1.body_id_raw, disc1.body_id_raw, HINGE1, Vec3::Z, Vec3::X);
-    let hinge2 = world.create_hinge_constraint(post2.body_id_raw, disc2.body_id_raw, HINGE2, Vec3::Z, Vec3::X);
-    assert!(hinge1 != 0 && hinge2 != 0, "gear hinge failed");
-    let gear = world.create_gear_constraint(
-        disc1.body_id_raw,
-        disc2.body_id_raw,
-        Vec3::Z,
-        2.0,
-        hinge1,
-        hinge2,
-    );
-    assert!(gear != 0, "gear creation failed");
-    demo.gear = gear;
     // Steady spin: the hinge motor drives disc1, the gear drags disc2 along.
-    world.constraint_drive_at(hinge1, 2.0);
-    println!("gear joint id {gear} (hinges {hinge1}, {hinge2})");
+    physics_world.constraint_drive_at(hinge_id.constraint_id_raw, 2.0);
+    demo.started = true;
+    println!("gear joint id {}", gear_id.constraint_id_raw);
 }
 
 fn report(
     mut tick: Local<u32>,
     demo: Res<Demo>,
-    body_query: Query<&JoltBodyId>,
-    physics_world: Res<JoltPhysicsWorld>,
+    transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
 ) {
-    if demo.gear == 0 {
+    if !demo.started || joint_query.get(demo.gear).is_err() {
         return;
     }
     *tick += 1;
     if *tick % 300 != 0 {
         return;
     }
-    let position = |entity: Entity| {
-        body_query
-            .get(entity)
-            .map(|id| {
-                physics_world
-                    .body_full_transform(id.body_id_raw)
-            })
-            .expect("demo entity should own a Jolt body")
+    let (Ok(disc1), Ok(disc2)) = (
+        transform_query.get(demo.disc1),
+        transform_query.get(demo.disc2),
+    ) else {
+        return;
     };
-    let (pos1, rot1) = position(demo.disc1);
-    let (pos2, _) = position(demo.disc2);
     // Twist around Z shows the coupling: equal and opposite, scaled by ratio.
-    let (axis, angle1) = rot1.to_axis_angle();
+    let (axis, angle1) = disc1.rotation.to_axis_angle();
     let signed = angle1 * axis.z.signum();
     println!(
         "tick {}: discs at y={:.3}, y={:.3}, disc1 twist {:.2} rad.",
-        *tick, pos1.y, pos2.y, signed
+        *tick, disc1.translation.y, disc2.translation.y, signed
     );
-    assert!(pos1.y > 1.5 && pos2.y > 1.5, "gear discs should hang on");
+    assert!(
+        disc1.translation.y > 1.5 && disc2.translation.y > 1.5,
+        "gear discs should hang on"
+    );
 }
 
 fn draw_link(
     demo: Res<Demo>,
     transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
     mut gizmos: Gizmos,
 ) {
-    if demo.gear == 0 {
+    if joint_query.get(demo.gear).is_err() {
         return;
     }
     let (Ok(disc1), Ok(disc2)) = (

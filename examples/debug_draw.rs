@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use bevy_jolt::{CollisionLayers, JoltDebugPlugin, JoltMotion, JoltPhysicsWorld, JoltPlugin};
+use bevy_jolt::{
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape,
+};
 
 fn main() {
     App::new()
@@ -10,10 +12,7 @@ fn main() {
         .run();
 }
 
-fn spawn_physics_scene(
-    mut commands: Commands,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
+fn spawn_physics_scene(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-6.0, 5.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -26,23 +25,24 @@ fn spawn_physics_scene(
         Transform::from_xyz(4.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    physics_world
-        .create_plane(Vec3::Y, 0.0, 50.0, CollisionLayers::NON_MOVING);
-    physics_world.create_box(
-        Vec3::splat(0.5),
-        Vec3::new(-1.0, 3.0, 0.0),
-        CollisionLayers::MOVING,
-        JoltMotion::Dynamic,
-    );
-    physics_world.create_capsule(
-        0.5,
-        0.3,
-        Vec3::new(1.0, 4.0, 0.0),
-        CollisionLayers::MOVING,
-    );
-    physics_world.create_sphere(
-        0.5,
-        Vec3::new(0.0, 5.0, 0.0),
-        CollisionLayers::MOVING,
-    );
+    commands.spawn((
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltShape::plane(Vec3::Y, 0.0),
+    ));
+    commands.spawn((
+        Transform::from_xyz(-1.0, 3.0, 0.0),
+        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltShape::box_shape(Vec3::splat(0.5)),
+    ));
+    commands.spawn((
+        Transform::from_xyz(1.0, 4.0, 0.0),
+        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltShape::capsule(0.5, 0.3),
+    ));
+    commands.spawn((
+        Transform::from_xyz(0.0, 5.0, 0.0),
+        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltShape::sphere(0.5),
+    ));
 }

@@ -102,24 +102,19 @@ fn rekick_pair(
 fn report(
     mut tick: Local<u32>,
     demo: Res<Demo>,
-    body_query: Query<&JoltBodyId>,
-    physics_world: Res<JoltPhysicsWorld>,
+    transform_query: Query<&Transform>,
 ) {
     *tick += 1;
     if *tick % 300 != 0 {
         return;
     }
-    let position = |entity: Entity| {
-        body_query
-            .get(entity)
-            .map(|id| {
-                physics_world
-                    .body_full_transform(id.body_id_raw)
-                    .0
-            })
-            .expect("demo entity should own a Jolt body")
+    let (Ok(bottom), Ok(top)) = (
+        transform_query.get(demo.bottom),
+        transform_query.get(demo.top),
+    ) else {
+        return;
     };
-    let gap = (position(demo.top) - position(demo.bottom)).length();
+    let gap = (top.translation - bottom.translation).length();
     println!("tick {}: weld gap {:.3}.", *tick, gap);
     assert!(
         (gap - 1.1).abs() < 0.15,

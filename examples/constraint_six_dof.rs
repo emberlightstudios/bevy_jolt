@@ -3,7 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltShape, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
+    JoltPlugin, JoltShape,
 };
 
 fn main() {
@@ -12,8 +13,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(PreUpdate, create_joint_once)
-        .add_systems(FixedUpdate, pingpong_motor)
+        .add_systems(FixedUpdate, (start_motor_once, pingpong_motor).chain())
         .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_rail)
         .run();
@@ -21,11 +21,11 @@ fn main() {
 
 #[derive(Resource)]
 struct Demo {
-    rail: Entity,
     block: Entity,
-    joint: u32,
+    joint: Entity,
     flip_in: u32,
     forward: bool,
+    started: bool,
 }
 
 fn spawn_scene(
@@ -48,7 +48,8 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
         Text::new("six-dof (piston)"),
@@ -65,7 +66,8 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.5, 0.5, 0.5))),
             MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
             Transform::from_xyz(0.0, 4.2, 0.0),
-            JoltBody::fixed(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::splat(0.25)),
+            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.25)),
         ))
         .id();
     let block = commands
@@ -73,51 +75,55 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.6, 0.6, 0.6))),
             MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.9))),
             Transform::from_xyz(0.0, 2.6, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::splat(0.3)),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.3)),
         ))
         .id();
+    let joint = commands
+        .spawn(JoltJoint::six_dof_slider(rail, block, -1.5, 0.5))
+        .id();
     commands.insert_resource(Demo {
-        rail,
         block,
-        joint: 0,
+        joint,
         flip_in: 300,
         forward: false,
+        started: false,
     });
 }
 
-fn create_joint_once(
+fn start_motor_once(
     mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
+    joint_query: Query<&JoltJointId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    if demo.joint != 0 {
+    if demo.started {
         return;
     }
-    let Ok(rail) = body_query.get(demo.rail) else {
+    let Ok(joint_id) = joint_query.get(demo.joint) else {
         return;
     };
-    let Ok(block) = body_query.get(demo.block) else {
-        return;
-    };
-    let joint = physics_world
-        .create_six_dof_slider(rail.body_id_raw, block.body_id_raw, -1.5, 0.5);
-    assert!(joint != 0, "six-dof creation failed");
-    demo.joint = joint;
-    physics_world.constraint_drive_at(joint, -1.5);
-    println!("six-dof joint id {joint}");
+    physics_world.constraint_drive_at(joint_id.constraint_id_raw, -1.5);
+    demo.started = true;
+    println!("six-dof joint id {}", joint_id.constraint_id_raw);
 }
 
-fn pingpong_motor(mut demo: ResMut<Demo>, mut physics_world: ResMut<JoltPhysicsWorld>) {
-    if demo.joint == 0 {
+fn pingpong_motor(
+    mut demo: ResMut<Demo>,
+    joint_query: Query<&JoltJointId>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    if !demo.started {
         return;
     }
+    let Ok(joint_id) = joint_query.get(demo.joint) else {
+        return;
+    };
     demo.flip_in = demo.flip_in.saturating_sub(1);
     if demo.flip_in == 0 {
         demo.forward = !demo.forward;
         demo.flip_in = 300;
         let speed = if demo.forward { 1.5 } else { -1.5 };
-        physics_world
-            .constraint_drive_at(demo.joint, speed);
+        physics_world.constraint_drive_at(joint_id.constraint_id_raw, speed);
         println!("six-dof reversed ({}).", if demo.forward { "up" } else { "down" });
     }
 }
@@ -125,24 +131,20 @@ fn pingpong_motor(mut demo: ResMut<Demo>, mut physics_world: ResMut<JoltPhysicsW
 fn report(
     mut tick: Local<u32>,
     demo: Res<Demo>,
-    body_query: Query<&JoltBodyId>,
-    physics_world: Res<JoltPhysicsWorld>,
+    transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     *tick += 1;
     if *tick % 300 != 0 {
         return;
     }
-    let position = body_query
-        .get(demo.block)
-        .map(|id| {
-            physics_world
-                .body_full_transform(id.body_id_raw)
-                .0
-        })
-        .expect("block should own a Jolt body");
+    let Ok(block) = transform_query.get(demo.block) else {
+        return;
+    };
+    let position = block.translation;
     println!("tick {}: 6-dof piston height {:.3}.", *tick, position.y);
     assert!(
         position.x.abs() < 0.2 && position.z.abs() < 0.2,
@@ -150,8 +152,12 @@ fn report(
     );
 }
 
-fn draw_rail(demo: Res<Demo>, mut gizmos: Gizmos) {
-    if demo.joint == 0 {
+fn draw_rail(
+    demo: Res<Demo>,
+    joint_query: Query<(), With<JoltJointId>>,
+    mut gizmos: Gizmos,
+) {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     gizmos.line(

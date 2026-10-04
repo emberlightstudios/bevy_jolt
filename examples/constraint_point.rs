@@ -3,7 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltShape, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin,
+    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
+    JoltPlugin, JoltShape,
 };
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 5.0, 0.0);
@@ -11,12 +12,11 @@ const BALL_SPAWN: Vec3 = Vec3::new(0.8, 3.6, 0.0);
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(PreUpdate, create_joint_once)
-        .add_systems(FixedUpdate, rekick_ball)
+        .add_systems(Startup, kick_ball_once)
+        .add_systems(FixedUpdate, (apply_kick_once, rekick_ball).chain())
         .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_link)
         .run();
@@ -26,7 +26,7 @@ fn main() {
 struct Demo {
     anchor: Entity,
     ball: Entity,
-    joint: u32,
+    joint: Entity,
     kick_in: u32,
 }
 
@@ -50,7 +50,8 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
         Text::new("point (ball-and-socket)"),
@@ -67,7 +68,8 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.4, 0.4, 0.4))),
             MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
             Transform::from_translation(ANCHOR),
-            JoltBody::fixed(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::splat(0.2)),
+            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.2)),
         ))
         .id();
     let ball = commands
@@ -75,56 +77,50 @@ fn spawn_scene(
             Mesh3d(meshes.add(Sphere::new(0.3))),
             MeshMaterial3d(materials.add(Color::srgb(0.9, 0.3, 0.5))),
             Transform::from_translation(BALL_SPAWN),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::sphere(0.3),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::sphere(0.3),
         ))
         .id();
+    let joint = commands.spawn(JoltJoint::point(anchor, ball, ANCHOR)).id();
     commands.insert_resource(Demo {
         anchor,
         ball,
-        joint: 0,
+        joint,
         kick_in: 600,
     });
 }
 
-fn create_joint_once(
-    mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
+fn kick_ball_once(demo: Res<Demo>, mut commands: Commands) {
+    commands.entity(demo.ball).insert(KickOnce);
+}
+
+#[derive(Component)]
+struct KickOnce;
+
+fn apply_kick_once(
+    mut commands: Commands,
+    kick_query: Query<(Entity, &JoltBodyId), With<KickOnce>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    if demo.joint != 0 {
-        return;
+    for (kick_entity, body_id) in &kick_query {
+        physics_world.kick_body(body_id.body_id_raw, Vec3::new(3.0, 0.5, 1.5));
+        commands.entity(kick_entity).remove::<KickOnce>();
     }
-    let Ok(anchor) = body_query.get(demo.anchor) else {
-        return;
-    };
-    let Ok(ball) = body_query.get(demo.ball) else {
-        return;
-    };
-    let joint = physics_world.create_point_constraint(
-        anchor.body_id_raw,
-        ball.body_id_raw,
-        ANCHOR,
-    );
-    assert!(joint != 0, "point joint creation failed");
-    demo.joint = joint;
-    physics_world
-        .kick_body(ball.body_id_raw, Vec3::new(3.0, 0.5, 1.5));
-    println!("point joint id {joint}");
 }
 
 fn rekick_ball(
     mut demo: ResMut<Demo>,
     body_query: Query<&JoltBodyId>,
+    joint_query: Query<(), With<JoltJointId>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     demo.kick_in = demo.kick_in.saturating_sub(1);
     if demo.kick_in == 0 {
         if let Ok(ball) = body_query.get(demo.ball) {
-            physics_world
-                .kick_body(ball.body_id_raw, Vec3::new(3.0, 0.5, 1.5));
+            physics_world.kick_body(ball.body_id_raw, Vec3::new(3.0, 0.5, 1.5));
         }
         demo.kick_in = 600;
         println!("re-kicked the pendulum");
@@ -132,30 +128,26 @@ fn rekick_ball(
 }
 
 fn report(
-    mut tick: Local<u32>,
+    mut tick_count: Local<u32>,
     demo: Res<Demo>,
-    body_query: Query<&JoltBodyId>,
-    physics_world: Res<JoltPhysicsWorld>,
+    transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
-    *tick += 1;
-    if *tick % 300 != 0 {
+    *tick_count += 1;
+    if *tick_count % 300 != 0 {
         return;
     }
-    let position = |entity: Entity| {
-        body_query
-            .get(entity)
-            .map(|id| {
-                physics_world
-                    .body_full_transform(id.body_id_raw)
-                    .0
-            })
-            .expect("demo entity should own a Jolt body")
+    let (Ok(anchor_transform), Ok(ball_transform)) = (
+        transform_query.get(demo.anchor),
+        transform_query.get(demo.ball),
+    ) else {
+        return;
     };
-    let radius = (position(demo.ball) - position(demo.anchor)).length();
-    println!("tick {}: ball-and-socket radius {:.3}.", *tick, radius);
+    let radius = (ball_transform.translation - anchor_transform.translation).length();
+    println!("tick {}: ball-and-socket radius {:.3}.", *tick_count, radius);
     assert!(
         (radius - 1.6).abs() < 0.2,
         "ball should hold its radius from the anchor"
@@ -165,20 +157,14 @@ fn report(
 fn draw_link(
     demo: Res<Demo>,
     transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
     mut gizmos: Gizmos,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
-    let (Ok(anchor), Ok(ball)) = (
-        transform_query.get(demo.anchor),
-        transform_query.get(demo.ball),
-    ) else {
+    let Ok(ball) = transform_query.get(demo.ball) else {
         return;
     };
-    gizmos.line(
-        anchor.translation,
-        ball.translation,
-        Color::srgb(1.0, 0.5, 0.7),
-    );
+    gizmos.line(ANCHOR, ball.translation, Color::srgb(1.0, 0.5, 0.7));
 }

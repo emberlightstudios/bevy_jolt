@@ -3,7 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltShape, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
+    JoltPlugin, JoltShape,
 };
 
 const TRACK_FROM: Vec3 = Vec3::new(-1.5, 3.5, 0.0);
@@ -15,8 +16,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(PreUpdate, create_joint_once)
-        .add_systems(FixedUpdate, pingpong_motor)
+        .add_systems(FixedUpdate, (start_motor_once, pingpong_motor).chain())
         .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_track)
         .run();
@@ -24,11 +24,11 @@ fn main() {
 
 #[derive(Resource)]
 struct Demo {
-    anchor: Entity,
     cart: Entity,
-    joint: u32,
+    joint: Entity,
     flip_in: u32,
     forward: bool,
+    started: bool,
 }
 
 fn spawn_scene(
@@ -51,7 +51,8 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
         Text::new("path (track cart)"),
@@ -68,7 +69,8 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.4, 0.4, 0.4))),
             MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
             Transform::from_xyz(-1.5, 4.5, 0.0),
-            JoltBody::fixed(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::splat(0.2)),
+            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.2)),
         ))
         .id();
     let cart = commands
@@ -76,55 +78,55 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.7, 0.7, 0.7))),
             MeshMaterial3d(materials.add(Color::srgb(0.7, 0.3, 0.9))),
             Transform::from_translation(TRACK_FROM),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::splat(0.35)),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.35)),
         ))
         .id();
+    let joint = commands
+        .spawn(JoltJoint::path_cart(anchor, cart, TRACK_FROM, TRACK_TO))
+        .id();
     commands.insert_resource(Demo {
-        anchor,
         cart,
-        joint: 0,
+        joint,
         flip_in: 300,
         forward: true,
+        started: false,
     });
 }
 
-fn create_joint_once(
+fn start_motor_once(
     mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
+    joint_query: Query<&JoltJointId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    if demo.joint != 0 {
+    if demo.started {
         return;
     }
-    let Ok(anchor) = body_query.get(demo.anchor) else {
+    let Ok(joint_id) = joint_query.get(demo.joint) else {
         return;
     };
-    let Ok(cart) = body_query.get(demo.cart) else {
-        return;
-    };
-    let joint = physics_world.create_path_cart(
-        anchor.body_id_raw,
-        cart.body_id_raw,
-        TRACK_FROM,
-        TRACK_TO,
-    );
-    assert!(joint != 0, "path cart creation failed");
-    demo.joint = joint;
-    physics_world.constraint_drive_at(joint, 1.0);
-    println!("path joint id {joint}");
+    physics_world.constraint_drive_at(joint_id.constraint_id_raw, 1.0);
+    demo.started = true;
+    println!("path joint id {}", joint_id.constraint_id_raw);
 }
 
-fn pingpong_motor(mut demo: ResMut<Demo>, mut physics_world: ResMut<JoltPhysicsWorld>) {
-    if demo.joint == 0 {
+fn pingpong_motor(
+    mut demo: ResMut<Demo>,
+    joint_query: Query<&JoltJointId>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    if !demo.started {
         return;
     }
+    let Ok(joint_id) = joint_query.get(demo.joint) else {
+        return;
+    };
     demo.flip_in = demo.flip_in.saturating_sub(1);
     if demo.flip_in == 0 {
         demo.forward = !demo.forward;
         demo.flip_in = 300;
         let speed = if demo.forward { 1.0 } else { -1.0 };
-        physics_world
-            .constraint_drive_at(demo.joint, speed);
+        physics_world.constraint_drive_at(joint_id.constraint_id_raw, speed);
         println!("cart reversed ({}).", if demo.forward { "forward" } else { "back" });
     }
 }
@@ -132,24 +134,20 @@ fn pingpong_motor(mut demo: ResMut<Demo>, mut physics_world: ResMut<JoltPhysicsW
 fn report(
     mut tick: Local<u32>,
     demo: Res<Demo>,
-    body_query: Query<&JoltBodyId>,
-    physics_world: Res<JoltPhysicsWorld>,
+    transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     *tick += 1;
     if *tick % 300 != 0 {
         return;
     }
-    let position = body_query
-        .get(demo.cart)
-        .map(|id| {
-            physics_world
-                .body_full_transform(id.body_id_raw)
-                .0
-        })
-        .expect("cart should own a Jolt body");
+    let Ok(cart) = transform_query.get(demo.cart) else {
+        return;
+    };
+    let position = cart.translation;
     let track = TRACK_TO - TRACK_FROM;
     let progress = ((position - TRACK_FROM).dot(track) / track.length_squared()).clamp(0.0, 1.0);
     println!("tick {}: cart progress {:.2}.", *tick, progress);
@@ -157,8 +155,12 @@ fn report(
     assert!(off_track < 0.3, "cart should stay glued to its track");
 }
 
-fn draw_track(demo: Res<Demo>, mut gizmos: Gizmos) {
-    if demo.joint == 0 {
+fn draw_track(
+    demo: Res<Demo>,
+    joint_query: Query<(), With<JoltJointId>>,
+    mut gizmos: Gizmos,
+) {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     gizmos.line(TRACK_FROM, TRACK_TO, Color::srgb(0.8, 0.5, 1.0));

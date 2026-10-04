@@ -3,7 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltShape, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin,
+    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId,
+    JoltPhysicsWorld, JoltPlugin, JoltShape,
 };
 
 const FIXED1: Vec3 = Vec3::new(-1.0, 6.0, 0.0);
@@ -17,8 +18,8 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(PreUpdate, create_joint_once)
-        .add_systems(FixedUpdate, hoist_weight)
+        .add_systems(Startup, kick_weight_once)
+        .add_systems(FixedUpdate, (apply_kick_once, hoist_weight).chain())
         .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_ropes)
         .run();
@@ -28,7 +29,7 @@ fn main() {
 struct Demo {
     weight1: Entity,
     weight2: Entity,
-    joint: u32,
+    joint: Entity,
     hoist_in: u32,
 }
 
@@ -52,7 +53,8 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
         Text::new("pulley (elevator)"),
@@ -69,7 +71,8 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.6, 0.6, 0.6))),
             MeshMaterial3d(materials.add(Color::srgb(0.9, 0.4, 0.2))),
             Transform::from_translation(BODY1_SPAWN),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::splat(0.3)),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.3)),
         ))
         .id();
     let weight2 = commands
@@ -77,63 +80,63 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.6, 0.6, 0.6))),
             MeshMaterial3d(materials.add(Color::srgb(0.2, 0.4, 0.9))),
             Transform::from_translation(BODY2_SPAWN),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::splat(0.3)),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.3)),
+        ))
+        .id();
+    let joint = commands
+        .spawn(JoltJoint::pulley(
+            weight1,
+            weight2,
+            BODY1_SPAWN,
+            FIXED1,
+            BODY2_SPAWN,
+            FIXED2,
+            1.0,
+            3.0,
+            4.5,
         ))
         .id();
     commands.insert_resource(Demo {
         weight1,
         weight2,
-        joint: 0,
+        joint,
         hoist_in: 900,
     });
 }
 
-fn create_joint_once(
-    mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
+fn kick_weight_once(demo: Res<Demo>, mut commands: Commands) {
+    commands.entity(demo.weight2).insert(KickOnce);
+}
+
+#[derive(Component)]
+struct KickOnce;
+
+fn apply_kick_once(
+    mut commands: Commands,
+    kick_query: Query<(Entity, &JoltBodyId), With<KickOnce>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    if demo.joint != 0 {
-        return;
+    for (kick_entity, body_id) in &kick_query {
+        // Unbalance the pair so the elevator starts moving immediately.
+        physics_world.kick_body(body_id.body_id_raw, Vec3::new(0.0, -2.0, 0.0));
+        commands.entity(kick_entity).remove::<KickOnce>();
     }
-    let Ok(weight1) = body_query.get(demo.weight1) else {
-        return;
-    };
-    let Ok(weight2) = body_query.get(demo.weight2) else {
-        return;
-    };
-    let joint = physics_world.create_pulley_constraint(
-        weight1.body_id_raw,
-        weight2.body_id_raw,
-        BODY1_SPAWN,
-        FIXED1,
-        BODY2_SPAWN,
-        FIXED2,
-        1.0,
-        3.0,
-        4.5,
-    );
-    assert!(joint != 0, "pulley creation failed");
-    demo.joint = joint;
-    // Unbalance the pair so the elevator starts moving immediately.
-    physics_world
-        .kick_body(weight2.body_id_raw, Vec3::new(0.0, -2.0, 0.0));
-    println!("pulley joint id {joint}");
 }
 
 fn hoist_weight(
     mut demo: ResMut<Demo>,
     body_query: Query<&JoltBodyId>,
+    joint_query: Query<(), With<JoltJointId>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     demo.hoist_in = demo.hoist_in.saturating_sub(1);
     if demo.hoist_in == 0 {
         if let Ok(weight1) = body_query.get(demo.weight1) {
-            physics_world
-                .reset_body_to(weight1.body_id_raw, BODY1_SPAWN);
+            physics_world.reset_body_to(weight1.body_id_raw, BODY1_SPAWN);
         }
         demo.hoist_in = 900;
         println!("hoisted the elevator weight");
@@ -143,28 +146,24 @@ fn hoist_weight(
 fn report(
     mut tick: Local<u32>,
     demo: Res<Demo>,
-    body_query: Query<&JoltBodyId>,
-    physics_world: Res<JoltPhysicsWorld>,
+    transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     *tick += 1;
     if *tick % 300 != 0 {
         return;
     }
-    let position = |entity: Entity| {
-        body_query
-            .get(entity)
-            .map(|id| {
-                physics_world
-                    .body_full_transform(id.body_id_raw)
-                    .0
-            })
-            .expect("demo entity should own a Jolt body")
+    let (Ok(weight1), Ok(weight2)) = (
+        transform_query.get(demo.weight1),
+        transform_query.get(demo.weight2),
+    ) else {
+        return;
     };
-    let total_rope =
-        (position(demo.weight1) - FIXED1).length() + (position(demo.weight2) - FIXED2).length();
+    let total_rope = (weight1.translation - FIXED1).length()
+        + (weight2.translation - FIXED2).length();
     println!("tick {}: elevator rope {:.3}.", *tick, total_rope);
     assert!(
         (2.8..4.7).contains(&total_rope),
@@ -175,9 +174,10 @@ fn report(
 fn draw_ropes(
     demo: Res<Demo>,
     transform_query: Query<&Transform>,
+    joint_query: Query<(), With<JoltJointId>>,
     mut gizmos: Gizmos,
 ) {
-    if demo.joint == 0 {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
     let (Ok(weight1), Ok(weight2)) = (
