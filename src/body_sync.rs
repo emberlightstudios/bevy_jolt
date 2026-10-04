@@ -258,6 +258,12 @@ pub fn spawn_jolt_body(
             body.object_layer,
         ),
     };
+    // Creation bakes identity rotation, so rotate the live body into the
+    // spawn pose before the first step. Non-identity only: saves an FFI
+    // round-trip for the common unrotated case.
+    if spawn_transform.rotation != Quat::IDENTITY {
+        physics_world.set_body_rotation(body_id_raw, spawn_transform.rotation);
+    }
     commands.entity(trigger_entity).insert((
         JoltBodyId { body_id_raw },
         PreviousBodyTransform {

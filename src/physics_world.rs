@@ -17,8 +17,8 @@ use jolt_sys::{
     bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_gravity_factor, bjolt_init,
     bjolt_kick_body, bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body,
     bjolt_set_angular_velocity, bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity,
-    bjolt_set_velocity, bjolt_vehicle_drive, bjolt_world_create_with_layers, bjolt_world_destroy,
-    bjolt_world_gravity, bjolt_world_update,
+    bjolt_set_rotation, bjolt_set_velocity, bjolt_vehicle_drive, bjolt_world_create_with_layers,
+    bjolt_world_destroy, bjolt_world_gravity, bjolt_world_update,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -926,6 +926,21 @@ impl JoltWorld {
                 angular_velocity.x,
                 angular_velocity.y,
                 angular_velocity.z,
+            )
+        }
+    }
+
+    /// Rotates a live body to a pose (spawn rotation fix-up, teleports).
+    /// Activates the body so the pose takes effect on the next step.
+    pub fn set_body_rotation(&mut self, body_id_raw: u32, body_rotation: Quat) {
+        unsafe {
+            bjolt_set_rotation(
+                self.world_ptr,
+                body_id_raw,
+                body_rotation.x,
+                body_rotation.y,
+                body_rotation.z,
+                body_rotation.w,
             )
         }
     }

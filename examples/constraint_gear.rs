@@ -3,6 +3,7 @@
 //! along at twice the rate, counter-rotating. Both discs also get a hinge
 //! each, which the gear needs as reference.
 use bevy::prelude::*;
+
 use bevy_jolt::{
     CollisionLayers, JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint,
     JoltPlugin, JoltShape, JointSpace,
@@ -58,46 +59,34 @@ fn spawn_scene(
         },
     ));
 
-    // No posts: each disc hinges directly to the floor (the fixed frame),
-    // so each hinge still has a static side and a spinning side. The visible
-    // disc is a child mesh: body sync overwrites the body's own rotation
-    // every tick, so a tip applied on the body would be wiped.
+    // Face-on discs: tip both physics and mesh 90° about X so the cylinder
+    // axis (Y) points at the camera (Z). Spawn rotation now reaches the
+    // physics body, so both stay tipped. Hinges, gear, and drive all run on
+    // Z to match the tipped axis.
+    let face_rotation = Quat::from_rotation_x(core::f32::consts::FRAC_PI_2);
     let disc1_mesh = meshes.add(Cylinder::new(DISC1_RADIUS, 0.15));
     let disc1_face = materials.add(Color::srgb(0.8, 0.7, 0.2));
     let disc1 = commands
         .spawn((
-            Transform::from_translation(DISC1_POS)
-                .with_rotation(Quat::from_rotation_x(
-                    core::f32::consts::FRAC_PI_2,
-                )),
+            Transform::from_translation(DISC1_POS).with_rotation(face_rotation),
             JoltBody::dynamic(CollisionLayers::MOVING),
-            JoltShape::sphere(DISC1_RADIUS),
+            JoltShape::cylinder(0.075, DISC1_RADIUS),
             JoltAngularVelocity {
                 angular_velocity: Vec3::Z * DRIVE_RATE,
             },
-            children![(
-                Mesh3d(disc1_mesh),
-                MeshMaterial3d(disc1_face),
-                Transform::from_rotation(Quat::from_rotation_x(
-                    core::f32::consts::FRAC_PI_2,
-                )),
-            )]
+            Mesh3d(disc1_mesh),
+            MeshMaterial3d(disc1_face),
         ))
         .id();
     let disc2_mesh = meshes.add(Cylinder::new(DISC2_RADIUS, 0.15));
     let disc2_face = materials.add(Color::srgb(0.2, 0.7, 0.8));
     let disc2 = commands
         .spawn((
-            Transform::from_translation(DISC2_POS),
+            Transform::from_translation(DISC2_POS).with_rotation(face_rotation),
             JoltBody::dynamic(CollisionLayers::MOVING),
-            JoltShape::sphere(DISC2_RADIUS),
-            children![(
-                Mesh3d(disc2_mesh),
-                MeshMaterial3d(disc2_face),
-                Transform::from_rotation(Quat::from_rotation_x(
-                    core::f32::consts::FRAC_PI_2,
-                )),
-            )]
+            JoltShape::cylinder(0.075, DISC2_RADIUS),
+            Mesh3d(disc2_mesh),
+            MeshMaterial3d(disc2_face),
         ))
         .id();
     let hinge1 = commands
