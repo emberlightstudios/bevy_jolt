@@ -78,7 +78,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Sphere::new(0.3))),
             MeshMaterial3d(materials.add(Color::srgb(0.3, 0.8, 0.6))),
             Transform::from_translation(BALL_SPAWN)
-                .with_rotation(Quat::from_rotation_arc(Vec3::Y, dir)),
+                .with_rotation(Quat::from_rotation_arc(dir, Vec3::Y)),
             JoltBody::dynamic(CollisionLayers::MOVING),
             JoltShape::sphere(0.3),
         ))
