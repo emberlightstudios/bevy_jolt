@@ -6,15 +6,15 @@
 use crate::body_sync::JoltMotion;
 use bevy::prelude::{Quat, Vec3};
 use jolt_sys::{
-    BJoltWorld, bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_state,
-    bjolt_body_transform, bjolt_car_bounds, bjolt_cast_ray, bjolt_constraint_drive_at,
+    BJoltWorld, bjolt_apply_force, bjolt_apply_impulse, bjolt_body_is_active, bjolt_body_remove_destroy,
+    bjolt_body_state, bjolt_body_transform, bjolt_car_bounds, bjolt_cast_ray, bjolt_constraint_drive_at,
     bjolt_create_box, bjolt_create_capsule, bjolt_create_cone_constraint, bjolt_create_demo_car,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
     bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_path_cart,
     bjolt_create_plane, bjolt_create_point_constraint, bjolt_create_pulley_constraint,
     bjolt_create_rack_pinion_constraint, bjolt_create_six_dof_slider, bjolt_create_sphere,
     bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint, bjolt_init, bjolt_kick_body,
-    bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body, bjolt_vehicle_drive,
+    bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body, bjolt_set_velocity, bjolt_vehicle_drive,
     bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_update,
 };
 
@@ -158,6 +158,7 @@ impl JoltWorld {
         sphere_radius: f32,
         spawn_position: Vec3,
         object_layer: u16,
+        density_kg_per_m3: f32,
     ) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_sphere(
@@ -167,6 +168,7 @@ impl JoltWorld {
                 spawn_position.y,
                 spawn_position.z,
                 object_layer,
+                density_kg_per_m3,
             )
         };
         self.body_shapes
@@ -210,6 +212,7 @@ impl JoltWorld {
         spawn_position: Vec3,
         object_layer: u16,
         motion: JoltMotion,
+        density_kg_per_m3: f32,
     ) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_box(
@@ -222,6 +225,7 @@ impl JoltWorld {
                 spawn_position.z,
                 object_layer,
                 motion as u8,
+                density_kg_per_m3,
             )
         };
         self.body_shapes.insert(
@@ -264,6 +268,7 @@ impl JoltWorld {
         capsule_radius: f32,
         spawn_position: Vec3,
         object_layer: u16,
+        density_kg_per_m3: f32,
     ) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_capsule(
@@ -274,6 +279,7 @@ impl JoltWorld {
                 spawn_position.y,
                 spawn_position.z,
                 object_layer,
+                density_kg_per_m3,
             )
         };
         self.body_shapes.insert(
@@ -453,7 +459,8 @@ impl JoltWorld {
         body1_raw: u32,
         body2_raw: u32,
         constraint_point: Vec3,
-        twist_axis: Vec3,
+        twist_axis1: Vec3,
+        twist_axis2: Vec3,
         half_cone_angle: f32,
     ) -> u32 {
         unsafe {
@@ -464,9 +471,12 @@ impl JoltWorld {
                 constraint_point.x,
                 constraint_point.y,
                 constraint_point.z,
-                twist_axis.x,
-                twist_axis.y,
-                twist_axis.z,
+                twist_axis1.x,
+                twist_axis1.y,
+                twist_axis1.z,
+                twist_axis2.x,
+                twist_axis2.y,
+                twist_axis2.z,
                 half_cone_angle,
             )
         }
@@ -670,6 +680,56 @@ impl JoltWorld {
     /// One-shot velocity kick so a resting rig shows motion immediately.
     pub fn kick_body(&mut self, body_id_raw: u32, velocity: Vec3) {
         unsafe { bjolt_kick_body(self.world_ptr, body_id_raw, velocity.x, velocity.y, velocity.z) }
+    }
+
+    /// One-shot linear + angular impulse at center of mass. Zero halves are
+    /// skipped; pass one pair for a combined kick.
+    pub fn apply_impulse(&mut self, body_id_raw: u32, linear_impulse: Vec3, angular_impulse: Vec3) {
+        unsafe {
+            bjolt_apply_impulse(
+                self.world_ptr,
+                body_id_raw,
+                linear_impulse.x,
+                linear_impulse.y,
+                linear_impulse.z,
+                angular_impulse.x,
+                angular_impulse.y,
+                angular_impulse.z,
+            )
+        }
+    }
+
+    /// Persistent force + torque. Jolt clears accumulated forces each step,
+    /// so call once per tick while the push lasts. Zero halves skipped.
+    pub fn apply_force(&mut self, body_id_raw: u32, push_force: Vec3, push_torque: Vec3) {
+        unsafe {
+            bjolt_apply_force(
+                self.world_ptr,
+                body_id_raw,
+                push_force.x,
+                push_force.y,
+                push_force.z,
+                push_torque.x,
+                push_torque.y,
+                push_torque.z,
+            )
+        }
+    }
+
+    /// Direct velocity overwrite (not a kick): zero halves stop that axis.
+    pub fn set_body_velocity(&mut self, body_id_raw: u32, linear_velocity: Vec3, angular_velocity: Vec3) {
+        unsafe {
+            bjolt_set_velocity(
+                self.world_ptr,
+                body_id_raw,
+                linear_velocity.x,
+                linear_velocity.y,
+                linear_velocity.z,
+                angular_velocity.x,
+                angular_velocity.y,
+                angular_velocity.z,
+            )
+        }
     }
 
     /// Velocity motor on a slider, hinge, or path joint. False on bad ids.

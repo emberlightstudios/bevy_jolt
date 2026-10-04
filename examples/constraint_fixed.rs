@@ -3,8 +3,7 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltPhysicsWorld,
-    JoltPlugin, JoltShape,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltPlugin, JoltShape,
 };
 
 fn main() {
@@ -85,15 +84,11 @@ fn spawn_scene(
 
 fn rekick_pair(
     mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
+    mut commands: Commands,
 ) {
     demo.kick_in = demo.kick_in.saturating_sub(1);
     if demo.kick_in == 0 {
-        if let Ok(bottom) = body_query.get(demo.bottom) {
-            physics_world
-                .kick_body(bottom.body_id_raw, Vec3::new(2.0, 3.0, 0.5));
-        }
+        commands.trigger(JoltImpulse::linear(demo.bottom, Vec3::new(2.0, 3.0, 0.5)));
         demo.kick_in = 600;
         println!("kicked the welded pair");
     }

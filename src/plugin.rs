@@ -105,6 +105,8 @@ impl Plugin for JoltPlugin {
             max_sub_steps: self.max_sub_steps,
         });
         app.add_observer(crate::body_sync::spawn_jolt_body);
+        app.add_observer(crate::body_forces::apply_jolt_impulse);
+        app.add_observer(crate::body_forces::apply_jolt_set_velocity);
         app.add_observer(crate::joint_sync::despawn_jolt_joint);
         // Joint cascade before body destroy: constraint removals here are
         // synchronous, so the solver never sees a constraint on a dead body.
@@ -113,6 +115,13 @@ impl Plugin for JoltPlugin {
         app.add_systems(
             FixedUpdate,
             crate::joint_sync::create_jolt_joints.before(step_physics_world),
+        );
+        // Held forces re-add before the step so they act this tick. One-shot
+        // impulses and velocity sets need no scheduling: their observers fire
+        // the moment the event triggers.
+        app.add_systems(
+            FixedUpdate,
+            crate::body_forces::apply_jolt_forces.before(step_physics_world),
         );
         app.add_systems(FixedUpdate, step_physics_world);
         app.add_systems(

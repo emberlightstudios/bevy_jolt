@@ -50,7 +50,8 @@ pub enum JointKind {
     },
     Cone {
         constraint_point: Vec3,
-        twist_axis: Vec3,
+        twist_axis1: Vec3,
+        twist_axis2: Vec3,
         half_cone_angle: f32,
     },
     SwingTwist {
@@ -173,7 +174,8 @@ impl JoltJoint {
         body_a: Entity,
         body_b: Entity,
         constraint_point: Vec3,
-        twist_axis: Vec3,
+        twist_axis1: Vec3,
+        twist_axis2: Vec3,
         half_cone_angle: f32,
     ) -> Self {
         Self {
@@ -181,7 +183,8 @@ impl JoltJoint {
             body_b,
             kind: JointKind::Cone {
                 constraint_point,
-                twist_axis,
+                twist_axis1,
+                twist_axis2,
                 half_cone_angle,
             },
         }
@@ -426,13 +429,15 @@ pub fn create_jolt_joints(
             ),
             JointKind::Cone {
                 constraint_point,
-                twist_axis,
+                twist_axis1,
+                twist_axis2,
                 half_cone_angle,
             } => world.create_cone_constraint(
                 body_a_raw,
                 body_b_raw,
                 constraint_point,
-                twist_axis,
+                twist_axis1,
+                twist_axis2,
                 half_cone_angle,
             ),
             JointKind::SwingTwist {

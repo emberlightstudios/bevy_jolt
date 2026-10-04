@@ -1,57 +1,90 @@
-use bevy_jolt::{CollisionLayers, JoltMotion, JoltWorld};
-use bevy::prelude::Vec3;
+use bevy::prelude::*;
+use bevy_jolt::{CollisionLayers, JoltBody, JoltPlugin, JoltShape};
 
 const GHOST_LAYER: u16 = 2;
+const SETTLE_TICKS: u32 = 300;
 
 fn main() {
     // Three teams: ground (0), normal bodies (1), ghosts (2). Ghosts hit
-    // nothing, not even each other.
+    // nothing, not even each other. Custom teams ride on the plugin: the
+    // layer table is handed to Jolt once at world creation.
     let mut collision_layers = CollisionLayers::new(3);
     collision_layers.set_collide(GHOST_LAYER, CollisionLayers::NON_MOVING, false);
     collision_layers.set_collide(GHOST_LAYER, CollisionLayers::MOVING, false);
     collision_layers.set_collide(GHOST_LAYER, GHOST_LAYER, false);
 
-    let mut jolt_world = JoltWorld::with_layers(collision_layers);
-    jolt_world.create_floor(Vec3::new(100.0, 1.0, 100.0), -1.0);
+    App::new()
+        .add_plugins(MinimalPlugins)
+        .add_plugins(
+            JoltPlugin::new()
+                .with_collision_layers(collision_layers)
+                .with_physics_hz(60.0),
+        )
+        .add_systems(Startup, spawn_layer_demo)
+        .add_systems(FixedUpdate, watch_layer_demo)
+        .run();
+}
 
-    // A normal box falls and rests on the floor.
-    let box_body_id = jolt_world.create_box(
-        Vec3::splat(0.5),
-        Vec3::new(-1.0, 3.0, 0.0),
-        CollisionLayers::MOVING,
-        JoltMotion::Dynamic,
-    );
+#[derive(Resource)]
+struct LayerDemoBodies {
+    normal_box: Entity,
+    ghost_box: Entity,
+}
 
+fn spawn_layer_demo(mut commands: Commands) {
+    commands.spawn((
+        Transform::from_xyz(0.0, -1.0, 0.0),
+        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+    ));
+    let normal_box = commands
+        .spawn((
+            Transform::from_xyz(-1.0, 3.0, 0.0),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::box_shape(Vec3::splat(0.5)),
+        ))
+        .id();
     // A ghost box at the same spot falls straight through the floor.
-    let ghost_body_id = jolt_world.create_box(
-        Vec3::splat(0.5),
-        Vec3::new(1.0, 3.0, 0.0),
-        GHOST_LAYER,
-        JoltMotion::Dynamic,
-    );
+    let ghost_box = commands
+        .spawn((
+            Transform::from_xyz(1.0, 3.0, 0.0),
+            JoltBody::dynamic(GHOST_LAYER),
+            JoltShape::box_shape(Vec3::splat(0.5)),
+        ))
+        .id();
+    commands.insert_resource(LayerDemoBodies {
+        normal_box,
+        ghost_box,
+    });
+}
 
-    let fixed_delta_time = 1.0 / 60.0;
-    for _ in 0..300 {
-        jolt_world.update(fixed_delta_time, 1);
+fn watch_layer_demo(
+    mut tick_count: Local<u32>,
+    demo_bodies: Res<LayerDemoBodies>,
+    transform_query: Query<&Transform>,
+    mut app_exit: MessageWriter<AppExit>,
+) {
+    *tick_count += 1;
+    if *tick_count < SETTLE_TICKS {
+        return;
     }
-
-    let (box_position, _) = jolt_world.body_full_transform(box_body_id);
-    let (ghost_position, _) = jolt_world.body_full_transform(ghost_body_id);
+    let Ok(normal_transform) = transform_query.get(demo_bodies.normal_box) else {
+        return;
+    };
+    let Ok(ghost_transform) = transform_query.get(demo_bodies.ghost_box) else {
+        return;
+    };
+    let box_height = normal_transform.translation.y;
+    let ghost_height = ghost_transform.translation.y;
     println!(
         "Box rested at y={:.3}, ghost fell to y={:.3}.",
-        box_position.y, ghost_position.y
+        box_height, ghost_height
     );
     assert!(
-        (box_position.y - 0.5).abs() < 0.05,
+        (box_height - 0.5).abs() < 0.05,
         "normal box should rest on the floor"
     );
-    assert!(
-        ghost_position.y < -5.0,
-        "ghost box should have fallen through the floor"
-    );
-
-    for body_id in [box_body_id, ghost_body_id] {
-        jolt_world.remove_and_destroy_body(body_id);
-    }
+    assert!(ghost_height < -5.0, "ghost box should fall through the floor");
     println!("Custom layers behaved: ghosts ignore everything.");
+    app_exit.write(AppExit::Success);
 }

@@ -11,14 +11,17 @@ use bevy::prelude::*;
 use crate::physics_world::PhysicsShape;
 use crate::plugin::JoltPhysicsWorld;
 
-/// Rigid-body descriptor: motion type + collision layer. Add alongside a
-/// [`JoltShape`] and a `Transform`; the plugin creates the Jolt body and
-/// keeps them in sync. Mirrors Jolt's `Body`: motion and layer live on the
-/// body, geometry lives on the (shareable) shape.
+/// Rigid-body descriptor: motion type + collision layer + density. Add
+/// alongside a [`JoltShape`] and a `Transform`; the plugin creates the Jolt
+/// body and keeps them in sync. Mirrors Jolt's `Body`: motion, layer, and
+/// density live on the body, geometry lives on the (shareable) shape.
+/// Density is kg/m³ (water ≈ 1000); mass = density × shape volume, baked
+/// at creation.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct JoltBody {
     pub motion: JoltMotion,
     pub object_layer: u16,
+    pub density_kg_per_m3: f32,
 }
 
 /// Jolt motion type: static never moves, kinematic moves by velocity and
@@ -31,10 +34,14 @@ pub enum JoltMotion {
 }
 
 impl JoltBody {
+    /// Default density: water-like, matches Jolt's own default.
+    pub const DEFAULT_DENSITY: f32 = 1000.0;
+
     pub fn dynamic(object_layer: u16) -> Self {
         Self {
             motion: JoltMotion::Dynamic,
             object_layer,
+            density_kg_per_m3: Self::DEFAULT_DENSITY,
         }
     }
 
@@ -42,6 +49,7 @@ impl JoltBody {
         Self {
             motion: JoltMotion::Static,
             object_layer,
+            density_kg_per_m3: Self::DEFAULT_DENSITY,
         }
     }
 
@@ -49,7 +57,19 @@ impl JoltBody {
         Self {
             motion: JoltMotion::Kinematic,
             object_layer,
+            density_kg_per_m3: Self::DEFAULT_DENSITY,
         }
+    }
+
+    /// Override density in kg/m³. Must be positive and finite.
+    pub fn with_density(mut self, density_kg_per_m3: f32) -> Self {
+        assert!(
+            density_kg_per_m3.is_finite() && density_kg_per_m3 > 0.0,
+            "density must be positive, got {}",
+            density_kg_per_m3
+        );
+        self.density_kg_per_m3 = density_kg_per_m3;
+        self
     }
 }
 
@@ -120,11 +140,13 @@ pub fn spawn_jolt_body(
             spawn_position,
             body.object_layer,
             body.motion,
+            body.density_kg_per_m3,
         ),
         PhysicsShape::Sphere { sphere_radius } => physics_world.create_sphere(
             sphere_radius,
             spawn_position,
             body.object_layer,
+            body.density_kg_per_m3,
         ),
         PhysicsShape::Capsule {
             capsule_half_height,
@@ -134,6 +156,7 @@ pub fn spawn_jolt_body(
             capsule_radius,
             spawn_position,
             body.object_layer,
+            body.density_kg_per_m3,
         ),
         PhysicsShape::Plane {
             surface_normal,

@@ -3,7 +3,7 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId,
+    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId,
     JoltPhysicsWorld, JoltPlugin, JoltShape,
 };
 
@@ -17,8 +17,8 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
-        .add_systems(Startup, (spawn_scene, kick_weight_once).chain())
-        .add_systems(FixedUpdate, (apply_kick_once, hoist_weight).chain())
+        .add_systems(Startup, spawn_scene)
+        .add_systems(FixedUpdate, hoist_weight)
         .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_ropes)
         .run();
@@ -102,25 +102,8 @@ fn spawn_scene(
         joint,
         hoist_in: 900,
     });
-}
-
-fn kick_weight_once(demo: Res<Demo>, mut commands: Commands) {
-    commands.entity(demo.weight2).insert(KickOnce);
-}
-
-#[derive(Component)]
-struct KickOnce;
-
-fn apply_kick_once(
-    mut commands: Commands,
-    kick_query: Query<(Entity, &JoltBodyId), With<KickOnce>>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    for (kick_entity, body_id) in &kick_query {
-        // Unbalance the pair so the elevator starts moving immediately.
-        physics_world.kick_body(body_id.body_id_raw, Vec3::new(0.0, -2.0, 0.0));
-        commands.entity(kick_entity).remove::<KickOnce>();
-    }
+    // Unbalance the pair so the elevator starts moving immediately.
+    commands.trigger(JoltImpulse::linear(weight2, Vec3::new(0.0, -2.0, 0.0)));
 }
 
 fn hoist_weight(

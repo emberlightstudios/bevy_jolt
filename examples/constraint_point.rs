@@ -3,8 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
-    JoltPlugin, JoltShape,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
+    JoltShape,
 };
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 5.0, 0.0);
@@ -12,10 +12,11 @@ const BALL_SPAWN: Vec3 = Vec3::new(0.8, 3.6, 0.0);
 
 fn main() {
     App::new()
+        .add_plugins(DefaultPlugins)
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
-        .add_systems(Startup, (spawn_scene, kick_ball_once).chain())
-        .add_systems(FixedUpdate, (apply_kick_once, rekick_ball).chain())
+        .add_systems(Startup, spawn_scene)
+        .add_systems(FixedUpdate, rekick_ball)
         .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_link)
         .run();
@@ -87,44 +88,25 @@ fn spawn_scene(
         joint,
         kick_in: 600,
     });
-}
-
-fn kick_ball_once(demo: Res<Demo>, mut commands: Commands) {
-    commands.entity(demo.ball).insert(KickOnce);
-}
-
-#[derive(Component)]
-struct KickOnce;
-
-fn apply_kick_once(
-    mut commands: Commands,
-    kick_query: Query<(Entity, &JoltBodyId), With<KickOnce>>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    for (kick_entity, body_id) in &kick_query {
-        physics_world.kick_body(body_id.body_id_raw, Vec3::new(3.0, 0.5, 1.5));
-        commands.entity(kick_entity).remove::<KickOnce>();
-    }
+    commands.trigger(JoltImpulse::linear(ball, Vec3::new(3.0, 0.5, 1.5)));
 }
 
 fn rekick_ball(
     mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
     joint_query: Query<(), With<JoltJointId>>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
+    mut commands: Commands,
 ) {
     if joint_query.get(demo.joint).is_err() {
         return;
     }
     demo.kick_in = demo.kick_in.saturating_sub(1);
     if demo.kick_in == 0 {
-        if let Ok(ball) = body_query.get(demo.ball) {
-            physics_world.kick_body(ball.body_id_raw, Vec3::new(3.0, 0.5, 1.5));
-        }
+        commands.trigger(JoltImpulse::linear(demo.ball, Vec3::new(3.0, 0.5, 1.5)));
         demo.kick_in = 600;
         println!("re-kicked the pendulum");
     }
 }
+
 
 fn report(
     mut tick_count: Local<u32>,

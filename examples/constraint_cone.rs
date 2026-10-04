@@ -1,10 +1,10 @@
-//! Cone (shoulder) joint: a ball swings inside a cone around the twist
-//! axis. Re-kicked every 10s so the swing loops.
-
+//! Cone (shoulder) joint: the mount cube sways slowly side to side while the
+//! ball hangs off it, swinging freely inside the cone. No kicks: the ball
+//! starts displaced and gravity plus the swaying mount do the rest.
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId,
-    JoltPhysicsWorld, JoltPlugin, JoltShape,
+    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
+    JoltPlugin, JoltShape,
 };
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 4.5, 0.0);
@@ -15,9 +15,8 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
-        .add_systems(Startup, (spawn_scene, kick_ball_once).chain())
-        .add_systems(FixedUpdate, (apply_kick_once, rekick_ball).chain())
-        .add_systems(FixedPostUpdate, report)
+        .add_systems(Startup, spawn_scene)
+        .add_systems(FixedUpdate, sway_anchor.before(bevy_jolt::step_physics_world))
         .add_systems(PostUpdate, draw_link)
         .run();
 }
@@ -27,7 +26,7 @@ struct Demo {
     anchor: Entity,
     ball: Entity,
     joint: Entity,
-    kick_in: u32,
+    sway_ticks: u32,
 }
 
 fn spawn_scene(
@@ -82,78 +81,38 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::cone(anchor, ball, ANCHOR, Vec3::Y, 0.35))
+        .spawn(JoltJoint::cone(
+            anchor,
+            ball,
+            ANCHOR,
+            Vec3::Y,
+            (ANCHOR - BALL_SPAWN).normalize(),
+            0.35,
+        ))
         .id();
     commands.insert_resource(Demo {
         anchor,
         ball,
         joint,
-        kick_in: 600,
+        sway_ticks: 0,
     });
 }
 
-fn kick_ball_once(demo: Res<Demo>, mut commands: Commands) {
-    commands.entity(demo.ball).insert(KickOnce);
-}
-
-#[derive(Component)]
-struct KickOnce;
-
-fn apply_kick_once(
-    mut commands: Commands,
-    kick_query: Query<(Entity, &JoltBodyId), With<KickOnce>>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    for (kick_entity, body_id) in &kick_query {
-        physics_world.kick_body(body_id.body_id_raw, Vec3::new(3.0, 0.5, 1.5));
-        commands.entity(kick_entity).remove::<KickOnce>();
-    }
-}
-
-fn rekick_ball(
+/// Slow twist: oscillating torque around the ball's own up winds and unwinds
+/// the hanging ball.
+fn sway_anchor(
     mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
-    joint_query: Query<(), With<JoltJointId>>,
+    body_query: Query<(&JoltBodyId, &Transform)>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
+    fixed_time: Res<Time<Fixed>>,
 ) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    demo.kick_in = demo.kick_in.saturating_sub(1);
-    if demo.kick_in == 0 {
-        if let Ok(ball) = body_query.get(demo.ball) {
-            physics_world.kick_body(ball.body_id_raw, Vec3::new(3.0, 0.5, 1.5));
-        }
-        demo.kick_in = 600;
-        println!("re-kicked the shoulder ball");
-    }
-}
-
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let (Ok(anchor_transform), Ok(ball_transform)) = (
-        transform_query.get(demo.anchor),
-        transform_query.get(demo.ball),
-    ) else {
+    let Ok((ball_id, ball_transform)) = body_query.get(demo.ball) else {
         return;
     };
-    let radius = (ball_transform.translation - anchor_transform.translation).length();
-    println!("tick {}: shoulder radius {:.3}.", *tick, radius);
-    assert!(
-        (radius - 1.6).abs() < 0.25,
-        "shoulder ball should hold its radius"
-    );
+    demo.sway_ticks += 1;
+    let elapsed = demo.sway_ticks as f32 * fixed_time.delta().as_secs_f32();
+    let twist_torque = 2.5 * (0.942 * elapsed).cos();
+    physics_world.apply_force(ball_id.body_id_raw, Vec3::ZERO, ball_transform.up() * twist_torque);
 }
 
 fn draw_link(
