@@ -71,11 +71,14 @@ fn spawn_scene(
             JoltShape::box_shape(Vec3::splat(0.2)),
         ))
         .id();
+
+    let dir = (ANCHOR - BALL_SPAWN).normalize();
     let ball = commands
         .spawn((
             Mesh3d(meshes.add(Sphere::new(0.3))),
             MeshMaterial3d(materials.add(Color::srgb(0.3, 0.8, 0.6))),
-            Transform::from_translation(BALL_SPAWN),
+            Transform::from_translation(BALL_SPAWN)
+                .with_rotation(Quat::from_rotation_arc(Vec3::Y, dir)),
             JoltBody::dynamic(CollisionLayers::MOVING),
             JoltShape::sphere(0.3),
         ))
@@ -86,7 +89,7 @@ fn spawn_scene(
             ball,
             ANCHOR,
             Vec3::Y,
-            (ANCHOR - BALL_SPAWN).normalize(),
+            dir,
             0.35,
         ))
         .id();
