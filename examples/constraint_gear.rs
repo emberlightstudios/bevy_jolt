@@ -31,7 +31,7 @@ fn spawn_scene(
 ) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 3.5, 10.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Dir3::Y),
+        Transform::from_xyz(0.0, 5.5, 5.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Dir3::Y),
     ));
     commands.spawn((
         DirectionalLight {
@@ -76,6 +76,13 @@ fn spawn_scene(
             },
             Mesh3d(disc1_mesh),
             MeshMaterial3d(disc1_face),
+            // Spoke near the rim, sitting just off the front face (local +Y
+            // is the disc axis: the tipped body maps it toward the camera).
+            children![(
+                Mesh3d(meshes.add(Cuboid::new(0.18, 0.12, 0.18))),
+                MeshMaterial3d(materials.add(Color::srgb(0.9, 0.15, 0.15))),
+                Transform::from_xyz(DISC1_RADIUS * 0.6, 0.14, 0.0),
+            )],
         ))
         .id();
     let disc2_mesh = meshes.add(Cylinder::new(DISC2_RADIUS, 0.15));
@@ -87,6 +94,11 @@ fn spawn_scene(
             JoltShape::cylinder(0.075, DISC2_RADIUS),
             Mesh3d(disc2_mesh),
             MeshMaterial3d(disc2_face),
+            children![(
+                Mesh3d(meshes.add(Cuboid::new(0.14, 0.12, 0.14))),
+                MeshMaterial3d(materials.add(Color::srgb(0.15, 0.9, 0.3))),
+                Transform::from_xyz(DISC2_RADIUS * 0.6, 0.14, 0.0),
+            )],
         ))
         .id();
     let hinge1 = commands

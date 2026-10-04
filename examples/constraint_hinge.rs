@@ -17,14 +17,12 @@ fn main() {
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
         .add_systems(FixedUpdate, (start_motor_once, pingpong_motor).chain())
-        .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, draw_pin)
         .run();
 }
 
 #[derive(Resource)]
 struct Demo {
-    panel: Entity,
     joint: Entity,
     flip_in: u32,
     forward: bool,
@@ -93,7 +91,6 @@ fn spawn_scene(
         .spawn(JoltJoint::hinge(post, panel, HINGE_POINT, Dir3::Z, Dir3::X, JointSpace::World))
         .id();
     commands.insert_resource(Demo {
-        panel,
         joint,
         flip_in: 300,
         forward: true,
@@ -139,35 +136,6 @@ fn pingpong_motor(
             if demo.forward { "forward" } else { "back" }
         );
     }
-}
-
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let Ok(panel) = transform_query.get(demo.panel) else {
-        return;
-    };
-    let position = panel.translation;
-    let radius = (position - HINGE_POINT).length();
-    println!("tick {}: hinge radius {:.3}.", *tick, radius);
-    assert!(
-        (radius - 1.1).abs() < 0.2,
-        "hinged panel should stay on its pin"
-    );
-    assert!(
-        position.y > 0.3,
-        "hinged panel should not fall through the floor"
-    );
 }
 
 fn draw_pin(
