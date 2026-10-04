@@ -45,4 +45,19 @@ fn spawn_physics_scene(mut commands: Commands) {
         JoltBody::dynamic(CollisionLayers::MOVING),
         JoltShape::sphere(0.5),
     ));
+    commands.spawn((
+        Transform::from_xyz(-2.5, 3.0, 0.0),
+        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltShape::cylinder(0.4, 0.5),
+    ));
+    commands.spawn((
+        Transform::from_xyz(2.5, 3.0, 0.0),
+        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltShape::tapered_cylinder(0.4, 0.3, 0.5),
+    ));
+    commands.spawn((
+        Transform::from_xyz(0.0, 7.0, 0.0),
+        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltShape::tapered_capsule(0.4, 0.3, 0.5),
+    ));
 }

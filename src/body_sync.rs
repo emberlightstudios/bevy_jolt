@@ -94,6 +94,37 @@ impl JoltShape {
         })
     }
 
+    pub fn cylinder(cylinder_half_height: f32, cylinder_radius: f32) -> Self {
+        Self(PhysicsShape::Cylinder {
+            cylinder_half_height,
+            cylinder_radius,
+        })
+    }
+
+    pub fn tapered_cylinder(
+        tapered_half_height: f32,
+        top_radius: f32,
+        bottom_radius: f32,
+    ) -> Self {
+        Self(PhysicsShape::TaperedCylinder {
+            tapered_half_height,
+            top_radius,
+            bottom_radius,
+        })
+    }
+
+    pub fn tapered_capsule(
+        tapered_half_height: f32,
+        top_radius: f32,
+        bottom_radius: f32,
+    ) -> Self {
+        Self(PhysicsShape::TaperedCapsule {
+            tapered_half_height,
+            top_radius,
+            bottom_radius,
+        })
+    }
+
     pub fn plane(surface_normal: Vec3, plane_constant: f32) -> Self {
         Self(PhysicsShape::Plane {
             surface_normal,
@@ -154,6 +185,40 @@ pub fn spawn_jolt_body(
         } => physics_world.create_capsule(
             capsule_half_height,
             capsule_radius,
+            spawn_position,
+            body.object_layer,
+            body.density_kg_per_m3,
+        ),
+        PhysicsShape::Cylinder {
+            cylinder_half_height,
+            cylinder_radius,
+        } => physics_world.create_cylinder(
+            cylinder_half_height,
+            cylinder_radius,
+            spawn_position,
+            body.object_layer,
+            body.density_kg_per_m3,
+        ),
+        PhysicsShape::TaperedCylinder {
+            tapered_half_height,
+            top_radius,
+            bottom_radius,
+        } => physics_world.create_tapered_cylinder(
+            tapered_half_height,
+            top_radius,
+            bottom_radius,
+            spawn_position,
+            body.object_layer,
+            body.density_kg_per_m3,
+        ),
+        PhysicsShape::TaperedCapsule {
+            tapered_half_height,
+            top_radius,
+            bottom_radius,
+        } => physics_world.create_tapered_capsule(
+            tapered_half_height,
+            top_radius,
+            bottom_radius,
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,

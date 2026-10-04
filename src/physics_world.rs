@@ -8,12 +8,13 @@ use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
     BJoltWorld, bjolt_apply_force, bjolt_apply_impulse, bjolt_body_is_active, bjolt_body_remove_destroy,
     bjolt_body_state, bjolt_body_transform, bjolt_car_bounds, bjolt_cast_ray, bjolt_constraint_drive_at,
-    bjolt_create_box, bjolt_create_capsule, bjolt_create_cone_constraint, bjolt_create_demo_car,
-    bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
-    bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_path_cart,
-    bjolt_create_plane, bjolt_create_point_constraint, bjolt_create_pulley_constraint,
-    bjolt_create_rack_pinion_constraint, bjolt_create_six_dof_slider, bjolt_create_sphere,
-    bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint, bjolt_init, bjolt_kick_body,
+    bjolt_create_box, bjolt_create_capsule, bjolt_create_cone_constraint, bjolt_create_cylinder,
+    bjolt_create_demo_car, bjolt_create_distance_constraint, bjolt_create_fixed_constraint,
+    bjolt_create_floor, bjolt_create_gear_constraint, bjolt_create_hinge_constraint,
+    bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
+    bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_six_dof_slider,
+    bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
+    bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_init, bjolt_kick_body,
     bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body, bjolt_set_angular_velocity,
     bjolt_set_linear_velocity, bjolt_set_velocity, bjolt_vehicle_drive,
     bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_update,
@@ -58,6 +59,17 @@ pub enum PhysicsShape {
     Box { half_extents: Vec3 },
     Sphere { sphere_radius: f32 },
     Capsule { capsule_half_height: f32, capsule_radius: f32 },
+    Cylinder { cylinder_half_height: f32, cylinder_radius: f32 },
+    TaperedCylinder {
+        tapered_half_height: f32,
+        top_radius: f32,
+        bottom_radius: f32,
+    },
+    TaperedCapsule {
+        tapered_half_height: f32,
+        top_radius: f32,
+        bottom_radius: f32,
+    },
     Plane { surface_normal: Vec3, plane_constant: f32 },
 }
 
@@ -308,6 +320,102 @@ impl JoltWorld {
             PhysicsShape::Capsule {
                 capsule_half_height,
                 capsule_radius,
+            },
+        );
+        body_id_raw
+    }
+
+    pub fn create_cylinder(
+        &mut self,
+        cylinder_half_height: f32,
+        cylinder_radius: f32,
+        spawn_position: Vec3,
+        object_layer: u16,
+        density_kg_per_m3: f32,
+    ) -> u32 {
+        let body_id_raw = unsafe {
+            bjolt_create_cylinder(
+                self.world_ptr,
+                cylinder_half_height,
+                cylinder_radius,
+                spawn_position.x,
+                spawn_position.y,
+                spawn_position.z,
+                object_layer,
+                density_kg_per_m3,
+            )
+        };
+        self.body_shapes.insert(
+            body_id_raw,
+            PhysicsShape::Cylinder {
+                cylinder_half_height,
+                cylinder_radius,
+            },
+        );
+        body_id_raw
+    }
+
+    pub fn create_tapered_cylinder(
+        &mut self,
+        tapered_half_height: f32,
+        top_radius: f32,
+        bottom_radius: f32,
+        spawn_position: Vec3,
+        object_layer: u16,
+        density_kg_per_m3: f32,
+    ) -> u32 {
+        let body_id_raw = unsafe {
+            bjolt_create_tapered_cylinder(
+                self.world_ptr,
+                tapered_half_height,
+                top_radius,
+                bottom_radius,
+                spawn_position.x,
+                spawn_position.y,
+                spawn_position.z,
+                object_layer,
+                density_kg_per_m3,
+            )
+        };
+        self.body_shapes.insert(
+            body_id_raw,
+            PhysicsShape::TaperedCylinder {
+                tapered_half_height,
+                top_radius,
+                bottom_radius,
+            },
+        );
+        body_id_raw
+    }
+
+    pub fn create_tapered_capsule(
+        &mut self,
+        tapered_half_height: f32,
+        top_radius: f32,
+        bottom_radius: f32,
+        spawn_position: Vec3,
+        object_layer: u16,
+        density_kg_per_m3: f32,
+    ) -> u32 {
+        let body_id_raw = unsafe {
+            bjolt_create_tapered_capsule(
+                self.world_ptr,
+                tapered_half_height,
+                top_radius,
+                bottom_radius,
+                spawn_position.x,
+                spawn_position.y,
+                spawn_position.z,
+                object_layer,
+                density_kg_per_m3,
+            )
+        };
+        self.body_shapes.insert(
+            body_id_raw,
+            PhysicsShape::TaperedCapsule {
+                tapered_half_height,
+                top_radius,
+                bottom_radius,
             },
         );
         body_id_raw

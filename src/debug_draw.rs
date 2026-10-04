@@ -69,6 +69,52 @@ fn draw_physics_shapes(
                     debug_color,
                 );
             }
+            PhysicsShape::Cylinder {
+                cylinder_half_height,
+                cylinder_radius,
+            } => {
+                let debug_color = body_debug_color(body_active);
+                draw_cylinder_outline(
+                    &mut gizmos,
+                    body_position,
+                    body_rotation,
+                    cylinder_half_height,
+                    cylinder_radius,
+                    debug_color,
+                );
+            }
+            PhysicsShape::TaperedCylinder {
+                tapered_half_height,
+                top_radius,
+                bottom_radius,
+            } => {
+                let debug_color = body_debug_color(body_active);
+                draw_tapered_cylinder_outline(
+                    &mut gizmos,
+                    body_position,
+                    body_rotation,
+                    tapered_half_height,
+                    top_radius,
+                    bottom_radius,
+                    debug_color,
+                );
+            }
+            PhysicsShape::TaperedCapsule {
+                tapered_half_height,
+                top_radius,
+                bottom_radius,
+            } => {
+                let debug_color = body_debug_color(body_active);
+                draw_tapered_capsule_outline(
+                    &mut gizmos,
+                    body_position,
+                    body_rotation,
+                    tapered_half_height,
+                    top_radius,
+                    bottom_radius,
+                    debug_color,
+                );
+            }
             PhysicsShape::Plane {
                 surface_normal,
                 plane_constant,
@@ -168,4 +214,108 @@ fn draw_plane_grid(
         gizmos.line(line_start_z, line_end_z, PLANE_GRID_COLOR);
     }
     gizmos.ray(grid_origin, grid_up * 2.0, PLANE_NORMAL_COLOR);
+}
+
+fn draw_cylinder_outline(
+    gizmos: &mut Gizmos,
+    cylinder_center: Vec3,
+    cylinder_rotation: Quat,
+    cylinder_half_height: f32,
+    cylinder_radius: f32,
+    debug_color: Color,
+) {
+    // No cylinder primitive: two end-cap circles plus side rails.
+    let up_direction = cylinder_rotation * Vec3::Y;
+    let side_x = cylinder_rotation * Vec3::X;
+    let side_z = cylinder_rotation * Vec3::Z;
+    let top_cap_center = cylinder_center + up_direction * cylinder_half_height;
+    let bottom_cap_center = cylinder_center - up_direction * cylinder_half_height;
+    let cap_rotation = cylinder_rotation * Quat::from_rotation_x(core::f32::consts::FRAC_PI_2);
+    gizmos.circle(
+        Isometry3d::new(top_cap_center, cap_rotation),
+        cylinder_radius,
+        debug_color,
+    );
+    gizmos.circle(
+        Isometry3d::new(bottom_cap_center, cap_rotation),
+        cylinder_radius,
+        debug_color,
+    );
+    for side_offset in [side_x, -side_x, side_z, -side_z] {
+        let rail_bottom = bottom_cap_center + side_offset * cylinder_radius;
+        let rail_top = top_cap_center + side_offset * cylinder_radius;
+        gizmos.line(rail_bottom, rail_top, debug_color);
+    }
+}
+
+fn draw_tapered_cylinder_outline(
+    gizmos: &mut Gizmos,
+    tapered_center: Vec3,
+    tapered_rotation: Quat,
+    tapered_half_height: f32,
+    top_radius: f32,
+    bottom_radius: f32,
+    debug_color: Color,
+) {
+    // Frustum: different circle per face, rails slope between them.
+    let up_direction = tapered_rotation * Vec3::Y;
+    let side_x = tapered_rotation * Vec3::X;
+    let side_z = tapered_rotation * Vec3::Z;
+    let top_cap_center = tapered_center + up_direction * tapered_half_height;
+    let bottom_cap_center = tapered_center - up_direction * tapered_half_height;
+    let cap_rotation = tapered_rotation * Quat::from_rotation_x(core::f32::consts::FRAC_PI_2);
+    gizmos.circle(
+        Isometry3d::new(top_cap_center, cap_rotation),
+        top_radius,
+        debug_color,
+    );
+    gizmos.circle(
+        Isometry3d::new(bottom_cap_center, cap_rotation),
+        bottom_radius,
+        debug_color,
+    );
+    for side_offset in [side_x, -side_x, side_z, -side_z] {
+        let rail_bottom = bottom_cap_center + side_offset * bottom_radius;
+        let rail_top = top_cap_center + side_offset * top_radius;
+        gizmos.line(rail_bottom, rail_top, debug_color);
+    }
+}
+
+fn draw_tapered_capsule_outline(
+    gizmos: &mut Gizmos,
+    tapered_center: Vec3,
+    tapered_rotation: Quat,
+    tapered_half_height: f32,
+    top_radius: f32,
+    bottom_radius: f32,
+    debug_color: Color,
+) {
+    // Two different end-cap spheres (same 3-ring style as capsules) with
+    // rails that slope between the two radii.
+    let up_direction = tapered_rotation * Vec3::Y;
+    let side_x = tapered_rotation * Vec3::X;
+    let side_z = tapered_rotation * Vec3::Z;
+    let top_cap_center = tapered_center + up_direction * tapered_half_height;
+    let bottom_cap_center = tapered_center - up_direction * tapered_half_height;
+    for ring_rotation in [
+        tapered_rotation,
+        tapered_rotation * Quat::from_rotation_x(core::f32::consts::FRAC_PI_2),
+        tapered_rotation * Quat::from_rotation_z(core::f32::consts::FRAC_PI_2),
+    ] {
+        gizmos.circle(
+            Isometry3d::new(top_cap_center, ring_rotation),
+            top_radius,
+            debug_color,
+        );
+        gizmos.circle(
+            Isometry3d::new(bottom_cap_center, ring_rotation),
+            bottom_radius,
+            debug_color,
+        );
+    }
+    for side_offset in [side_x, -side_x, side_z, -side_z] {
+        let rail_bottom = bottom_cap_center + side_offset * bottom_radius;
+        let rail_top = top_cap_center + side_offset * top_radius;
+        gizmos.line(rail_bottom, rail_top, debug_color);
+    }
 }
