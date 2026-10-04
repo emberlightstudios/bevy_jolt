@@ -28,6 +28,30 @@ pub struct JoltJoint {
     pub kind: JointKind,
 }
 
+/// Velocity-motor tuning for a driven joint axis. Mirrors Jolt's single
+/// `MotorSettings` type (spring frequency + damping) plus the force cap.
+/// Stiffer (higher frequency) chases the target speed harder; damping
+/// settles overshoot.
+#[derive(Clone, Copy, Debug)]
+pub struct JointMotor {
+    /// Spring stiffness in Hz. Higher corrects speed errors faster.
+    pub frequency_hz: f32,
+    /// Spring damping ratio. 1 is critically damped, no overshoot.
+    pub damping: f32,
+    /// Max force (sliders/paths) or torque (hinges) the motor may apply.
+    pub force_limit: f32,
+}
+
+impl Default for JointMotor {
+    fn default() -> Self {
+        Self {
+            frequency_hz: 8.0,
+            damping: 1.0,
+            force_limit: 1.0e6,
+        }
+    }
+}
+
 /// Constraint flavor plus its creation params. Mirrors the
 /// `JoltWorld::create_*_constraint` set one-to-one.
 #[derive(Clone, Copy, Debug)]
@@ -45,6 +69,7 @@ pub enum JointKind {
         normal_axis: Dir3,
         limits_min: f32,
         limits_max: f32,
+        motor: JointMotor,
     },
     Point {
         constraint_point: Vec3,
@@ -54,6 +79,7 @@ pub enum JointKind {
         normal_axis: Dir3,
         limits_min: f32,
         limits_max: f32,
+        motor: JointMotor,
     },
     Cone {
         constraint_point: Vec3,
@@ -73,6 +99,7 @@ pub enum JointKind {
     SixDofSlider {
         limit_y_min: f32,
         limit_y_max: f32,
+        motor: JointMotor,
     },
     Pulley {
         body_point1: Vec3,
@@ -99,6 +126,7 @@ pub enum JointKind {
     PathCart {
         track_from: Vec3,
         track_to: Vec3,
+        motor: JointMotor,
     },
 }
 
@@ -150,6 +178,7 @@ impl JoltJoint {
                 normal_axis,
                 limits_min: -core::f32::consts::PI,
                 limits_max: core::f32::consts::PI,
+                motor: JointMotor::default(),
             },
         }
     }
@@ -194,6 +223,7 @@ impl JoltJoint {
                 normal_axis,
                 limits_min,
                 limits_max,
+                motor: JointMotor::default(),
             },
         }
     }
@@ -230,6 +260,7 @@ impl JoltJoint {
                 normal_axis,
                 limits_min,
                 limits_max,
+                motor: JointMotor::default(),
             },
         }
     }
@@ -301,6 +332,7 @@ impl JoltJoint {
             kind: JointKind::SixDofSlider {
                 limit_y_min,
                 limit_y_max,
+                motor: JointMotor::default(),
             },
         }
     }
@@ -397,6 +429,7 @@ impl JoltJoint {
             kind: JointKind::PathCart {
                 track_from,
                 track_to,
+                motor: JointMotor::default(),
             },
         }
     }
@@ -491,6 +524,7 @@ pub fn create_jolt_joints(
                 normal_axis,
                 limits_min,
                 limits_max,
+                motor,
             } => world.create_hinge_constraint(
                 body_a_raw,
                 body_b_raw,
@@ -499,6 +533,7 @@ pub fn create_jolt_joints(
                 normal_axis,
                 limits_min,
                 limits_max,
+                motor,
                 joint.joint_space,
             ),
             JointKind::Point { constraint_point } => world.create_point_constraint(
@@ -512,6 +547,7 @@ pub fn create_jolt_joints(
                 normal_axis,
                 limits_min,
                 limits_max,
+                motor,
             } => world.create_slider_constraint(
                 body_a_raw,
                 body_b_raw,
@@ -519,6 +555,7 @@ pub fn create_jolt_joints(
                 normal_axis,
                 limits_min,
                 limits_max,
+                motor,
                 joint.joint_space,
             ),
             JointKind::Cone {
@@ -558,7 +595,8 @@ pub fn create_jolt_joints(
             JointKind::SixDofSlider {
                 limit_y_min,
                 limit_y_max,
-            } => world.create_six_dof_slider(body_a_raw, body_b_raw, limit_y_min, limit_y_max),
+                motor,
+            } => world.create_six_dof_slider(body_a_raw, body_b_raw, limit_y_min, limit_y_max, motor),
             JointKind::Pulley {
                 body_point1,
                 fixed_point1,
@@ -626,7 +664,8 @@ pub fn create_jolt_joints(
             JointKind::PathCart {
                 track_from,
                 track_to,
-            } => world.create_path_cart(body_a_raw, body_b_raw, track_from, track_to),
+                motor,
+            } => world.create_path_cart(body_a_raw, body_b_raw, track_from, track_to, motor),
         };
         assert!(
             constraint_id != 0,

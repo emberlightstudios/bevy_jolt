@@ -531,7 +531,7 @@ impl JoltWorld {
     /// Single-axis hinge at an anchor point. The hinge axis is the free
     /// rotation; the normal axis defines angle zero. Limits in radians clamp
     /// the swing: min in [-pi, 0], max in [0, pi] (full swing by default).
-    /// Returns 0 on failure.
+    /// The motor spring engages on the first drive call. Returns 0 on failure.
     pub fn create_hinge_constraint(
         &mut self,
         body1_raw: u32,
@@ -541,6 +541,7 @@ impl JoltWorld {
         normal_axis: Dir3,
         limits_min: f32,
         limits_max: f32,
+        motor: crate::joint_sync::JointMotor,
         joint_space: JointSpace,
     ) -> u32 {
         unsafe {
@@ -559,6 +560,9 @@ impl JoltWorld {
                 normal_axis.as_vec3().z,
                 limits_min,
                 limits_max,
+                motor.frequency_hz,
+                motor.damping,
+                motor.force_limit,
                 joint_space.ffi_space(),
             )
         }
@@ -591,7 +595,8 @@ impl JoltWorld {
     }
 
     /// Prismatic slide along an axis with travel limits, locked in the
-    /// current relative pose otherwise. Returns 0 on failure.
+    /// current relative pose otherwise. The motor spring engages on the first
+    /// drive call. Returns 0 on failure.
     pub fn create_slider_constraint(
         &mut self,
         body1_raw: u32,
@@ -600,6 +605,7 @@ impl JoltWorld {
         normal_axis: Dir3,
         limits_min: f32,
         limits_max: f32,
+        motor: crate::joint_sync::JointMotor,
         joint_space: JointSpace,
     ) -> u32 {
         unsafe {
@@ -615,6 +621,9 @@ impl JoltWorld {
                 normal_axis.as_vec3().z,
                 limits_min,
                 limits_max,
+                motor.frequency_hz,
+                motor.damping,
+                motor.force_limit,
                 joint_space.ffi_space(),
             )
         }
@@ -691,15 +700,28 @@ impl JoltWorld {
     }
 
     /// Six-DOF used as a piston: everything locked except free Y travel.
-    /// Positions lock to the current poses plus the Y band. Returns 0 on failure.
+    /// Positions lock to the current poses plus the Y band. The motor spring
+    /// engages on the first drive call. Returns 0 on failure.
     pub fn create_six_dof_slider(
         &mut self,
         body1_raw: u32,
         body2_raw: u32,
         limit_y_min: f32,
         limit_y_max: f32,
+        motor: crate::joint_sync::JointMotor,
     ) -> u32 {
-        unsafe { bjolt_create_six_dof_slider(self.world_ptr, body1_raw, body2_raw, limit_y_min, limit_y_max) }
+        unsafe {
+            bjolt_create_six_dof_slider(
+                self.world_ptr,
+                body1_raw,
+                body2_raw,
+                limit_y_min,
+                limit_y_max,
+                motor.frequency_hz,
+                motor.damping,
+                motor.force_limit,
+            )
+        }
     }
 
     /// Elevator counterweight: rope length of body 1 plus ratio-scaled rope
@@ -803,13 +825,15 @@ impl JoltWorld {
     }
 
     /// Glues a body to a straight track so it shuttles between two stops.
-    /// Needs a static anchor body plus the cart body. Returns 0 on failure.
+    /// Needs a static anchor body plus the cart body. The motor spring
+    /// engages on the first drive call. Returns 0 on failure.
     pub fn create_path_cart(
         &mut self,
         static_body_raw: u32,
         cart_body_raw: u32,
         track_from: Vec3,
         track_to: Vec3,
+        motor: crate::joint_sync::JointMotor,
     ) -> u32 {
         unsafe {
             bjolt_create_path_cart(
@@ -822,6 +846,9 @@ impl JoltWorld {
                 track_to.x,
                 track_to.y,
                 track_to.z,
+                motor.frequency_hz,
+                motor.damping,
+                motor.force_limit,
             )
         }
     }
