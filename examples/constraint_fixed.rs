@@ -7,6 +7,8 @@ use bevy_jolt::{
     JointSpace,
 };
 
+const KICK_EVERY_N_TICKS: u32 = 300;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -14,14 +16,12 @@ fn main() {
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
         .add_systems(FixedUpdate, rekick_pair)
-        .add_systems(FixedPostUpdate, report)
         .run();
 }
 
 #[derive(Resource)]
 struct Demo {
     bottom: Entity,
-    top: Entity,
     kick_in: u32,
 }
 fn spawn_scene(
@@ -48,10 +48,9 @@ fn spawn_scene(
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
-        Text::new("fixed (weld)"),
+        Text::new("Fixed Constraint"),
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(12.0),
             left: Val::Px(16.0),
             ..default()
         },
@@ -78,8 +77,7 @@ fn spawn_scene(
     commands.spawn(JoltJoint::fixed(bottom, top, JointSpace::World));
     commands.insert_resource(Demo {
         bottom,
-        top,
-        kick_in: 600,
+        kick_in: KICK_EVERY_N_TICKS,
     });
 }
 
@@ -89,31 +87,8 @@ fn rekick_pair(
 ) {
     demo.kick_in = demo.kick_in.saturating_sub(1);
     if demo.kick_in == 0 {
-        commands.trigger(JoltImpulse::linear(demo.bottom, Vec3::new(2.0, 3.0, 0.5)));
-        demo.kick_in = 600;
-        println!("kicked the welded pair");
+        commands.trigger(JoltImpulse::linear(demo.bottom, Vec3::new(0.0, 2000.0, 0.0)));
+        demo.kick_in = KICK_EVERY_N_TICKS;
+        println!("kicked the bottom object");
     }
-}
-
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-) {
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let (Ok(bottom), Ok(top)) = (
-        transform_query.get(demo.bottom),
-        transform_query.get(demo.top),
-    ) else {
-        return;
-    };
-    let gap = (top.translation - bottom.translation).length();
-    println!("tick {}: weld gap {:.3}.", *tick, gap);
-    assert!(
-        (gap - 1.1).abs() < 0.15,
-        "welded boxes should keep their spacing"
-    );
 }

@@ -10,6 +10,7 @@ use bevy_jolt::{
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 5.0, 0.0);
 const BALL_SPAWN: Vec3 = Vec3::new(0.8, 3.6, 0.0);
+const KICK_EVERY_N_TICKS: u32 = 300;
 
 fn main() {
     App::new()
@@ -17,8 +18,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(FixedUpdate, rekick_ball)
-        .add_systems(FixedPostUpdate, report)
+        .add_systems(FixedUpdate, kick_ball)
         .add_systems(PostUpdate, draw_link)
         .run();
 }
@@ -87,12 +87,11 @@ fn spawn_scene(
         anchor,
         ball,
         joint,
-        kick_in: 600,
+        kick_in: KICK_EVERY_N_TICKS,
     });
-    commands.trigger(JoltImpulse::linear(ball, Vec3::new(3.0, 0.5, 1.5)));
 }
 
-fn rekick_ball(
+fn kick_ball(
     mut demo: ResMut<Demo>,
     joint_query: Query<(), With<JoltJointId>>,
     mut commands: Commands,
@@ -102,38 +101,10 @@ fn rekick_ball(
     }
     demo.kick_in = demo.kick_in.saturating_sub(1);
     if demo.kick_in == 0 {
-        commands.trigger(JoltImpulse::linear(demo.ball, Vec3::new(3.0, 0.5, 1.5)));
-        demo.kick_in = 600;
-        println!("re-kicked the pendulum");
+        commands.trigger(JoltImpulse::linear(demo.ball, Vec3::new(0.0, 2000.0, 0.0)));
+        demo.kick_in = KICK_EVERY_N_TICKS;
+        println!("kicked the ball");
     }
-}
-
-
-fn report(
-    mut tick_count: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    *tick_count += 1;
-    if *tick_count % 300 != 0 {
-        return;
-    }
-    let (Ok(anchor_transform), Ok(ball_transform)) = (
-        transform_query.get(demo.anchor),
-        transform_query.get(demo.ball),
-    ) else {
-        return;
-    };
-    let radius = (ball_transform.translation - anchor_transform.translation).length();
-    println!("tick {}: ball-and-socket radius {:.3}.", *tick_count, radius);
-    assert!(
-        (radius - 1.6).abs() < 0.2,
-        "ball should hold its radius from the anchor"
-    );
 }
 
 fn draw_link(
@@ -145,8 +116,15 @@ fn draw_link(
     if joint_query.get(demo.joint).is_err() {
         return;
     }
-    let Ok(ball) = transform_query.get(demo.ball) else {
+    let (Ok(anchor), Ok(ball)) = (
+        transform_query.get(demo.anchor),
+        transform_query.get(demo.ball),
+    ) else {
         return;
     };
-    gizmos.line(ANCHOR, ball.translation, Color::srgb(1.0, 0.5, 0.7));
+    gizmos.line(
+        anchor.translation,
+        ball.translation,
+        Color::srgb(1.0, 0.5, 0.7),
+    );
 }

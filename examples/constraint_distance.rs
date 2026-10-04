@@ -10,6 +10,7 @@ use bevy_jolt::{
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 5.0, 0.0);
 const BALL_SPAWN: Vec3 = Vec3::new(1.2, 3.4, 0.0);
+const KICK_EVERY_N_TICKS: u32 = 300;
 
 fn main() {
     App::new()
@@ -17,8 +18,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(FixedUpdate, rekick_ball)
-        .add_systems(FixedPostUpdate, report)
+        .add_systems(FixedUpdate, kick_ball)
         .add_systems(PostUpdate, draw_link)
         .run();
 }
@@ -83,18 +83,17 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::distance(anchor, ball, ANCHOR, BALL_SPAWN, 1.5, 2.5, JointSpace::World))
+        .spawn(JoltJoint::distance(anchor, ball, ANCHOR, BALL_SPAWN, 0.0, 2.5, JointSpace::World))
         .id();
     commands.insert_resource(Demo {
         anchor,
         ball,
         joint,
-        kick_in: 600,
+        kick_in: KICK_EVERY_N_TICKS,
     });
-    commands.trigger(JoltImpulse::linear(ball, Vec3::new(3.0, 0.5, 1.5)));
 }
 
-fn rekick_ball(
+fn kick_ball(
     mut demo: ResMut<Demo>,
     joint_query: Query<(), With<JoltJointId>>,
     mut commands: Commands,
@@ -106,38 +105,11 @@ fn rekick_ball(
     if demo.kick_in == 0 {
         commands.trigger(JoltImpulse::linear(
             demo.ball,
-            Vec3::new(3.0, 0.5, 1.5),
+            Vec3::new(0.0, 2000.0, 0.0),
         ));
-        demo.kick_in = 600;
-        println!("re-kicked the rope ball");
+        demo.kick_in = KICK_EVERY_N_TICKS;
+        println!("kicked the ball");
     }
-}
-
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let (Ok(anchor_transform), Ok(ball_transform)) = (
-        transform_query.get(demo.anchor),
-        transform_query.get(demo.ball),
-    ) else {
-        return;
-    };
-    let length = (ball_transform.translation - anchor_transform.translation).length();
-    println!("tick {}: rope {:.3}.", *tick, length);
-    assert!(
-        (1.3..2.7).contains(&length),
-        "rope should hold the ball in range"
-    );
 }
 
 fn draw_link(

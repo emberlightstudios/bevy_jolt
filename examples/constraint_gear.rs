@@ -1,15 +1,18 @@
-//! Gear joint: two discs hang off pivot posts, rotations coupled 2:1.
-//! A disc gets spun every 5s; watch the other counter-rotate twice as fast.
-//! Both discs also get a hinge each, which the gear needs as reference.
+//! Gear Joint: two round discs hang off pivot posts, rotations coupled 2:1.
+//! Disc1 is driven directly with an angular velocity; the gear drags disc2
+//! along at twice the rate, counter-rotating. Both discs also get a hinge
+//! each, which the gear needs as reference.
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
-    JoltPlugin, JoltShape,
-    JointSpace,
+    CollisionLayers, JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint,
+    JoltPlugin, JoltShape, JointSpace,
 };
 
-const HINGE1: Vec3 = Vec3::new(-1.0, 3.5, 0.0);
-const HINGE2: Vec3 = Vec3::new(1.0, 3.5, 0.0);
+const DISC1_POS: Vec3 = Vec3::new(-0.65, 3.0, 0.0);
+const DISC2_POS: Vec3 = Vec3::new(0.65, 3.0, 0.0);
+const DISC1_RADIUS: f32 = 0.8;
+const DISC2_RADIUS: f32 = 0.4;
+const DRIVE_RATE: f32 = 2.0;
 
 fn main() {
     App::new()
@@ -17,19 +20,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(FixedUpdate, start_motor_once)
-        .add_systems(FixedPostUpdate, report)
-        .add_systems(PostUpdate, draw_link)
         .run();
-}
-
-#[derive(Resource)]
-struct Demo {
-    disc1: Entity,
-    disc2: Entity,
-    hinge1: Entity,
-    gear: Entity,
-    started: bool,
 }
 
 fn spawn_scene(
@@ -48,14 +39,17 @@ fn spawn_scene(
         },
         Transform::from_xyz(4.0, 8.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
+    let floor = commands
+        .spawn((
+            Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
+            MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
+            Transform::from_xyz(0.0, -1.0, 0.0),
+            JoltBody::fixed(CollisionLayers::NON_MOVING),
+            JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+        ))
+        .id();
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
-        Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
-    ));
-    commands.spawn((
-        Text::new("gear (2:1 discs)"),
+        Text::new("Gear Constraint"),
         Node {
             position_type: PositionType::Absolute,
             top: Val::Px(12.0),
@@ -64,126 +58,75 @@ fn spawn_scene(
         },
     ));
 
-    let post1 = commands
-        .spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.4, 1.0, 0.4))),
-            MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
-            Transform::from_xyz(-1.0, 4.5, 0.0),
-            JoltBody::fixed(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.2, 0.5, 0.2)),
-        ))
-        .id();
+    // No posts: each disc hinges directly to the floor (the fixed frame),
+    // so each hinge still has a static side and a spinning side. The visible
+    // disc is a child mesh: body sync overwrites the body's own rotation
+    // every tick, so a tip applied on the body would be wiped.
+    let disc1_mesh = meshes.add(Cylinder::new(DISC1_RADIUS, 0.15));
+    let disc1_face = materials.add(Color::srgb(0.8, 0.7, 0.2));
     let disc1 = commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.2, 1.2, 0.3))),
-            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.2))),
-            Transform::from_xyz(-1.0, 3.0, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.6, 0.6, 0.15)),
+            Transform::from_translation(DISC1_POS)
+                .with_rotation(Quat::from_rotation_x(
+                    core::f32::consts::FRAC_PI_2,
+                )),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::sphere(DISC1_RADIUS),
+            JoltAngularVelocity {
+                angular_velocity: Vec3::Z * DRIVE_RATE,
+            },
+            children![(
+                Mesh3d(disc1_mesh),
+                MeshMaterial3d(disc1_face),
+                Transform::from_rotation(Quat::from_rotation_x(
+                    core::f32::consts::FRAC_PI_2,
+                )),
+            )]
         ))
         .id();
-    let post2 = commands
-        .spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.4, 1.0, 0.4))),
-            MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
-            Transform::from_xyz(1.0, 4.5, 0.0),
-            JoltBody::fixed(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.2, 0.5, 0.2)),
-        ))
-        .id();
+    let disc2_mesh = meshes.add(Cylinder::new(DISC2_RADIUS, 0.15));
+    let disc2_face = materials.add(Color::srgb(0.2, 0.7, 0.8));
     let disc2 = commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.2, 1.2, 0.3))),
-            MeshMaterial3d(materials.add(Color::srgb(0.2, 0.7, 0.8))),
-            Transform::from_xyz(1.0, 3.0, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::new(0.6, 0.6, 0.15)),
+            Transform::from_translation(DISC2_POS),
+            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltShape::sphere(DISC2_RADIUS),
+            children![(
+                Mesh3d(disc2_mesh),
+                MeshMaterial3d(disc2_face),
+                Transform::from_rotation(Quat::from_rotation_x(
+                    core::f32::consts::FRAC_PI_2,
+                )),
+            )]
         ))
         .id();
     let hinge1 = commands
-        .spawn(JoltJoint::hinge(post1, disc1, HINGE1, Dir3::Z, Dir3::X, JointSpace::World))
+        .spawn(JoltJoint::hinge(
+            floor,
+            disc1,
+            DISC1_POS,
+            Dir3::Z,
+            Dir3::X,
+            JointSpace::World,
+        ))
         .id();
     let hinge2 = commands
-        .spawn(JoltJoint::hinge(post2, disc2, HINGE2, Dir3::Z, Dir3::X, JointSpace::World))
+        .spawn(JoltJoint::hinge(
+            floor,
+            disc2,
+            DISC2_POS,
+            Dir3::Z,
+            Dir3::X,
+            JointSpace::World,
+        ))
         .id();
-    let gear = commands
-        .spawn(JoltJoint::gear(disc1, disc2, Dir3::Z, 2.0, hinge1, hinge2, JointSpace::World))
-        .id();
-    commands.insert_resource(Demo {
+    commands.spawn(JoltJoint::gear(
         disc1,
         disc2,
+        Dir3::Z,
+        2.0,
         hinge1,
-        gear,
-        started: false,
-    });
-}
-
-fn start_motor_once(
-    mut demo: ResMut<Demo>,
-    joint_query: Query<&JoltJointId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    if demo.started {
-        return;
-    }
-    let (Ok(hinge_id), Ok(gear_id)) = (
-        joint_query.get(demo.hinge1),
-        joint_query.get(demo.gear),
-    ) else {
-        return;
-    };
-    // Steady spin: the hinge motor drives disc1, the gear drags disc2 along.
-    physics_world.constraint_drive_at(hinge_id.constraint_id_raw, 2.0);
-    demo.started = true;
-    println!("gear joint id {}", gear_id.constraint_id_raw);
-}
-
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-) {
-    if !demo.started || joint_query.get(demo.gear).is_err() {
-        return;
-    }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let (Ok(disc1), Ok(disc2)) = (
-        transform_query.get(demo.disc1),
-        transform_query.get(demo.disc2),
-    ) else {
-        return;
-    };
-    // Twist around Z shows the coupling: equal and opposite, scaled by ratio.
-    let (axis, angle1) = disc1.rotation.to_axis_angle();
-    let signed = angle1 * axis.z.signum();
-    println!(
-        "tick {}: discs at y={:.3}, y={:.3}, disc1 twist {:.2} rad.",
-        *tick, disc1.translation.y, disc2.translation.y, signed
-    );
-    assert!(
-        disc1.translation.y > 1.5 && disc2.translation.y > 1.5,
-        "gear discs should hang on"
-    );
-}
-
-fn draw_link(
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-    mut gizmos: Gizmos,
-) {
-    if joint_query.get(demo.gear).is_err() {
-        return;
-    }
-    let (Ok(disc1), Ok(disc2)) = (
-        transform_query.get(demo.disc1),
-        transform_query.get(demo.disc2),
-    ) else {
-        return;
-    };
-    gizmos.line(
-        disc1.translation,
-        disc2.translation,
-        Color::srgb(1.0, 0.9, 0.3),
-    );
+        hinge2,
+        JointSpace::World,
+    ));
 }

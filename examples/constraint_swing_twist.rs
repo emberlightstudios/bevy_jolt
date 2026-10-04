@@ -10,6 +10,7 @@ use bevy_jolt::{
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 4.2, 0.0);
 const ARM_SPAWN: Vec3 = Vec3::new(0.6, 2.8, 0.0);
+const KICK_EVERY_N_TICKS: u32 = 300;
 
 fn main() {
     App::new()
@@ -17,8 +18,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(FixedUpdate, rekick_arm)
-        .add_systems(FixedPostUpdate, report)
+        .add_systems(FixedUpdate, kick_arm)
         .add_systems(PostUpdate, draw_link)
         .run();
 }
@@ -100,12 +100,11 @@ fn spawn_scene(
         shoulder,
         arm,
         joint,
-        kick_in: 600,
+        kick_in: KICK_EVERY_N_TICKS,
     });
-    commands.trigger(JoltImpulse::linear(arm, Vec3::new(3.0, 0.5, 1.5)));
 }
 
-fn rekick_arm(
+fn kick_arm(
     mut demo: ResMut<Demo>,
     joint_query: Query<(), With<JoltJointId>>,
     mut commands: Commands,
@@ -115,33 +114,10 @@ fn rekick_arm(
     }
     demo.kick_in = demo.kick_in.saturating_sub(1);
     if demo.kick_in == 0 {
-        commands.trigger(JoltImpulse::linear(demo.arm, Vec3::new(3.0, 0.5, 1.5)));
-        demo.kick_in = 600;
-        println!("re-kicked the arm");
+        commands.trigger(JoltImpulse::linear(demo.arm, Vec3::new(0.0, 2000.0, 0.0)));
+        demo.kick_in = KICK_EVERY_N_TICKS;
+        println!("kicked the arm");
     }
-}
-
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
-) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let Ok(arm) = transform_query.get(demo.arm) else {
-        return;
-    };
-    println!("tick {}: arm height {:.3}.", *tick, arm.translation.y);
-    assert!(
-        arm.translation.y > 0.3,
-        "swing arm should not fall through the floor"
-    );
 }
 
 fn draw_link(

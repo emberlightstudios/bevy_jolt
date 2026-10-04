@@ -1,9 +1,8 @@
-//! Cone (shoulder) joint: the ball's spin is driven directly with an
-//! oscillating angular velocity, swinging freely inside the cone. No kicks:
-//! the joint plus the driven spin do the rest.
+//! Cone Joint: the ball's spin is driven directly with an
+//! angular velocity, swinging freely inside the cone. 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId,
+    CollisionLayers, JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint,
     JoltPlugin, JoltShape, JointSpace,
 };
 
@@ -16,7 +15,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(Update, sway_anchor)
+        .add_systems(Update, ball_twist)
         .add_systems(PostUpdate, draw_link)
         .run();
 }
@@ -25,8 +24,6 @@ fn main() {
 struct Demo {
     anchor: Entity,
     ball: Entity,
-    joint: Entity,
-    sway_ticks: u32,
 }
 
 fn spawn_scene(
@@ -53,7 +50,7 @@ fn spawn_scene(
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
-        Text::new("cone (shoulder)"),
+        Text::new("Cone constraint"),
         Node {
             position_type: PositionType::Absolute,
             top: Val::Px(12.0),
@@ -86,7 +83,7 @@ fn spawn_scene(
             },
         ))
         .id();
-    let joint = commands
+    let _joint = commands
         .spawn(JoltJoint::cone(
             anchor,
             ball,
@@ -100,39 +97,25 @@ fn spawn_scene(
     commands.insert_resource(Demo {
         anchor,
         ball,
-        joint,
-        sway_ticks: 0,
     });
 }
 
-/// Slow twist: oscillating angular velocity around the ball's own up winds
-/// and unwinds the hanging ball. Direct velocity drive (not torque): the
-/// cone still caps the swing while the spin rate is exact.
-fn sway_anchor(
-    mut demo: ResMut<Demo>,
+fn ball_twist(
+    demo: Res<Demo>,
     mut body_query: Query<(&Transform, &mut JoltAngularVelocity)>,
-    render_time: Res<Time>,
 ) {
     let Ok((ball_transform, mut spin)) = body_query.get_mut(demo.ball) else {
         return;
     };
-    demo.sway_ticks += 1;
-    // Fixed-hz phase would be nicer, but Update has no fixed delta: advance
-    // by wall clock so the oscillation rate is framerate-independent.
-    let elapsed = render_time.elapsed_secs();
-    let twist_rate = 2.5 * (0.942 * elapsed).cos();
+    let twist_rate = 2.5;
     spin.angular_velocity = ball_transform.up() * twist_rate;
 }
 
 fn draw_link(
     demo: Res<Demo>,
     transform_query: Query<&Transform>,
-    joint_query: Query<(), With<JoltJointId>>,
     mut gizmos: Gizmos,
 ) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
     let (Ok(anchor), Ok(ball)) = (
         transform_query.get(demo.anchor),
         transform_query.get(demo.ball),
