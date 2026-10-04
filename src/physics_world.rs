@@ -14,9 +14,30 @@ use jolt_sys::{
     bjolt_create_plane, bjolt_create_point_constraint, bjolt_create_pulley_constraint,
     bjolt_create_rack_pinion_constraint, bjolt_create_six_dof_slider, bjolt_create_sphere,
     bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint, bjolt_init, bjolt_kick_body,
-    bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body, bjolt_set_velocity, bjolt_vehicle_drive,
+    bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body, bjolt_set_angular_velocity,
+    bjolt_set_linear_velocity, bjolt_set_velocity, bjolt_vehicle_drive,
     bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_update,
 };
+
+/// Which frame joint anchors/axes live in. `World` takes global positions
+/// and directions; `LocalToBodyCom` takes them relative to each body's
+/// center of mass (NOT the Bevy `Transform` origin). Re-exported from
+/// `jolt_sys` constants so the FFI discriminant stays in one place.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum JointSpace {
+    #[default]
+    World,
+    LocalToBodyCom,
+}
+
+impl JointSpace {
+    fn ffi_space(self) -> u8 {
+        match self {
+            JointSpace::World => jolt_sys::JOINT_SPACE_WORLD,
+            JointSpace::LocalToBodyCom => jolt_sys::JOINT_SPACE_LOCAL_TO_BODY_COM,
+        }
+    }
+}
 
 /// Position and linear velocity of one body at the current step.
 pub struct BodySnapshot {
@@ -340,12 +361,24 @@ impl JoltWorld {
     }
 
     /// Welds two bodies in their current relative pose. Returns 0 on failure.
-    pub fn create_fixed_constraint(&mut self, body1_raw: u32, body2_raw: u32) -> u32 {
-        unsafe { bjolt_create_fixed_constraint(self.world_ptr, body1_raw, body2_raw) }
+    pub fn create_fixed_constraint(
+        &mut self,
+        body1_raw: u32,
+        body2_raw: u32,
+        joint_space: JointSpace,
+    ) -> u32 {
+        unsafe {
+            bjolt_create_fixed_constraint(
+                self.world_ptr,
+                body1_raw,
+                body2_raw,
+                joint_space.ffi_space(),
+            )
+        }
     }
 
-    /// Keeps two world-space anchor points within a distance band. Negative
-    /// bounds fall back to the anchors' current distance. Returns 0 on failure.
+    /// Keeps two anchor points within a distance band. Negative bounds fall
+    /// back to the anchors' current distance. Returns 0 on failure.
     pub fn create_distance_constraint(
         &mut self,
         body1_raw: u32,
@@ -354,6 +387,7 @@ impl JoltWorld {
         point2: Vec3,
         min_distance: f32,
         max_distance: f32,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
             bjolt_create_distance_constraint(
@@ -368,11 +402,12 @@ impl JoltWorld {
                 point2.z,
                 min_distance,
                 max_distance,
+                joint_space.ffi_space(),
             )
         }
     }
 
-    /// Single-axis hinge at a world-space point. The hinge axis is the free
+    /// Single-axis hinge at an anchor point. The hinge axis is the free
     /// rotation; the normal axis defines angle zero. Returns 0 on failure.
     pub fn create_hinge_constraint(
         &mut self,
@@ -381,6 +416,7 @@ impl JoltWorld {
         hinge_point: Vec3,
         hinge_axis: Vec3,
         normal_axis: Vec3,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
             bjolt_create_hinge_constraint(
@@ -396,6 +432,7 @@ impl JoltWorld {
                 normal_axis.x,
                 normal_axis.y,
                 normal_axis.z,
+                joint_space.ffi_space(),
             )
         }
     }
@@ -404,13 +441,14 @@ impl JoltWorld {
         unsafe { bjolt_remove_constraint(self.world_ptr, constraint_id) }
     }
 
-    /// Ball-and-socket at a world point: positions locked, rotation free.
+    /// Ball-and-socket at an anchor point: positions locked, rotation free.
     /// Returns 0 on failure.
     pub fn create_point_constraint(
         &mut self,
         body1_raw: u32,
         body2_raw: u32,
         constraint_point: Vec3,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
             bjolt_create_point_constraint(
@@ -420,6 +458,7 @@ impl JoltWorld {
                 constraint_point.x,
                 constraint_point.y,
                 constraint_point.z,
+                joint_space.ffi_space(),
             )
         }
     }
@@ -434,6 +473,7 @@ impl JoltWorld {
         normal_axis: Vec3,
         limits_min: f32,
         limits_max: f32,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
             bjolt_create_slider_constraint(
@@ -448,6 +488,7 @@ impl JoltWorld {
                 normal_axis.z,
                 limits_min,
                 limits_max,
+                joint_space.ffi_space(),
             )
         }
     }
@@ -462,6 +503,7 @@ impl JoltWorld {
         twist_axis1: Vec3,
         twist_axis2: Vec3,
         half_cone_angle: f32,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
             bjolt_create_cone_constraint(
@@ -478,6 +520,7 @@ impl JoltWorld {
                 twist_axis2.y,
                 twist_axis2.z,
                 half_cone_angle,
+                joint_space.ffi_space(),
             )
         }
     }
@@ -495,6 +538,7 @@ impl JoltWorld {
         plane_half_cone_angle: f32,
         twist_min_angle: f32,
         twist_max_angle: f32,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
             bjolt_create_swing_twist_constraint(
@@ -514,6 +558,7 @@ impl JoltWorld {
                 plane_half_cone_angle,
                 twist_min_angle,
                 twist_max_angle,
+                joint_space.ffi_space(),
             )
         }
     }
@@ -543,6 +588,7 @@ impl JoltWorld {
         ratio: f32,
         min_length: f32,
         max_length: f32,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
             bjolt_create_pulley_constraint(
@@ -564,6 +610,7 @@ impl JoltWorld {
                 ratio,
                 min_length,
                 max_length,
+                joint_space.ffi_space(),
             )
         }
     }
@@ -578,6 +625,7 @@ impl JoltWorld {
         ratio: f32,
         hinge_id1: u32,
         hinge_id2: u32,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
             bjolt_create_gear_constraint(
@@ -590,6 +638,7 @@ impl JoltWorld {
                 ratio,
                 hinge_id1,
                 hinge_id2,
+                joint_space.ffi_space(),
             )
         }
     }
@@ -605,6 +654,7 @@ impl JoltWorld {
         ratio: f32,
         pinion_hinge_id: u32,
         rack_slider_id: u32,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
             bjolt_create_rack_pinion_constraint(
@@ -620,6 +670,7 @@ impl JoltWorld {
                 ratio,
                 pinion_hinge_id,
                 rack_slider_id,
+                joint_space.ffi_space(),
             )
         }
     }
@@ -731,6 +782,33 @@ impl JoltWorld {
             )
         }
     }
+    /// Linear-only velocity overwrite. Leaves angular velocity untouched, so
+    /// a driven move never wipes out spin.
+    pub fn set_linear_velocity(&mut self, body_id_raw: u32, linear_velocity: Vec3) {
+        unsafe {
+            bjolt_set_linear_velocity(
+                self.world_ptr,
+                body_id_raw,
+                linear_velocity.x,
+                linear_velocity.y,
+                linear_velocity.z,
+            )
+        }
+    }
+
+    /// Angular-only velocity overwrite. Leaves linear velocity untouched.
+    pub fn set_angular_velocity(&mut self, body_id_raw: u32, angular_velocity: Vec3) {
+        unsafe {
+            bjolt_set_angular_velocity(
+                self.world_ptr,
+                body_id_raw,
+                angular_velocity.x,
+                angular_velocity.y,
+                angular_velocity.z,
+            )
+        }
+    }
+
 
     /// Velocity motor on a slider, hinge, or path joint. False on bad ids.
     pub fn constraint_drive_at(&mut self, constraint_id: u32, target_velocity: f32) -> bool {

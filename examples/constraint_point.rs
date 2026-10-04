@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy_jolt::{
     CollisionLayers, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
     JoltShape,
+    JointSpace,
 };
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 5.0, 0.0);
@@ -81,7 +82,7 @@ fn spawn_scene(
             JoltShape::sphere(0.3),
         ))
         .id();
-    let joint = commands.spawn(JoltJoint::point(anchor, ball, ANCHOR)).id();
+    let joint = commands.spawn(JoltJoint::point(anchor, ball, ANCHOR, JointSpace::World)).id();
     commands.insert_resource(Demo {
         anchor,
         ball,

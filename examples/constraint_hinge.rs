@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy_jolt::{
     CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
     JoltPlugin, JoltShape,
+    JointSpace,
 };
 
 const HINGE_POINT: Vec3 = Vec3::new(0.0, 3.2, 0.0);
@@ -89,7 +90,7 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::hinge(post, panel, HINGE_POINT, Vec3::Z, Vec3::X))
+        .spawn(JoltJoint::hinge(post, panel, HINGE_POINT, Vec3::Z, Vec3::X, JointSpace::World))
         .id();
     commands.insert_resource(Demo {
         panel,

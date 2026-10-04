@@ -4,6 +4,7 @@
 use bevy::prelude::*;
 use bevy_jolt::{
     CollisionLayers, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltPlugin, JoltShape,
+    JointSpace,
 };
 
 fn main() {
@@ -74,7 +75,7 @@ fn spawn_scene(
             JoltShape::box_shape(Vec3::splat(0.5)),
         ))
         .id();
-    commands.spawn(JoltJoint::fixed(bottom, top));
+    commands.spawn(JoltJoint::fixed(bottom, top, JointSpace::World));
     commands.insert_resource(Demo {
         bottom,
         top,

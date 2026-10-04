@@ -116,12 +116,17 @@ impl Plugin for JoltPlugin {
             FixedUpdate,
             crate::joint_sync::create_jolt_joints.before(step_physics_world),
         );
-        // Held forces re-add before the step so they act this tick. One-shot
+        // Held forces re-add before the step so they act this tick. Driven
+        // velocities overwrite before the step for the same reason. One-shot
         // impulses and velocity sets need no scheduling: their observers fire
         // the moment the event triggers.
         app.add_systems(
             FixedUpdate,
-            crate::body_forces::apply_jolt_forces.before(step_physics_world),
+            (
+                crate::body_forces::apply_jolt_forces,
+                crate::body_forces::apply_jolt_driven_velocities,
+            )
+                .before(step_physics_world),
         );
         app.add_systems(FixedUpdate, step_physics_world);
         app.add_systems(

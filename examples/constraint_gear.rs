@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy_jolt::{
     CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
     JoltPlugin, JoltShape,
+    JointSpace,
 };
 
 const HINGE1: Vec3 = Vec3::new(-1.0, 3.5, 0.0);
@@ -96,13 +97,13 @@ fn spawn_scene(
         ))
         .id();
     let hinge1 = commands
-        .spawn(JoltJoint::hinge(post1, disc1, HINGE1, Vec3::Z, Vec3::X))
+        .spawn(JoltJoint::hinge(post1, disc1, HINGE1, Vec3::Z, Vec3::X, JointSpace::World))
         .id();
     let hinge2 = commands
-        .spawn(JoltJoint::hinge(post2, disc2, HINGE2, Vec3::Z, Vec3::X))
+        .spawn(JoltJoint::hinge(post2, disc2, HINGE2, Vec3::Z, Vec3::X, JointSpace::World))
         .id();
     let gear = commands
-        .spawn(JoltJoint::gear(disc1, disc2, Vec3::Z, 2.0, hinge1, hinge2))
+        .spawn(JoltJoint::gear(disc1, disc2, Vec3::Z, 2.0, hinge1, hinge2, JointSpace::World))
         .id();
     commands.insert_resource(Demo {
         disc1,

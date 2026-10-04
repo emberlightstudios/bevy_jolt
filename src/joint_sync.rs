@@ -10,16 +10,21 @@
 use bevy::prelude::*;
 
 use crate::body_sync::{JoltBody, JoltBodyId};
+use crate::physics_world::JointSpace;
 use crate::plugin::JoltPhysicsWorld;
 
 /// Joint spec: which two bodies to link plus what kind of constraint.
 /// Creation params (anchors, axes, limits) live here; the untyped
 /// [`JoltJointId`] holds the runtime handle. No `Transform`: joints aren't
-/// spatial, anchors bake in world space on the creation tick.
+/// spatial. `joint_space` says which frame those anchors/axes live in:
+/// `World` (global) or `LocalToBodyCom` (relative to each body's center
+/// of mass). Local is NOT the Bevy `Transform` origin: subtract the
+/// shape's center-of-mass offset first.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct JoltJoint {
     pub body_a: Entity,
     pub body_b: Entity,
+    pub joint_space: JointSpace,
     pub kind: JointKind,
 }
 
@@ -96,14 +101,14 @@ pub enum JointKind {
 }
 
 impl JoltJoint {
-    pub fn fixed(body_a: Entity, body_b: Entity) -> Self {
+    pub fn fixed(body_a: Entity, body_b: Entity, joint_space: JointSpace) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::Fixed,
         }
     }
-
     pub fn distance(
         body_a: Entity,
         body_b: Entity,
@@ -111,10 +116,12 @@ impl JoltJoint {
         point2: Vec3,
         min_distance: f32,
         max_distance: f32,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::Distance {
                 point1,
                 point2,
@@ -123,17 +130,18 @@ impl JoltJoint {
             },
         }
     }
-
     pub fn hinge(
         body_a: Entity,
         body_b: Entity,
         hinge_point: Vec3,
         hinge_axis: Vec3,
         normal_axis: Vec3,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::Hinge {
                 hinge_point,
                 hinge_axis,
@@ -142,10 +150,16 @@ impl JoltJoint {
         }
     }
 
-    pub fn point(body_a: Entity, body_b: Entity, constraint_point: Vec3) -> Self {
+    pub fn point(
+        body_a: Entity,
+        body_b: Entity,
+        constraint_point: Vec3,
+        joint_space: JointSpace,
+    ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::Point { constraint_point },
         }
     }
@@ -157,10 +171,12 @@ impl JoltJoint {
         normal_axis: Vec3,
         limits_min: f32,
         limits_max: f32,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::Slider {
                 slider_axis,
                 normal_axis,
@@ -177,10 +193,12 @@ impl JoltJoint {
         twist_axis1: Vec3,
         twist_axis2: Vec3,
         half_cone_angle: f32,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::Cone {
                 constraint_point,
                 twist_axis1,
@@ -201,10 +219,12 @@ impl JoltJoint {
         plane_half_cone_angle: f32,
         twist_min_angle: f32,
         twist_max_angle: f32,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::SwingTwist {
                 constraint_position,
                 twist_axis,
@@ -217,15 +237,19 @@ impl JoltJoint {
         }
     }
 
+    /// `joint_space` is accepted for uniformity but ignored: the piston
+    /// locks to the bodies' current poses plus the Y band.
     pub fn six_dof_slider(
         body_a: Entity,
         body_b: Entity,
         limit_y_min: f32,
         limit_y_max: f32,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::SixDofSlider {
                 limit_y_min,
                 limit_y_max,
@@ -244,10 +268,12 @@ impl JoltJoint {
         ratio: f32,
         min_length: f32,
         max_length: f32,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::Pulley {
                 body_point1,
                 fixed_point1,
@@ -267,10 +293,12 @@ impl JoltJoint {
         ratio: f32,
         hinge_a: Entity,
         hinge_b: Entity,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::Gear {
                 hinge_axis,
                 ratio,
@@ -289,10 +317,12 @@ impl JoltJoint {
         ratio: f32,
         pinion_hinge: Entity,
         rack_slider: Entity,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
+            joint_space,
             kind: JointKind::RackPinion {
                 hinge_axis,
                 slider_axis,
@@ -303,15 +333,19 @@ impl JoltJoint {
         }
     }
 
+    /// `joint_space` is accepted for uniformity but ignored: track points
+    /// are path-local to the static body's frame.
     pub fn path_cart(
         static_body: Entity,
         cart_body: Entity,
         track_from: Vec3,
         track_to: Vec3,
+        joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a: static_body,
             body_b: cart_body,
+            joint_space,
             kind: JointKind::PathCart {
                 track_from,
                 track_to,
@@ -386,7 +420,9 @@ pub fn create_jolt_joints(
         };
         let world = &mut **physics_world;
         let constraint_id = match joint.kind {
-            JointKind::Fixed => world.create_fixed_constraint(body_a_raw, body_b_raw),
+            JointKind::Fixed => {
+                world.create_fixed_constraint(body_a_raw, body_b_raw, joint.joint_space)
+            }
             JointKind::Distance {
                 point1,
                 point2,
@@ -399,6 +435,7 @@ pub fn create_jolt_joints(
                 point2,
                 min_distance,
                 max_distance,
+                joint.joint_space,
             ),
             JointKind::Hinge {
                 hinge_point,
@@ -410,10 +447,14 @@ pub fn create_jolt_joints(
                 hinge_point,
                 hinge_axis,
                 normal_axis,
+                joint.joint_space,
             ),
-            JointKind::Point { constraint_point } => {
-                world.create_point_constraint(body_a_raw, body_b_raw, constraint_point)
-            }
+            JointKind::Point { constraint_point } => world.create_point_constraint(
+                body_a_raw,
+                body_b_raw,
+                constraint_point,
+                joint.joint_space,
+            ),
             JointKind::Slider {
                 slider_axis,
                 normal_axis,
@@ -426,6 +467,7 @@ pub fn create_jolt_joints(
                 normal_axis,
                 limits_min,
                 limits_max,
+                joint.joint_space,
             ),
             JointKind::Cone {
                 constraint_point,
@@ -439,6 +481,7 @@ pub fn create_jolt_joints(
                 twist_axis1,
                 twist_axis2,
                 half_cone_angle,
+                joint.joint_space,
             ),
             JointKind::SwingTwist {
                 constraint_position,
@@ -458,6 +501,7 @@ pub fn create_jolt_joints(
                 plane_half_cone_angle,
                 twist_min_angle,
                 twist_max_angle,
+                joint.joint_space,
             ),
             JointKind::SixDofSlider {
                 limit_y_min,
@@ -481,6 +525,7 @@ pub fn create_jolt_joints(
                 ratio,
                 min_length,
                 max_length,
+                joint.joint_space,
             ),
             JointKind::Gear {
                 hinge_axis,
@@ -500,6 +545,7 @@ pub fn create_jolt_joints(
                     ratio,
                     hinge_a_raw,
                     hinge_b_raw,
+                    joint.joint_space,
                 )
             }
             JointKind::RackPinion {
@@ -522,6 +568,7 @@ pub fn create_jolt_joints(
                     ratio,
                     hinge_raw,
                     slider_raw,
+                    joint.joint_space,
                 )
             }
             JointKind::PathCart {

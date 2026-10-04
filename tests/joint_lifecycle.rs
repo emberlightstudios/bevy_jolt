@@ -7,6 +7,7 @@
 use bevy::prelude::*;
 use bevy_jolt::{
     CollisionLayers, JoltBody, JoltBodyId, JoltJoint, JoltJointId, JoltPlugin, JoltShape,
+    JointSpace,
 };
 
 fn spawn_pair(app: &mut App) -> (Entity, Entity, Entity) {
@@ -28,7 +29,7 @@ fn spawn_pair(app: &mut App) -> (Entity, Entity, Entity) {
         .id();
     let joint = app
         .world_mut()
-        .spawn(JoltJoint::fixed(body_a, body_b))
+        .spawn(JoltJoint::fixed(body_a, body_b, JointSpace::World))
         .id();
     (body_a, body_b, joint)
 }

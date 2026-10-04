@@ -1,12 +1,16 @@
-//! One-shot force events and persistent force components.
+//! One-shot force events and persistent drive components.
 //!
 //! One-shots are [`EntityEvent`]s so firing them never moves the target
 //! entity between archetypes (see code-quality rule 18): trigger
 //! `JoltImpulse`/`JoltSetVelocity` on the body entity and the observer
-//! applies it to the Jolt body immediately. A held push lives as
-//! [`JoltForce`] on the entity itself: the two archetype moves happen once
-//! at attach/detach, steady-state reads are free, and despawn cleans up
+//! applies it to the Jolt body immediately. Held drives live as components
+//! on the entity itself: the two archetype moves happen once at
+//! attach/detach, steady-state reads are free, and despawn cleans up
 //! with no extra work.
+//!
+//! Linear and angular halves are separate components so driving movement
+//! never wipes out spin (and vice versa): most bodies only need the linear
+//! half, and each half is added/removed on its own.
 
 use bevy::prelude::*;
 
@@ -72,29 +76,35 @@ impl JoltSetVelocity {
     }
 }
 
-/// Persistent force + torque, re-applied every tick while present. Jolt
-/// clears accumulated forces each step, so the system re-adds them before
+/// Persistent linear force, re-applied every tick while present. Jolt
+/// clears accumulated forces each step, so the system re-adds it before
 /// the physics step. Remove the component to stop pushing.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct JoltForce {
-    pub push_force: Vec3,
-    pub push_torque: Vec3,
+pub struct JoltLinearForce {
+    pub linear_force: Vec3,
 }
 
-impl JoltForce {
-    pub fn force(push_force: Vec3) -> Self {
-        Self {
-            push_force,
-            push_torque: Vec3::ZERO,
-        }
-    }
+/// Persistent angular torque, re-applied every tick while present.
+/// Same re-add rule as [`JoltLinearForce`].
+#[derive(Component, Clone, Copy, Debug)]
+pub struct JoltAngularForce {
+    pub angular_torque: Vec3,
+}
 
-    pub fn torque(push_torque: Vec3) -> Self {
-        Self {
-            push_force: Vec3::ZERO,
-            push_torque,
-        }
-    }
+/// Persistent linear velocity, overwritten every tick while present.
+/// Overrules gravity/friction/drag on this axis while attached: for
+/// directly driven bodies (player, platform, hover), not for bodies that
+/// should react naturally. Remove the component to release the body.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct JoltLinearVelocity {
+    pub linear_velocity: Vec3,
+}
+
+/// Persistent angular velocity, overwritten every tick while present.
+/// Same overrule warning as [`JoltLinearVelocity`].
+#[derive(Component, Clone, Copy, Debug)]
+pub struct JoltAngularVelocity {
+    pub angular_velocity: Vec3,
 }
 
 /// Applies a triggered [`JoltImpulse`] to the target entity's Jolt body.
@@ -131,14 +141,57 @@ pub fn apply_jolt_set_velocity(
     );
 }
 
-/// Re-adds every [`JoltForce`] before the physics step. Bodies missing
-/// their id (not baked yet) are skipped for the tick, not despawned:
-/// unlike joints, a force has no endpoint to go stale on.
+/// Re-adds every [`JoltLinearForce`] and [`JoltAngularForce`] before the
+/// physics step. Bodies missing their id (not baked yet) are skipped for
+/// the tick, not despawned: unlike joints, a force has no endpoint to go
+/// stale on. One pass with `Option` reads: no extra loop cost for the
+/// split, and entities carrying only one half skip the other FFI call
+/// (zero halves are skipped inside the FFI anyway).
 pub fn apply_jolt_forces(
-    force_query: Query<(&JoltForce, &JoltBodyId)>,
+    force_query: Query<
+        (
+            &JoltBodyId,
+            Option<&JoltLinearForce>,
+            Option<&JoltAngularForce>,
+        ),
+        Or<(With<JoltLinearForce>, With<JoltAngularForce>)>,
+    >,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    for (push, body_id) in &force_query {
-        physics_world.apply_force(body_id.body_id_raw, push.push_force, push.push_torque);
+    for (body_id, linear_push, angular_push) in &force_query {
+        let linear_force = linear_push
+            .map(|push| push.linear_force)
+            .unwrap_or(Vec3::ZERO);
+        let angular_torque = angular_push
+            .map(|push| push.angular_torque)
+            .unwrap_or(Vec3::ZERO);
+        physics_world.apply_force(body_id.body_id_raw, linear_force, angular_torque);
     }
 }
+
+
+/// Overwrites velocity every tick for entities carrying
+/// [`JoltLinearVelocity`] and/or [`JoltAngularVelocity`]. Each half only
+/// touches its own axis, so a driven move never wipes out spin. Runs
+/// before the physics step, same as forces.
+pub fn apply_jolt_driven_velocities(
+    velocity_query: Query<
+        (
+            &JoltBodyId,
+            Option<&JoltLinearVelocity>,
+            Option<&JoltAngularVelocity>,
+        ),
+        Or<(With<JoltLinearVelocity>, With<JoltAngularVelocity>)>,
+    >,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (body_id, linear_drive, angular_drive) in &velocity_query {
+        if let Some(linear_drive) = linear_drive {
+            physics_world.set_linear_velocity(body_id.body_id_raw, linear_drive.linear_velocity);
+        }
+        if let Some(angular_drive) = angular_drive {
+            physics_world.set_angular_velocity(body_id.body_id_raw, angular_drive.angular_velocity);
+        }
+    }
+}
+

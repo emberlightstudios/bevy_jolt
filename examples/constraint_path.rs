@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy_jolt::{
     CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
     JoltPlugin, JoltShape,
+    JointSpace,
 };
 
 const TRACK_FROM: Vec3 = Vec3::new(-1.5, 3.5, 0.0);
@@ -83,7 +84,7 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::path_cart(anchor, cart, TRACK_FROM, TRACK_TO))
+        .spawn(JoltJoint::path_cart(anchor, cart, TRACK_FROM, TRACK_TO, JointSpace::World))
         .id();
     commands.insert_resource(Demo {
         cart,

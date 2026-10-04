@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy_jolt::{
     CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
     JoltPlugin, JoltShape,
+    JointSpace,
 };
 
 fn main() {
@@ -80,7 +81,7 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::slider(rail, block, Vec3::Y, Vec3::X, -1.5, 0.5))
+        .spawn(JoltJoint::slider(rail, block, Vec3::Y, Vec3::X, -1.5, 0.5, JointSpace::World))
         .id();
     commands.insert_resource(Demo {
         block,
