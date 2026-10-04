@@ -11,6 +11,13 @@ pub struct JoltCollisionLayers {
     pub collision_layers: CollisionLayers,
 }
 
+/// Startup gravity carried from the [`JoltPlugin`] builder to world
+/// creation. Inserted by the plugin; read it to inspect the configured pull.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct JoltStartupGravity {
+    pub world_gravity: Vec3,
+}
+
 /// Bevy resource owning the Jolt physics world. Derefs to [`JoltWorld`] so
 /// systems call `physics_world.create_box(...)` directly; the field stays
 /// for the rare case the resource wrapper itself matters.
@@ -25,9 +32,16 @@ impl FromWorld for JoltPhysicsWorld {
             .get_resource::<JoltCollisionLayers>()
             .map(|layers_resource| layers_resource.collision_layers.clone())
             .unwrap_or_default();
-        Self {
-            physics_world: JoltWorld::with_layers(collision_layers),
-        }
+        let mut physics_world = JoltWorld::with_layers(collision_layers);
+        // The plugin builder owns the startup gravity: Jolt itself always
+        // starts at Earth-like (0, -9.81, 0), so overwrite with whatever the
+        // builder carries (default = same value, no visible change).
+        let startup_gravity = world
+            .get_resource::<JoltStartupGravity>()
+            .map(|gravity_resource| gravity_resource.world_gravity)
+            .unwrap_or(JoltPlugin::DEFAULT_GRAVITY);
+        physics_world.set_world_gravity(startup_gravity);
+        Self { physics_world }
     }
 }
 
@@ -38,6 +52,7 @@ pub struct JoltPlugin {
     collision_layers: CollisionLayers,
     physics_hz: f64,
     max_sub_steps: u32,
+    world_gravity: Vec3,
 }
 
 impl JoltPlugin {
@@ -48,11 +63,16 @@ impl JoltPlugin {
     /// Jolt collision step per tick. Raise for fast bodies at low tick rates.
     pub const DEFAULT_MAX_SUB_STEPS: u32 = 1;
 
+    /// World gravity every body feels, scaled per body by its gravity
+    /// factor. Jolt default: Earth-like (0, -9.81, 0).
+    pub const DEFAULT_GRAVITY: Vec3 = Vec3::new(0.0, -9.81, 0.0);
+
     pub fn new() -> Self {
         Self {
             collision_layers: CollisionLayers::default(),
             physics_hz: Self::DEFAULT_PHYSICS_HZ,
             max_sub_steps: Self::DEFAULT_MAX_SUB_STEPS,
+            world_gravity: Self::DEFAULT_GRAVITY,
         }
     }
 
@@ -78,6 +98,18 @@ impl JoltPlugin {
         self.max_sub_steps = max_sub_steps;
         self
     }
+
+    /// World gravity every body feels, scaled per body by its gravity
+    /// factor. Must be finite (zero vector allowed: no pull anywhere).
+    pub fn with_world_gravity(mut self, world_gravity: Vec3) -> Self {
+        assert!(
+            world_gravity.is_finite(),
+            "gravity must be finite, got {}",
+            world_gravity
+        );
+        self.world_gravity = world_gravity;
+        self
+    }
 }
 
 impl Default for JoltPlugin {
@@ -97,6 +129,10 @@ impl Plugin for JoltPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(JoltCollisionLayers {
             collision_layers: self.collision_layers.clone(),
+        });
+        // Before the world resource: FromWorld reads this for startup gravity.
+        app.insert_resource(JoltStartupGravity {
+            world_gravity: self.world_gravity,
         });
         app.init_resource::<JoltPhysicsWorld>();
         app.insert_resource(Time::<Fixed>::from_hz(self.physics_hz));

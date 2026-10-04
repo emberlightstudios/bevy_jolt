@@ -19,6 +19,6 @@ pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, Previous
 pub use crate::debug_draw::JoltDebugPlugin;
 pub use crate::joint_sync::{JointKind, JoltJoint, JoltJointId};
 pub use crate::physics_world::{BodySnapshot, CollisionLayers, JointSpace, JoltWorld, PhysicsShape, RayHit};
-pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStepConfig, step_physics_world};
+pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStepConfig, step_physics_world};
 pub use jolt_sys::MAX_OBJECT_LAYERS;
 
