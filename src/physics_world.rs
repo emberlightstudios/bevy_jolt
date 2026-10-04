@@ -16,8 +16,9 @@ use jolt_sys::{
     bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
     bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_gravity_factor, bjolt_init,
     bjolt_kick_body, bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body,
-    bjolt_set_angular_velocity, bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_velocity,
-    bjolt_vehicle_drive, bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_update,
+    bjolt_set_angular_velocity, bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity,
+    bjolt_set_velocity, bjolt_vehicle_drive, bjolt_world_create_with_layers, bjolt_world_destroy,
+    bjolt_world_gravity, bjolt_world_update,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -968,6 +969,27 @@ impl JoltWorld {
     /// double). Takes effect on the next step, no re-bake needed.
     pub fn set_body_gravity_factor(&mut self, body_id_raw: u32, gravity_factor: f32) {
         unsafe { bjolt_set_gravity_factor(self.world_ptr, body_id_raw, gravity_factor) }
+    }
+
+    /// Global gravity every body feels, scaled per body by its gravity
+    /// factor. Jolt defaults to (0, -9.81, 0).
+    pub fn world_gravity(&self) -> Vec3 {
+        let mut gravity = [0.0f32; 3];
+        unsafe { bjolt_world_gravity(self.world_ptr, gravity.as_mut_ptr()) }
+        Vec3::from_array(gravity)
+    }
+
+    /// Replaces global gravity at runtime (moon level, zero-g room, flipped
+    /// world). Takes effect on the next step.
+    pub fn set_world_gravity(&mut self, world_gravity: Vec3) {
+        unsafe {
+            bjolt_set_gravity(
+                self.world_ptr,
+                world_gravity.x,
+                world_gravity.y,
+                world_gravity.z,
+            )
+        }
     }
 
     pub fn body_snapshot(&self, body_id_raw: u32) -> BodySnapshot {
