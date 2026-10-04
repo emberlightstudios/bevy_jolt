@@ -7,7 +7,7 @@ use crate::body_sync::JoltMotion;
 use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
     BJoltWorld, bjolt_apply_force, bjolt_apply_impulse, bjolt_body_is_active, bjolt_body_remove_destroy,
-    bjolt_body_state, bjolt_body_transform, bjolt_car_bounds, bjolt_cast_ray, bjolt_constraint_drive_at,
+    bjolt_body_state, bjolt_body_transform, bjolt_cast_ray, bjolt_constraint_drive_at,
     bjolt_create_box, bjolt_create_capsule, bjolt_create_cone_constraint, bjolt_create_cylinder,
     bjolt_create_demo_car, bjolt_create_distance_constraint, bjolt_create_fixed_constraint,
     bjolt_create_floor, bjolt_create_gear_constraint, bjolt_create_hinge_constraint,
@@ -15,7 +15,7 @@ use jolt_sys::{
     bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_six_dof_slider,
     bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
     bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_gravity_factor, bjolt_init,
-    bjolt_kick_body, bjolt_move_kinematic, bjolt_remove_constraint, bjolt_reset_body,
+    bjolt_move_kinematic, bjolt_remove_constraint,
     bjolt_set_angular_velocity, bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity,
     bjolt_set_rotation, bjolt_set_velocity, bjolt_vehicle_drive, bjolt_world_create_with_layers,
     bjolt_world_destroy, bjolt_world_gravity, bjolt_world_update,
@@ -855,11 +855,6 @@ impl JoltWorld {
         unsafe { bjolt_vehicle_drive(self.world_ptr, constraint_id, forward, right, brake) }
     }
 
-    /// One-shot velocity kick so a resting rig shows motion immediately.
-    pub fn kick_body(&mut self, body_id_raw: u32, velocity: Vec3) {
-        unsafe { bjolt_kick_body(self.world_ptr, body_id_raw, velocity.x, velocity.y, velocity.z) }
-    }
-
     /// One-shot linear + angular impulse at center of mass. Zero halves are
     /// skipped; pass one pair for a combined kick.
     pub fn apply_impulse(&mut self, body_id_raw: u32, linear_impulse: Vec3, angular_impulse: Vec3) {
@@ -951,29 +946,9 @@ impl JoltWorld {
         }
     }
 
-
     /// Velocity motor on a slider, hinge, or path joint. False on bad ids.
     pub fn constraint_drive_at(&mut self, constraint_id: u32, target_velocity: f32) -> bool {
         unsafe { bjolt_constraint_drive_at(self.world_ptr, constraint_id, target_velocity) }
-    }
-
-    /// Teleports the car body back inside a rectangle when it leaves.
-    /// Cheap demo guard so the car can drive without a chase camera.
-    pub fn clamp_car_to_bounds(&mut self, body_id_raw: u32, min: Vec3, max: Vec3) {
-        unsafe {
-            bjolt_car_bounds(
-                self.world_ptr, body_id_raw, min.x, max.x, min.z, max.z,
-            )
-        }
-    }
-
-    /// Drops a body back at a spawn pose with zero velocity. Demo looping.
-    pub fn reset_body_to(&mut self, body_id_raw: u32, spawn_position: Vec3) {
-        unsafe {
-            bjolt_reset_body(
-                self.world_ptr, body_id_raw, spawn_position.x, spawn_position.y, spawn_position.z,
-            )
-        }
     }
 
     pub fn body_is_active(&self, body_id_raw: u32) -> bool {

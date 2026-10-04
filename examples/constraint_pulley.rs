@@ -1,10 +1,10 @@
 //! Pulley (elevator) joint: two weights share one rope, so one rises as the
-//! other falls. Every 15s the first weight gets hoisted back up to loop.
+//! other falls. The heavier weight sinks and drags the lighter one up.
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltJoint, JoltJointId,
-    JoltPhysicsWorld, JoltPlugin, JoltShape, JointSpace,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPlugin, JoltShape,
+    JointSpace,
 };
 
 const FIXED1: Vec3 = Vec3::new(-1.0, 6.0, 0.0);
@@ -18,7 +18,6 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(FixedUpdate, hoist_weight)
         .add_systems(PostUpdate, draw_ropes)
         .run();
 }
@@ -28,7 +27,6 @@ struct Demo {
     weight1: Entity,
     weight2: Entity,
     joint: Entity,
-    hoist_in: u32,
 }
 
 fn spawn_scene(
@@ -100,26 +98,7 @@ fn spawn_scene(
         weight1,
         weight2,
         joint,
-        hoist_in: 900,
     });
-}
-
-fn hoist_weight(
-    mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
-    joint_query: Query<(), With<JoltJointId>>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    if joint_query.get(demo.joint).is_err() {
-        return;
-    }
-    demo.hoist_in = demo.hoist_in.saturating_sub(1);
-    if demo.hoist_in == 0 {
-        if let Ok(weight1) = body_query.get(demo.weight1) {
-            physics_world.reset_body_to(weight1.body_id_raw, BODY1_SPAWN);
-        }
-        demo.hoist_in = 900;
-    }
 }
 
 

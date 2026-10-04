@@ -1,11 +1,11 @@
 //! Vehicle: a four-wheel demo car with ray-cast wheels laps a paddock.
-//! Gas held down, WASD steers from the keyboard. Teleports back inside the
-//! paddock instead of driving away forever.
+//! Gas held down, WASD steers from the keyboard.
 
 use bevy::prelude::*;
 use bevy_jolt::{CollisionLayers, JoltBody, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin, JoltShape};
 
 const CAR_SPAWN: Vec3 = Vec3::new(0.0, 1.2, 0.0);
+const PADDOCK_HALF: f32 = 30.0;
 
 fn main() {
     App::new()
@@ -15,7 +15,6 @@ fn main() {
         .add_systems(Startup, spawn_scene)
         .add_systems(PreUpdate, create_car_once)
         .add_systems(PreUpdate, drive_car.after(create_car_once))
-        .add_systems(FixedPostUpdate, report)
         .add_systems(PostUpdate, sync_car_mesh)
         .run();
 }
@@ -87,7 +86,6 @@ fn create_car_once(
     };
     demo.car_body = body;
     demo.car_joint = joint;
-    println!("car body {body}, vehicle joint id {joint}");
 }
 
 fn drive_car(
@@ -114,34 +112,19 @@ fn drive_car(
         0.0
     };
     let brake = if keyboard.pressed(KeyCode::Space) { 1.0 } else { 0.0 };
-    physics_world
-        .vehicle_drive(demo.car_joint, forward, steer, brake);
-    if demo.car_body != 0 {
-        physics_world.clamp_car_to_bounds(
-            demo.car_body,
-            Vec3::new(-30.0, 0.0, -30.0),
-            Vec3::new(30.0, 0.0, 30.0),
-        );
+    // Steer back toward the paddock instead of teleporting: turn around when
+    // near the edge so the car laps on its own.
+    let (car_position, _) = physics_world.body_full_transform(demo.car_body);
+    let (mut drive_forward, mut drive_steer) = (forward, steer);
+    if car_position.x.abs() > PADDOCK_HALF - 6.0 || car_position.z.abs() > PADDOCK_HALF - 6.0 {
+        drive_forward = 0.6;
+        drive_steer = if car_position.x > car_position.z {
+            0.6
+        } else {
+            -0.6
+        };
     }
-}
-
-fn report(mut tick: Local<u32>, demo: Res<Demo>, physics_world: Res<JoltPhysicsWorld>) {
-    if demo.car_joint == 0 {
-        return;
-    }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let (position, _) = physics_world
-        .body_full_transform(demo.car_body);
-    println!(
-        "tick {}: car at ({:.1}, {:.1}), height {:.2}.",
-        *tick, position.x, position.z, position.y
-    );
-    if position.y <= 0.2 {
-        println!("tick {}: car left its wheels.", *tick);
-    }
+    physics_world.vehicle_drive(demo.car_joint, drive_forward, drive_steer, brake);
 }
 
 fn sync_car_mesh(
