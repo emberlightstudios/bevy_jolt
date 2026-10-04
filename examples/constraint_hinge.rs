@@ -88,7 +88,16 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::hinge(post, panel, HINGE_POINT, Dir3::Z, Dir3::X, JointSpace::World))
+        .spawn(JoltJoint::hinge_limited(
+            post,
+            panel,
+            HINGE_POINT,
+            Dir3::Z,
+            Dir3::X,
+            -1.2,
+            1.2,
+            JointSpace::World,
+        ))
         .id();
     commands.insert_resource(Demo {
         joint,
