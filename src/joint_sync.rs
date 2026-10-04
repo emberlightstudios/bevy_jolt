@@ -43,6 +43,8 @@ pub enum JointKind {
         hinge_point: Vec3,
         hinge_axis: Dir3,
         normal_axis: Dir3,
+        limits_min: f32,
+        limits_max: f32,
     },
     Point {
         constraint_point: Vec3,
@@ -146,6 +148,52 @@ impl JoltJoint {
                 hinge_point,
                 hinge_axis,
                 normal_axis,
+                limits_min: -core::f32::consts::PI,
+                limits_max: core::f32::consts::PI,
+            },
+        }
+    }
+
+    /// Hinge with swing limits in radians: min in [-pi, 0], max in [0, pi].
+    /// The motor clamps inside the band, so a ping-pong drive bounces off the
+    /// stops instead of spinning through.
+    #[allow(clippy::too_many_arguments)]
+    pub fn hinge_limited(
+        body_a: Entity,
+        body_b: Entity,
+        hinge_point: Vec3,
+        hinge_axis: Dir3,
+        normal_axis: Dir3,
+        limits_min: f32,
+        limits_max: f32,
+        joint_space: JointSpace,
+    ) -> Self {
+        assert!(
+            (-core::f32::consts::PI..=0.0).contains(&limits_min),
+            "hinge min {} outside [-pi, 0]",
+            limits_min
+        );
+        assert!(
+            (0.0..=core::f32::consts::PI).contains(&limits_max),
+            "hinge max {} outside [0, pi]",
+            limits_max
+        );
+        assert!(
+            limits_min <= limits_max,
+            "hinge min {} above max {}",
+            limits_min,
+            limits_max
+        );
+        Self {
+            body_a,
+            body_b,
+            joint_space,
+            kind: JointKind::Hinge {
+                hinge_point,
+                hinge_axis,
+                normal_axis,
+                limits_min,
+                limits_max,
             },
         }
     }
@@ -441,12 +489,16 @@ pub fn create_jolt_joints(
                 hinge_point,
                 hinge_axis,
                 normal_axis,
+                limits_min,
+                limits_max,
             } => world.create_hinge_constraint(
                 body_a_raw,
                 body_b_raw,
                 hinge_point,
                 hinge_axis,
                 normal_axis,
+                limits_min,
+                limits_max,
                 joint.joint_space,
             ),
             JointKind::Point { constraint_point } => world.create_point_constraint(

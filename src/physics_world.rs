@@ -529,7 +529,9 @@ impl JoltWorld {
     }
 
     /// Single-axis hinge at an anchor point. The hinge axis is the free
-    /// rotation; the normal axis defines angle zero. Returns 0 on failure.
+    /// rotation; the normal axis defines angle zero. Limits in radians clamp
+    /// the swing: min in [-pi, 0], max in [0, pi] (full swing by default).
+    /// Returns 0 on failure.
     pub fn create_hinge_constraint(
         &mut self,
         body1_raw: u32,
@@ -537,6 +539,8 @@ impl JoltWorld {
         hinge_point: Vec3,
         hinge_axis: Dir3,
         normal_axis: Dir3,
+        limits_min: f32,
+        limits_max: f32,
         joint_space: JointSpace,
     ) -> u32 {
         unsafe {
@@ -553,6 +557,8 @@ impl JoltWorld {
                 normal_axis.as_vec3().x,
                 normal_axis.as_vec3().y,
                 normal_axis.as_vec3().z,
+                limits_min,
+                limits_max,
                 joint_space.ffi_space(),
             )
         }
