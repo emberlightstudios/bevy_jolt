@@ -31,7 +31,7 @@ fn spawn_scene(
 ) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 3.0, 10.0).looking_at(Vec3::new(0.0, 2.5, 0.0), Dir3::Y),
+        Transform::from_xyz(3.0, 3.0, 10.0).looking_at(Vec3::new(0.0, 2.5, 0.0), Dir3::Y),
     ));
     commands.spawn((
         DirectionalLight {
@@ -48,7 +48,7 @@ fn spawn_scene(
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
-        Text::new("slider (piston)"),
+        Text::new("slider"),
         Node {
             position_type: PositionType::Absolute,
             top: Val::Px(12.0),
@@ -57,10 +57,14 @@ fn spawn_scene(
         },
     ));
 
+    // Static anchor: every Jolt joint is a two-body constraint, so the slide
+    // needs a partner even though nothing moves but the block. Fixed in
+    // World space, this contributes only a reference frame: the slide axis
+    // stays global and the travel stays a straight line. (If the anchor
+    // moved or spun, the axis would follow it and the path would curve.)
+    // No mesh: without one it stays out of the scene and the debug draw.
     let rail = commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.5, 0.5, 0.5))),
-            MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
             Transform::from_xyz(0.0, 4.2, 0.0),
             JoltBody::fixed(CollisionLayers::MOVING),
             JoltShape::box_shape(Vec3::splat(0.25)),
@@ -75,6 +79,8 @@ fn spawn_scene(
             JoltShape::box_shape(Vec3::splat(0.3)),
         ))
         .id();
+    // Travel is relative to the spawn pose (position 0), not the world
+    // origin: limits -1.5/+0.5 mean 1.5 down and 0.5 up from y=2.6.
     let joint = commands
         .spawn((
             JoltJoint::slider(
@@ -120,9 +126,10 @@ fn draw_rail(
     if joint_query.get(demo.joint).is_err() {
         return;
     }
+    // Legal travel: spawn pose plus the joint limits along the slide axis.
     gizmos.line(
-        Vec3::new(0.0, 0.2, 0.0),
-        Vec3::new(0.0, 4.2, 0.0),
+        Vec3::new(0.0, 2.6 - 1.5, 0.0),
+        Vec3::new(0.0, 2.6 + 0.5, 0.0),
         Color::srgb(0.4, 0.7, 1.0),
     );
 }
