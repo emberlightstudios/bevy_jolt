@@ -110,7 +110,7 @@ fn watch_cloth_scene(
     demo: Res<ClothDemo>,
     soft_query: Query<&JoltSoftBodyId>,
     transform_query: Query<&Transform>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
+    physics_world: Res<JoltPhysicsWorld>,
     mut app_exit: MessageWriter<AppExit>,
 ) {
     let (Some(banner), Some(slider)) = (demo.banner, demo.slider) else {
