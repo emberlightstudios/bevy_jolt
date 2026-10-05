@@ -2,7 +2,7 @@
 //! it sag, then it prints pin stability + drape depth and exits.
 
 use bevy::prelude::*;
-use bevy_jolt::{JoltPhysicsWorld, JoltPlugin, JoltSoftBody, JoltSoftBodyId};
+use bevy_jolt::{JoltBody, JoltPhysicsWorld, JoltPlugin, JoltShape, JoltSoftBody, JoltSoftBodyId};
 
 const SETTLE_TICKS: u32 = 400;
 const GRID_NX: u32 = 16;
@@ -43,6 +43,13 @@ fn spawn_cloth_scene(mut commands: Commands, mut demo: ResMut<ClothDemo>) {
             },
         ))
         .id();
+    // Shoulder stand: the breeze presses the sheet onto this cube, folds
+    // wrap it instead of clipping through. Static, so it never budges.
+    commands.spawn((
+        Transform::from_xyz(0.0, 4.2, 0.9),
+        JoltBody::fixed(0),
+        JoltShape::box_shape(Vec3::new(0.6, 0.6, 0.6)),
+    ));
     demo.banner = Some(banner);
 }
 
@@ -101,5 +108,17 @@ fn watch_cloth_scene(
         bottom_swing > 0.5,
         "breeze should billow the free edge past 0.5m, got z={bottom_swing:.3}"
     );
-    app_exit.write(AppExit::Success);
+    // Shoulder stand at (0, 4.2, 0.9), half 0.6: no vertex may end up
+    // inside it. The sheet wraps the cube instead of clipping through.
+    for vertex_position in &cloth_positions {
+        let inside_cube = (vertex_position.x - 0.0).abs() < 0.55
+            && (vertex_position.y - 4.2).abs() < 0.55
+            && (vertex_position.z - 0.9).abs() < 0.55;
+        assert!(
+            !inside_cube,
+            "cloth should wrap the cube, not clip it: vertex at {:?}",
+            vertex_position
+        );
+    }
+    println!("Sheet wraps the cube; nothing clips.");
 }
