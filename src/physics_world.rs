@@ -14,21 +14,27 @@ use jolt_sys::{
     bjolt_body_state, bjolt_body_transform, bjolt_character_create, bjolt_character_destroy,
     bjolt_character_move, bjolt_character_stance, bjolt_character_teleport, bjolt_constraint_drive_at,
     bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
-    bjolt_create_capsule, bjolt_create_cloth, bjolt_create_compound, bjolt_create_cone_constraint,
-    bjolt_create_cylinder, bjolt_create_distance_constraint, bjolt_create_fixed_constraint,
-    bjolt_create_floor, bjolt_create_gear_constraint, bjolt_create_hinge_constraint,
-    bjolt_create_motorcycle, bjolt_create_path_cart, bjolt_create_plane,
-    bjolt_create_point_constraint, bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint,
-    bjolt_create_six_dof, bjolt_create_sphere, bjolt_create_slider_constraint,
-    bjolt_create_swing_twist_constraint, bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder,
-    bjolt_create_tracked_vehicle, bjolt_create_wheeled_vehicle, bjolt_gravity_factor,
-    bjolt_init, bjolt_move_kinematic, bjolt_remove_constraint, bjolt_set_angular_velocity,
-    bjolt_set_ccd, bjolt_set_friction, bjolt_set_gravity, bjolt_set_gravity_factor,
-    bjolt_set_linear_velocity, bjolt_set_position, bjolt_set_position_rotation, bjolt_set_restitution,
-    bjolt_set_rotation, bjolt_set_velocity, bjolt_tracked_drive, bjolt_vehicle_drive,
+    bjolt_create_capsule, bjolt_create_cloth_settings, bjolt_create_compound,
+    bjolt_create_cone_constraint, bjolt_create_cube_settings, bjolt_create_cylinder,
+    bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
+    bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_motorcycle,
+    bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
+    bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_shared_settings,
+    bjolt_create_six_dof, bjolt_create_soft_body, bjolt_create_sphere, bjolt_create_sphere_settings,
+    bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
+    bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_create_tracked_vehicle,
+    bjolt_create_wheeled_vehicle, bjolt_destroy_shared_settings, bjolt_drain_contact_added,
+    bjolt_drain_contact_removed, bjolt_gravity_factor, bjolt_init, bjolt_move_kinematic,
+    bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_ccd, bjolt_set_friction,
+    bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_position,
+    bjolt_set_position_rotation, bjolt_set_restitution, bjolt_set_rotation, bjolt_set_velocity,
+    bjolt_shared_face_count, bjolt_shared_faces, bjolt_shared_vertex_count, bjolt_soft_contacts,
+    bjolt_soft_destroy, bjolt_soft_iterations, bjolt_soft_inv_masses, bjolt_soft_pressure,
+    bjolt_soft_push, bjolt_soft_set_inv_masses, bjolt_soft_set_iterations, bjolt_soft_set_pressure,
+    bjolt_soft_set_vertex_radius, bjolt_soft_velocities, bjolt_soft_vertex_count, bjolt_soft_vertex_radius,
+    bjolt_soft_vertices, bjolt_soft_volume, bjolt_tracked_drive, bjolt_vehicle_drive,
     bjolt_vehicle_shift, bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_gravity,
-    bjolt_world_update, bjolt_drain_contact_added, bjolt_drain_contact_removed,
-    bjolt_soft_destroy, bjolt_soft_push, bjolt_soft_vertex_count, bjolt_soft_vertices,
+    bjolt_world_update,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -47,6 +53,78 @@ impl JointSpace {
         match self {
             JointSpace::World => jolt_sys::JOINT_SPACE_WORLD,
             JointSpace::LocalToBodyCom => jolt_sys::JOINT_SPACE_LOCAL_TO_BODY_COM,
+        }
+    }
+}
+
+/// Which bend constraint the shared-settings builders create.
+/// Mirrors Jolt's `EBendType`: none, cheap distance, or expensive
+/// dihedral (handles triangles not starting in the same plane).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SoftBendType {
+    #[default]
+    None,
+    Distance,
+    Dihedral,
+}
+
+/// Full Jolt soft-body creation settings, one field per C++ knob.
+/// Passed to [`JoltWorld::create_soft_body`]; nothing hides in FFI defaults.
+#[derive(Clone, Debug)]
+pub struct SoftBodyConfig {
+    /// Spawn position of the soft body.
+    pub body_position: Vec3,
+    /// Spawn rotation of the soft body.
+    pub body_rotation: Quat,
+    /// Collision layer, same teams as rigid bodies.
+    pub object_layer: u16,
+    /// Solver iterations for this body.
+    pub num_iterations: u32,
+    /// Linear damping: dv/dt = -damping * v, near zero.
+    pub linear_damping: f32,
+    /// Fastest any vertex may travel (m/s).
+    pub max_linear_velocity: f32,
+    /// Bounciness on contact.
+    pub restitution: f32,
+    /// Grip on contact.
+    pub friction: f32,
+    /// Balloon pressure (n * R * T); inflates closed shapes.
+    pub pressure: f32,
+    /// Gravity scale for this body.
+    pub gravity_factor: f32,
+    /// Particle skin thickness: pushes verts off surfaces.
+    pub vertex_radius: f32,
+    /// False pins the body to the static world (only free verts move).
+    pub update_position: bool,
+    /// Bakes rotation into verts, keeps body rotation identity (more exact).
+    pub make_rotation_identity: bool,
+    /// Whether the body may sleep.
+    pub allow_sleeping: bool,
+    /// Faces collide from both sides (ray casts, shape queries).
+    pub faces_double_sided: bool,
+    /// App user data.
+    pub user_data: u64,
+}
+
+impl Default for SoftBodyConfig {
+    fn default() -> Self {
+        Self {
+            body_position: Vec3::ZERO,
+            body_rotation: Quat::IDENTITY,
+            object_layer: 0,
+            num_iterations: 5,
+            linear_damping: 0.1,
+            max_linear_velocity: 500.0,
+            restitution: 0.0,
+            friction: 0.2,
+            pressure: 0.0,
+            gravity_factor: 1.0,
+            vertex_radius: 0.0,
+            update_position: true,
+            make_rotation_identity: true,
+            allow_sleeping: true,
+            faces_double_sided: false,
+            user_data: 0,
         }
     }
 }
@@ -1357,27 +1435,176 @@ impl JoltWorld {
         }
     }
 
-    /// Moves a live body (spawn fix-up, respawns, resets). Wakes the body;
-    /// Creates a soft cloth banner: grid in the XZ plane at the position,
-    /// top row pinned so it hangs. Returns the soft body id (0 on failure).
-    pub fn create_cloth(
+    /// Shared soft-body settings from plain shape data. See
+    /// [`JoltWorld::create_soft_shared`] on `JoltSoftSharedSettings` usage;
+    /// this is the world-side constructor the bake path calls.
+    /// Creates shared soft-body settings from plain shape data: vertex
+    /// positions/velocities/inverse masses, triangle triples, edge pairs +
+    /// compliances, volume quads + compliances. Returns an opaque handle
+    /// (0 on failure) that outlives bodies: destroy it explicitly once no
+    /// body uses it. Empty slices skip that group; with no hand-placed
+    /// edges, Jolt auto-builds edge/shear/bend constraints from the faces.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_soft_shared(
+        &mut self,
+        vertex_positions: &[Vec3],
+        vertex_velocities: &[Vec3],
+        vertex_inv_masses: &[f32],
+        face_triangles: &[[u32; 3]],
+        edge_pairs: &[[u32; 2]],
+        edge_compliances: &[f32],
+        volume_quads: &[[u32; 4]],
+        volume_compliances: &[f32],
+        edge_compliance: f32,
+        shear_compliance: f32,
+        bend_compliance: f32,
+        bend_type: SoftBendType,
+    ) -> u64 {
+        let flat_positions: Vec<f32> = vertex_positions
+            .iter()
+            .flat_map(|vertex_position| vertex_position.to_array())
+            .collect();
+        let flat_velocities: Vec<f32> = vertex_velocities
+            .iter()
+            .flat_map(|vertex_velocity| vertex_velocity.to_array())
+            .collect();
+        let flat_faces: Vec<u32> = face_triangles.iter().flatten().copied().collect();
+        let flat_edges: Vec<u32> = edge_pairs.iter().flatten().copied().collect();
+        let flat_volumes: Vec<u32> = volume_quads.iter().flatten().copied().collect();
+        unsafe {
+            bjolt_create_shared_settings(
+                flat_positions.as_ptr(),
+                if vertex_velocities.is_empty() {
+                    std::ptr::null()
+                } else {
+                    flat_velocities.as_ptr()
+                },
+                vertex_inv_masses.as_ptr(),
+                vertex_positions.len() as u32,
+                if face_triangles.is_empty() {
+                    std::ptr::null()
+                } else {
+                    flat_faces.as_ptr()
+                },
+                face_triangles.len() as u32,
+                if edge_pairs.is_empty() {
+                    std::ptr::null()
+                } else {
+                    flat_edges.as_ptr()
+                },
+                if edge_compliances.is_empty() {
+                    std::ptr::null()
+                } else {
+                    edge_compliances.as_ptr()
+                },
+                edge_pairs.len() as u32,
+                if volume_quads.is_empty() {
+                    std::ptr::null()
+                } else {
+                    flat_volumes.as_ptr()
+                },
+                if volume_compliances.is_empty() {
+                    std::ptr::null()
+                } else {
+                    volume_compliances.as_ptr()
+                },
+                volume_quads.len() as u32,
+                edge_compliance,
+                shear_compliance,
+                bend_compliance,
+                bend_type as u8,
+            )
+        }
+    }
+
+    /// Frees shared settings. Call once no live body uses the handle.
+    pub fn destroy_soft_shared(&mut self, shared_handle: u64) {
+        unsafe { bjolt_destroy_shared_settings(shared_handle) }
+    }
+
+    /// Solid cube shared settings with volume constraints (Jolt's own
+    /// `sCreateCube`): the real 3D soft body. 0 on bad sizes.
+    pub fn create_cube_shared(&mut self, grid_size: u32, grid_spacing: f32) -> u64 {
+        unsafe { bjolt_create_cube_settings(grid_size, grid_spacing) }
+    }
+
+    /// Cloth-grid shared settings with the top rows pinned. 0 on bad sizes.
+    pub fn create_cloth_shared(
         &mut self,
         grid_nx: u32,
         grid_nz: u32,
-        spacing: f32,
-        cloth_position: Vec3,
-        object_layer: u16,
-    ) -> u32 {
+        grid_spacing: f32,
+        pinned_rows: u32,
+        bend_type: SoftBendType,
+    ) -> u64 {
         unsafe {
-            bjolt_create_cloth(
+            bjolt_create_cloth_settings(grid_nx, grid_nz, grid_spacing, pinned_rows, bend_type as u8)
+        }
+    }
+
+    /// Hollow sphere shared settings (pressure inflates it). 0 on bad sizes.
+    pub fn create_sphere_shared(
+        &mut self,
+        sphere_radius: f32,
+        theta_segments: u32,
+        phi_segments: u32,
+        bend_type: SoftBendType,
+    ) -> u64 {
+        unsafe {
+            bjolt_create_sphere_settings(sphere_radius, theta_segments, phi_segments, bend_type as u8)
+        }
+    }
+
+    /// Vertex count baked into shared settings. 0 on bad handles.
+    pub fn soft_shared_vertex_count(&self, shared_handle: u64) -> u32 {
+        unsafe { bjolt_shared_vertex_count(shared_handle) }
+    }
+
+    /// Face count baked into shared settings. 0 on bad handles.
+    pub fn soft_shared_face_count(&self, shared_handle: u64) -> u32 {
+        unsafe { bjolt_shared_face_count(shared_handle) }
+    }
+
+    /// Face triangles baked into shared settings. Truncates at the buffer
+    /// length; returns triangles written.
+    pub fn soft_shared_faces(&self, shared_handle: u64, out_triangles: &mut [[u32; 3]]) -> u32 {
+        unsafe {
+            bjolt_shared_faces(
+                shared_handle,
+                out_triangles.as_mut_ptr() as *mut u32,
+                out_triangles.len() as u32,
+            )
+        }
+    }
+
+    /// Creates a soft body from shared settings with the full Jolt
+    /// per-body knob set. Returns the body id (0 on failure).
+    pub fn create_soft_body(&mut self, shared_handle: u64, soft_config: &SoftBodyConfig) -> u32 {
+        unsafe {
+            bjolt_create_soft_body(
                 self.world_ptr,
-                grid_nx,
-                grid_nz,
-                spacing,
-                cloth_position.x,
-                cloth_position.y,
-                cloth_position.z,
-                object_layer,
+                shared_handle,
+                soft_config.body_position.x,
+                soft_config.body_position.y,
+                soft_config.body_position.z,
+                soft_config.body_rotation.x,
+                soft_config.body_rotation.y,
+                soft_config.body_rotation.z,
+                soft_config.body_rotation.w,
+                soft_config.object_layer,
+                soft_config.num_iterations,
+                soft_config.linear_damping,
+                soft_config.max_linear_velocity,
+                soft_config.restitution,
+                soft_config.friction,
+                soft_config.pressure,
+                soft_config.gravity_factor,
+                soft_config.vertex_radius,
+                soft_config.update_position,
+                soft_config.make_rotation_identity,
+                soft_config.allow_sleeping,
+                soft_config.faces_double_sided,
+                soft_config.user_data,
             )
         }
     }
@@ -1398,6 +1625,96 @@ impl JoltWorld {
                 out_positions.len() as u32,
             )
         }
+    }
+
+    /// World-space vertex velocities. Truncates at the buffer length.
+    pub fn soft_velocities(&self, body_id_raw: u32, out_velocities: &mut [Vec3]) -> u32 {
+        unsafe {
+            bjolt_soft_velocities(
+                self.world_ptr,
+                body_id_raw,
+                out_velocities.as_mut_ptr() as *mut f32,
+                out_velocities.len() as u32,
+            )
+        }
+    }
+
+    /// Per-vertex inverse masses. Zero means pinned.
+    pub fn soft_inv_masses(&self, body_id_raw: u32, out_inv_masses: &mut [f32]) -> u32 {
+        unsafe {
+            bjolt_soft_inv_masses(
+                self.world_ptr,
+                body_id_raw,
+                out_inv_masses.as_mut_ptr(),
+                out_inv_masses.len() as u32,
+            )
+        }
+    }
+
+    /// Overwrites per-vertex inverse masses live: zero nails a vertex,
+    /// positive frees it. Only mass and velocity are safe to touch at
+    /// runtime per Jolt; positions stay solver-owned.
+    pub fn soft_set_inv_masses(&mut self, body_id_raw: u32, inv_masses: &[f32]) {
+        unsafe {
+            bjolt_soft_set_inv_masses(
+                self.world_ptr,
+                body_id_raw,
+                inv_masses.as_ptr(),
+                inv_masses.len() as u32,
+            )
+        }
+    }
+
+    /// Per-vertex contact flags (true = touched something last update).
+    pub fn soft_contacts(&self, body_id_raw: u32, out_contacted: &mut [bool]) -> u32 {
+        let mut contact_bytes = vec![0u8; out_contacted.len()];
+        let written = unsafe {
+            bjolt_soft_contacts(
+                self.world_ptr,
+                body_id_raw,
+                contact_bytes.as_mut_ptr(),
+                contact_bytes.len() as u32,
+            )
+        };
+        for (contact_flag, contact_byte) in out_contacted.iter_mut().zip(contact_bytes.iter()) {
+            *contact_flag = *contact_byte != 0;
+        }
+        written
+    }
+
+    /// Current pressure (balloon bodies). 0 on bad ids.
+    pub fn soft_pressure(&self, body_id_raw: u32) -> f32 {
+        unsafe { bjolt_soft_pressure(self.world_ptr, body_id_raw) }
+    }
+
+    /// Sets pressure live (inflate/deflate a balloon body).
+    pub fn soft_set_pressure(&mut self, body_id_raw: u32, pressure: f32) {
+        unsafe { bjolt_soft_set_pressure(self.world_ptr, body_id_raw, pressure) }
+    }
+
+    /// Current solver iterations. 0 on bad ids.
+    pub fn soft_iterations(&self, body_id_raw: u32) -> u32 {
+        unsafe { bjolt_soft_iterations(self.world_ptr, body_id_raw) }
+    }
+
+    /// Sets solver iterations live.
+    pub fn soft_set_iterations(&mut self, body_id_raw: u32, num_iterations: u32) {
+        unsafe { bjolt_soft_set_iterations(self.world_ptr, body_id_raw, num_iterations) }
+    }
+
+    /// Current vertex radius (skin thickness). 0 on bad ids.
+    pub fn soft_vertex_radius(&self, body_id_raw: u32) -> f32 {
+        unsafe { bjolt_soft_vertex_radius(self.world_ptr, body_id_raw) }
+    }
+
+    /// Sets vertex radius live.
+    pub fn soft_set_vertex_radius(&mut self, body_id_raw: u32, vertex_radius: f32) {
+        unsafe { bjolt_soft_set_vertex_radius(self.world_ptr, body_id_raw, vertex_radius) }
+    }
+
+    /// Current enclosed volume (closed shapes). 0 on bad ids.
+    pub fn soft_volume(&self, body_id_raw: u32) -> f32 {
+        unsafe { bjolt_soft_volume(self.world_ptr, body_id_raw) }
     }
 
     /// Destroys a soft body. Never touches rigid bodies.

@@ -38,10 +38,13 @@ pub use crate::joint_sync::{
 };
 pub use crate::physics_world::{
     BodySnapshot, CollisionLayers, CompoundGeometry, CompoundPart, JointSpace, JoltWorld, PhysicsShape,
+    SoftBendType, SoftBodyConfig,
 };
 pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStepConfig, step_physics_world};
 pub use crate::ragdoll::{JoltRagdoll, JoltRagdollParts, RagdollPart};
-pub use crate::soft_body::{JoltSoftBody, JoltSoftBodyId};
+pub use crate::soft_body::{
+    JoltSoftBodyConfig, JoltSoftBodyId, JoltSoftBodyMesh, JoltSoftSharedSettings,
+};
 pub use crate::spatial_queries::{MAX_QUERY_HITS, OverlapHit, QueryProbe, RayHit};
 pub use crate::vehicle::{
     CurveKnot, JoltTrackedDrive, JoltVehicleDrive, JoltVehicleId, JoltVehicleShift,
