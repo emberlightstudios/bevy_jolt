@@ -106,8 +106,42 @@ pub fn path_knots_from_waypoints(waypoints: &[Vec3], looping: bool) -> Vec<PathK
         .collect()
 }
 
+/// How a path cart's rotation follows the track. Maps to Jolt's
+/// `EPathRotationConstraintType` (0-5) across the FFI.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PathRotation {
+    /// Rotation untouched: position rides the spline. Current behavior.
+    #[default]
+    Free,
+    /// Only spin around the tangent (direction of travel) is free.
+    AroundTangent,
+    /// Only spin around the track normal is free.
+    AroundNormal,
+    /// Only spin around the binormal is free.
+    AroundBinormal,
+    /// Nose follows the track: rotation locked to tangent + normal.
+    /// The pick for carts, trains, and coasters.
+    ToPath,
+    /// Rotation locked to the anchor body's rotation.
+    FullyConstrained,
+}
+
+impl PathRotation {
+    pub(crate) fn ffi_mode(self) -> u8 {
+        match self {
+            PathRotation::Free => 0,
+            PathRotation::AroundTangent => 1,
+            PathRotation::AroundNormal => 2,
+            PathRotation::AroundBinormal => 3,
+            PathRotation::ToPath => 4,
+            PathRotation::FullyConstrained => 5,
+        }
+    }
+}
+
 /// Reference frames for a [`JointKind::SixDof`] joint: anchor + basis per
 /// body. Differing body2 vectors offset the rest pose without moving the
+/// joint center, like the cone and swing-twist axes.
 #[derive(Clone, Copy, Debug)]
 pub struct SixDofFrame {
     pub position1: Vec3,
@@ -229,6 +263,7 @@ pub enum JointKind {
         knot_count: u8,
         looping: bool,
         motor: JointMotor,
+        cart_rotation: PathRotation,
     },
 }
 
@@ -545,6 +580,7 @@ impl JoltJoint {
         track_knots: &[PathKnot],
         looping: bool,
         motor: JointMotor,
+        cart_rotation: PathRotation,
         joint_space: JointSpace,
     ) -> Self {
         let mut knots = [PathKnot::default(); MAX_PATH_KNOTS];
@@ -559,6 +595,7 @@ impl JoltJoint {
                 knot_count: knot_count as u8,
                 looping,
                 motor,
+                cart_rotation,
             },
         }
     }
@@ -572,6 +609,7 @@ impl JoltJoint {
         waypoints: &[Vec3],
         looping: bool,
         motor: JointMotor,
+        cart_rotation: PathRotation,
         joint_space: JointSpace,
     ) -> Self {
         let track_knots = path_knots_from_waypoints(waypoints, looping);
@@ -581,6 +619,7 @@ impl JoltJoint {
             &track_knots,
             looping,
             motor,
+            cart_rotation,
             joint_space,
         )
     }
@@ -838,12 +877,14 @@ pub fn create_jolt_joints(
                 knot_count,
                 looping,
                 motor,
+                cart_rotation,
             } => world.create_path_cart(
                 body_a_raw,
                 body_b_raw,
                 &track_knots[..knot_count as usize],
                 looping,
                 motor,
+                cart_rotation,
             ),
         };
         assert!(

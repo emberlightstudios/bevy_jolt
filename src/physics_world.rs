@@ -6,21 +6,23 @@
 use crate::body_sync::JoltMotion;
 use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
-    BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi, VehicleLeanFfi, VehicleRollBarFfi,
-    VehicleTransmissionFfi, VehicleWheelFfi, bjolt_apply_force, bjolt_apply_impulse,
-    bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_state, bjolt_body_transform,
-    bjolt_cast_ray, bjolt_constraint_drive_at, bjolt_create_box, bjolt_create_capsule,
-    bjolt_create_cone_constraint, bjolt_create_cylinder, bjolt_create_distance_constraint,
-    bjolt_create_fixed_constraint, bjolt_create_floor, bjolt_create_gear_constraint,
-    bjolt_create_hinge_constraint, bjolt_create_motorcycle, bjolt_create_path_cart, bjolt_create_plane,
-    bjolt_create_point_constraint, bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint,
-    bjolt_create_six_dof, bjolt_create_sphere, bjolt_create_slider_constraint,
-    bjolt_create_swing_twist_constraint, bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder,
-    bjolt_create_tracked_vehicle, bjolt_create_wheeled_vehicle, bjolt_gravity_factor, bjolt_init,
-    bjolt_move_kinematic, bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_gravity,
-    bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_rotation, bjolt_set_velocity,
-    bjolt_tracked_drive, bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_world_create_with_layers,
-    bjolt_world_destroy, bjolt_world_gravity, bjolt_world_update,
+    BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
+    VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
+    bjolt_apply_force, bjolt_apply_impulse, bjolt_body_is_active, bjolt_body_remove_destroy,
+    bjolt_body_state, bjolt_body_transform, bjolt_cast_ray, bjolt_constraint_drive_at,
+    bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
+    bjolt_create_capsule, bjolt_create_cone_constraint, bjolt_create_cylinder,
+    bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
+    bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_motorcycle,
+    bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
+    bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_six_dof,
+    bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
+    bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_create_tracked_vehicle,
+    bjolt_create_wheeled_vehicle, bjolt_gravity_factor, bjolt_init, bjolt_move_kinematic,
+    bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_gravity, bjolt_set_gravity_factor,
+    bjolt_set_linear_velocity, bjolt_set_rotation, bjolt_set_velocity, bjolt_tracked_drive,
+    bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_world_create_with_layers, bjolt_world_destroy,
+    bjolt_world_gravity, bjolt_world_update,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -901,6 +903,7 @@ impl JoltWorld {
         track_knots: &[crate::joint_sync::PathKnot],
         looping: bool,
         motor: crate::joint_sync::JointMotor,
+        cart_rotation: crate::joint_sync::PathRotation,
     ) -> u32 {
         use jolt_sys::{PathPointFfi, MAX_PATH_POINTS};
         let points: Vec<PathPointFfi> = track_knots
@@ -928,6 +931,7 @@ impl JoltWorld {
                 motor.frequency_hz,
                 motor.damping,
                 motor.force_limit,
+                cart_rotation.ffi_mode(),
             )
         }
     }
@@ -1193,6 +1197,16 @@ impl JoltWorld {
         unsafe { bjolt_constraint_drive_at(self.world_ptr, constraint_id, target_velocity) }
     }
 
+    /// Current path fraction of a path constraint. NaN on bad ids or
+    /// non-path joints. Debug probe for loop-seam diagnosis.
+    pub fn constraint_path_fraction(&mut self, constraint_id: u32) -> f32 {
+        unsafe { bjolt_constraint_path_fraction(self.world_ptr, constraint_id) }
+    }
+
+    /// Whether a path constraint's spline loops. -1 on bad ids.
+    pub fn constraint_path_looping(&mut self, constraint_id: u32) -> i32 {
+        unsafe { bjolt_constraint_path_looping(self.world_ptr, constraint_id) }
+    }
     pub fn body_is_active(&self, body_id_raw: u32) -> bool {
         unsafe { bjolt_body_is_active(self.world_ptr, body_id_raw) }
     }

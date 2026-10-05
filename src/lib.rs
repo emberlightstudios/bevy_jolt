@@ -19,7 +19,8 @@ pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, Previous
 pub use crate::debug_draw::JoltDebugPlugin;
 pub use crate::joint_sync::{JointKind, JointMotor, JoltJoint, JoltJointId, JoltMotorDrive};
 pub use crate::joint_sync::{
-    MAX_PATH_KNOTS, PathKnot, SixDofAxis, SixDofFrame, SixDofLimits, path_knots_from_waypoints,
+    MAX_PATH_KNOTS, PathKnot, PathRotation, SixDofAxis, SixDofFrame, SixDofLimits,
+    path_knots_from_waypoints,
 };
 pub use crate::physics_world::{BodySnapshot, CollisionLayers, JointSpace, JoltWorld, PhysicsShape, RayHit};
 pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStepConfig, step_physics_world};

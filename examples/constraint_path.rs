@@ -1,11 +1,12 @@
-//! Path (track) joint: a cart rides a looping oval Hermite spline, driven
-//! by a velocity motor. Waypoints become knots via
-//! `path_knots_from_waypoints` (central-difference tangents, up normals).
+//! Path (track) joints: six carts ride the same looping oval Hermite
+//! spline, one per [`PathRotation`] mode, staggered around the track.
+//! Waypoints become knots via `path_knots_from_waypoints`
+//! (central-difference tangents, up normals).
 
 use bevy::prelude::*;
 use bevy_jolt::{
     CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
-    JoltPlugin, JoltShape, JointMotor, JointSpace,
+    JoltPlugin, JoltShape, JointMotor, JointSpace, PathRotation,
 };
 
 /// Oval waypoints (x/z plane) lifted to cart height: the Hermite builder
@@ -18,6 +19,34 @@ const WAYPOINTS: [Vec3; 6] = [
     Vec3::new(1.5, 3.5, -1.5),
     Vec3::new(-1.5, 3.5, -1.5),
 ];
+
+/// One cart per rotation mode: label, mode, and tint. Stagger index spaces
+/// them around the loop so they don't pile up.
+const CARTS: [(&str, PathRotation, Color); 6] = [
+    ("free", PathRotation::Free, Color::srgb(0.7, 0.3, 0.9)),
+    (
+        "tangent",
+        PathRotation::AroundTangent,
+        Color::srgb(0.9, 0.5, 0.2),
+    ),
+    (
+        "normal",
+        PathRotation::AroundNormal,
+        Color::srgb(0.2, 0.7, 0.9),
+    ),
+    (
+        "binormal",
+        PathRotation::AroundBinormal,
+        Color::srgb(0.3, 0.9, 0.4),
+    ),
+    ("to-path", PathRotation::ToPath, Color::srgb(0.9, 0.9, 0.3)),
+    (
+        "full",
+        PathRotation::FullyConstrained,
+        Color::srgb(0.9, 0.3, 0.4),
+    ),
+];
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -30,9 +59,8 @@ fn main() {
 
 #[derive(Resource)]
 struct Demo {
-    joint: Entity,
+    joints: Vec<Entity>,
 }
-
 fn spawn_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -67,7 +95,7 @@ fn spawn_scene(
     ));
 
     // Anchor defines the path-local frame but must not sit on the track:
-    // the cart would collide with it at the seam. Park it inside the oval.
+    // carts would collide with it at the seam. Park it inside the oval.
     let anchor = commands
         .spawn((
             Mesh3d(meshes.add(Cuboid::new(0.4, 0.4, 0.4))),
@@ -77,33 +105,43 @@ fn spawn_scene(
             JoltShape::box_shape(Vec3::splat(0.2)),
         ))
         .id();
-    let cart = commands
-        .spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.7, 0.7, 0.7))),
-            MeshMaterial3d(materials.add(Color::srgb(0.7, 0.3, 0.9))),
-            Transform::from_translation(WAYPOINTS[0]),
-            JoltBody::dynamic(CollisionLayers::MOVING),
-            JoltShape::box_shape(Vec3::splat(0.35)),
-        ))
-        .id();
-    let joint = commands
-        .spawn((
-            JoltJoint::path_waypoints(
-                anchor,
-                cart,
-                &WAYPOINTS,
-                true,
-                JointMotor {
-                    frequency_hz: 8.0,
-                    damping: 1.0,
-                    force_limit: 1.0e6,
-                },
-                JointSpace::World,
-            ),
-            JoltMotorDrive(2.0),
-        ))
-        .id();
-    commands.insert_resource(Demo { joint });
+    // One cart per rotation mode, staggered one waypoint apart so they
+    // spread around the loop instead of stacking at the start.
+    let cart_mesh = meshes.add(Cuboid::new(0.7, 0.7, 0.7));
+    let mut joints = Vec::with_capacity(CARTS.len());
+    for (cart_index, (_, cart_rotation, cart_color)) in CARTS.iter().enumerate() {
+        let start_position = WAYPOINTS[cart_index % WAYPOINTS.len()];
+        let cart = commands
+            .spawn((
+                Mesh3d(cart_mesh.clone()),
+                MeshMaterial3d(materials.add(*cart_color)),
+                Transform::from_translation(start_position),
+                JoltBody::dynamic(CollisionLayers::MOVING),
+                JoltShape::box_shape(Vec3::splat(0.35)),
+            ))
+            .id();
+        joints.push(
+            commands
+                .spawn((
+                    JoltJoint::path_waypoints(
+                        anchor,
+                        cart,
+                        &WAYPOINTS,
+                        true,
+                        JointMotor {
+                            frequency_hz: 8.0,
+                            damping: 1.0,
+                            force_limit: 1.0e6,
+                        },
+                        *cart_rotation,
+                        JointSpace::World,
+                    ),
+                    JoltMotorDrive(2.0),
+                ))
+                .id(),
+        );
+    }
+    commands.insert_resource(Demo { joints });
 }
 
 fn draw_track(
@@ -111,7 +149,7 @@ fn draw_track(
     joint_query: Query<(), With<JoltJointId>>,
     mut gizmos: Gizmos,
 ) {
-    if joint_query.get(demo.joint).is_err() {
+    if demo.joints.iter().all(|joint| joint_query.get(*joint).is_err()) {
         return;
     }
     for i in 0..WAYPOINTS.len() {
