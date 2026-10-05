@@ -10,11 +10,11 @@ use jolt_sys::{
     BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
     VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
     bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide, bjolt_body_is_active,
-    bjolt_body_remove_destroy, bjolt_body_state, bjolt_body_transform, bjolt_character_create,
-    bjolt_character_destroy, bjolt_character_move, bjolt_character_stance, bjolt_character_teleport,
-    bjolt_constraint_drive_at, bjolt_constraint_path_fraction, bjolt_constraint_path_looping,
-    bjolt_create_box, bjolt_create_capsule, bjolt_create_compound, bjolt_create_cone_constraint,
-    bjolt_create_cylinder,
+    bjolt_body_remove_destroy, bjolt_body_set_sensor, bjolt_body_state, bjolt_body_transform,
+    bjolt_character_create, bjolt_character_destroy, bjolt_character_move, bjolt_character_stance,
+    bjolt_character_teleport, bjolt_constraint_drive_at, bjolt_constraint_path_fraction,
+    bjolt_constraint_path_looping, bjolt_create_box, bjolt_create_capsule, bjolt_create_compound,
+    bjolt_create_cone_constraint, bjolt_create_cylinder,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
     bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_motorcycle,
     bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
@@ -25,7 +25,7 @@ use jolt_sys::{
     bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_gravity, bjolt_set_gravity_factor,
     bjolt_set_linear_velocity, bjolt_set_rotation, bjolt_set_velocity, bjolt_tracked_drive,
     bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_world_create_with_layers, bjolt_world_destroy,
-    bjolt_world_gravity, bjolt_world_update,
+    bjolt_world_gravity, bjolt_world_update, bjolt_drain_contact_added, bjolt_drain_contact_removed,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -1374,6 +1374,37 @@ impl JoltWorld {
     pub fn remove_and_destroy_body(&mut self, body_id_raw: u32) {
         unsafe { bjolt_body_remove_destroy(self.world_ptr, body_id_raw) }
         self.body_shapes.remove(&body_id_raw);
+    }
+
+    /// Flags a body as a sensor (overlaps report, nothing pushes).
+    pub fn set_body_sensor(&mut self, body_id_raw: u32, is_sensor: bool) {
+        unsafe { bjolt_body_set_sensor(self.world_ptr, body_id_raw, is_sensor) }
+    }
+
+    /// Drains contact begin pairs into the buffers. Returns pairs kept.
+    pub fn drain_contact_added(&mut self, pair_a: &mut [u32], pair_b: &mut [u32]) -> u32 {
+        assert_eq!(pair_a.len(), pair_b.len(), "contact buffers must match");
+        unsafe {
+            bjolt_drain_contact_added(
+                self.world_ptr,
+                pair_a.as_mut_ptr(),
+                pair_b.as_mut_ptr(),
+                pair_a.len() as u32,
+            )
+        }
+    }
+
+    /// Drains contact end pairs into the buffers. Returns pairs kept.
+    pub fn drain_contact_removed(&mut self, pair_a: &mut [u32], pair_b: &mut [u32]) -> u32 {
+        assert_eq!(pair_a.len(), pair_b.len(), "contact buffers must match");
+        unsafe {
+            bjolt_drain_contact_removed(
+                self.world_ptr,
+                pair_a.as_mut_ptr(),
+                pair_b.as_mut_ptr(),
+                pair_a.len() as u32,
+            )
+        }
     }
 
     /// Stops two bodies colliding (ragdoll parent-child pairs). Shared group
