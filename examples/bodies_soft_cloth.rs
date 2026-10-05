@@ -43,12 +43,12 @@ fn spawn_cloth_scene(mut commands: Commands, mut demo: ResMut<ClothDemo>) {
             },
         ))
         .id();
-    // Shoulder stand: the breeze presses the sheet onto this cube, folds
-    // wrap it instead of clipping through. Static, so it never budges.
+    // Shoulder stand: shoved right into the sheet's face so the breeze
+    // folds the cloth hard over its top. Static, so it never budges.
     commands.spawn((
-        Transform::from_xyz(0.0, 4.2, 0.9),
+        Transform::from_xyz(0.0, 4.6, 0.35),
         JoltBody::fixed(0),
-        JoltShape::box_shape(Vec3::new(0.6, 0.6, 0.6)),
+        JoltShape::box_shape(Vec3::new(0.8, 0.8, 0.8)),
     ));
     demo.banner = Some(banner);
 }
@@ -108,17 +108,25 @@ fn watch_cloth_scene(
         bottom_swing > 0.5,
         "breeze should billow the free edge past 0.5m, got z={bottom_swing:.3}"
     );
-    // Shoulder stand at (0, 4.2, 0.9), half 0.6: no vertex may end up
-    // inside it. The sheet wraps the cube instead of clipping through.
+    // Shoulder stand at (0, 4.6, 0.35), half 0.8: no vertex may end up
+    // inside it. The sheet drapes over the top instead of clipping.
     for vertex_position in &cloth_positions {
-        let inside_cube = (vertex_position.x - 0.0).abs() < 0.55
-            && (vertex_position.y - 4.2).abs() < 0.55
-            && (vertex_position.z - 0.9).abs() < 0.55;
+        let inside_cube = (vertex_position.x - 0.0).abs() < 0.75
+            && (vertex_position.y - 4.6).abs() < 0.75
+            && (vertex_position.z - 0.35).abs() < 0.75;
         assert!(
             !inside_cube,
-            "cloth should wrap the cube, not clip it: vertex at {:?}",
+            "cloth should drape over the cube, not clip it: vertex at {:?}",
             vertex_position
         );
     }
-    println!("Sheet wraps the cube; nothing clips.");
+    // Drape proof: at least one vertex rests on the cube's top face
+    // (y≈5.4) inside its footprint. The sheet lies ON the box.
+    let rests_on_top = cloth_positions.iter().any(|vertex_position| {
+        vertex_position.x.abs() < 0.8
+            && vertex_position.z.abs() < 0.8
+            && (vertex_position.y - 5.4).abs() < 0.2
+    });
+    assert!(rests_on_top, "sheet should lie on the cube's top face");
+    println!("Sheet drapes the cube; nothing clips.");
 }
