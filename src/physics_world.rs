@@ -4,12 +4,13 @@
 //! on via the `jolt_sys` build). This type only owns the world pointer.
 
 use crate::body_sync::JoltMotion;
+use crate::spatial_queries::RayHit;
 use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
     BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
     VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
     bjolt_apply_force, bjolt_apply_impulse, bjolt_body_is_active, bjolt_body_remove_destroy,
-    bjolt_body_state, bjolt_body_transform, bjolt_cast_ray, bjolt_constraint_drive_at,
+    bjolt_body_state, bjolt_body_transform, bjolt_constraint_drive_at,
     bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
     bjolt_create_capsule, bjolt_create_cone_constraint, bjolt_create_cylinder,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
@@ -51,14 +52,7 @@ pub struct BodySnapshot {
     pub body_velocity: Vec3,
 }
 
-/// Closest body hit by a ray cast: body id plus fraction along the ray.
-pub struct RayHit {
-    pub hit_body_id: u32,
-    pub hit_fraction: f32,
-}
-
 /// What a body looks like, remembered at creation so the debug visualizer
-/// can draw it. Jolt owns the real shape; this is just the outline recipe.
 #[derive(Clone, Copy, Debug)]
 pub enum PhysicsShape {
     Box { half_extents: Vec3 },
@@ -468,30 +462,42 @@ impl JoltWorld {
         )
     }
 
+    /// Closest body a ray hits, if any. `ray_direction` sets both direction
+    /// and reach: hits past `origin + direction` are not reported.
     pub fn cast_ray(&self, ray_origin: Vec3, ray_direction: Vec3) -> Option<RayHit> {
-        let mut hit_body_id = 0u32;
-        let mut hit_fraction = 0.0f32;
-        let found_hit = unsafe {
-            bjolt_cast_ray(
-                self.world_ptr,
-                ray_origin.x,
-                ray_origin.y,
-                ray_origin.z,
-                ray_direction.x,
-                ray_direction.y,
-                ray_direction.z,
-                &mut hit_body_id,
-                &mut hit_fraction,
-            )
-        };
-        if found_hit {
-            Some(RayHit {
-                hit_body_id,
-                hit_fraction,
-            })
-        } else {
-            None
-        }
+        crate::spatial_queries::cast_ray_all(self.world_ptr, ray_origin, ray_direction)
+            .into_iter()
+            .next()
+    }
+
+    /// Every body a ray passes through, nearest first. Empty on a miss.
+    pub fn cast_ray_all(&self, ray_origin: Vec3, ray_direction: Vec3) -> Vec<RayHit> {
+        crate::spatial_queries::cast_ray_all(self.world_ptr, ray_origin, ray_direction)
+    }
+
+    /// Every body containing a point (solid shapes count as filled).
+    pub fn collide_point_all(&self, probe_point: Vec3) -> Vec<u32> {
+        crate::spatial_queries::collide_point_all(self.world_ptr, probe_point)
+    }
+
+    /// Every body overlapping a probe volume centered at a point.
+    pub fn overlap_shape_all(
+        &self,
+        probe: crate::spatial_queries::QueryProbe,
+        probe_center: Vec3,
+    ) -> Vec<crate::spatial_queries::OverlapHit> {
+        crate::spatial_queries::overlap_shape_all(self.world_ptr, probe, probe_center)
+    }
+
+    /// Sweeps a probe volume along a direction; every body touched, nearest
+    /// first. `cast_direction` sets direction and reach.
+    pub fn cast_shape_all(
+        &self,
+        probe: crate::spatial_queries::QueryProbe,
+        probe_center: Vec3,
+        cast_direction: Vec3,
+    ) -> Vec<RayHit> {
+        crate::spatial_queries::cast_shape_all(self.world_ptr, probe, probe_center, cast_direction)
     }
 
     pub fn update(&mut self, delta_time: f32, collision_steps: i32) {

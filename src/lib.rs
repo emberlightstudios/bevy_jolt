@@ -10,6 +10,7 @@ mod debug_draw;
 mod joint_sync;
 mod physics_world;
 mod plugin;
+mod spatial_queries;
 mod vehicle;
 pub use crate::body_forces::{
     JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltLinearForce, JoltLinearVelocity,
@@ -22,8 +23,9 @@ pub use crate::joint_sync::{
     MAX_PATH_KNOTS, PathKnot, PathRotation, SixDofAxis, SixDofFrame, SixDofLimits,
     path_knots_from_waypoints,
 };
-pub use crate::physics_world::{BodySnapshot, CollisionLayers, JointSpace, JoltWorld, PhysicsShape, RayHit};
+pub use crate::physics_world::{BodySnapshot, CollisionLayers, JointSpace, JoltWorld, PhysicsShape};
 pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStepConfig, step_physics_world};
+pub use crate::spatial_queries::{MAX_QUERY_HITS, OverlapHit, QueryProbe, RayHit};
 pub use crate::vehicle::{
     CurveKnot, JoltTrackedDrive, JoltVehicleDrive, JoltVehicleId, JoltVehicleShift,
     VehicleDifferential, VehicleEngine, VehicleKind, VehicleLean, VehicleRollBar, VehicleSpec,
