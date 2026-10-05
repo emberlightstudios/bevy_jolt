@@ -161,19 +161,29 @@ impl JoltSoftSharedSettings {
         let mut face_triangles = Vec::new();
         for phi in 0..phi_total {
             for theta in 0..theta_total - 2 {
+                // Reversed vs Jolt's own builder: our y-up mapping flips the
+                // signed volume, so faces wind the other way to keep volume
+                // positive (pressure only fires on positive volume).
                 face_triangles.push([
                     sphere_index(theta, phi),
-                    sphere_index(theta + 1, phi),
                     sphere_index(theta + 1, phi + 1),
+                    sphere_index(theta + 1, phi),
                 ]);
                 if theta > 0 {
                     face_triangles.push([
                         sphere_index(theta, phi),
-                        sphere_index(theta + 1, phi + 1),
                         sphere_index(theta, phi + 1),
+                        sphere_index(theta + 1, phi + 1),
                     ]);
                 }
             }
+            // Bottom cap fan: closes the last ring onto the shared south
+            // pole. Same faces as Jolt's builder, wound for our mapping.
+            face_triangles.push([
+                sphere_index(theta_total - 2, phi),
+                sphere_index(theta_total - 2, phi + 1),
+                sphere_index(theta_total - 1, 0),
+            ]);
         }
         let vertex_total = vertex_positions.len();
         Self {
