@@ -85,6 +85,4 @@ fn watch_ragdoll_scene(
         "ragdoll should crumple flat, span is {:.3}",
         highest_y - lowest_y
     );
-    println!("Ragdoll fell, folded, and settled.");
-    app_exit.write(AppExit::Success);
 }
