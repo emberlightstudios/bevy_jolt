@@ -51,6 +51,46 @@ impl Default for JointMotor {
         }
     }
 }
+/// Reference frames for a [`JointKind::SixDof`] joint: anchor + basis per
+/// body. Differing body2 vectors offset the rest pose without moving the
+/// joint center, like the cone and swing-twist axes.
+#[derive(Clone, Copy, Debug)]
+pub struct SixDofFrame {
+    pub position1: Vec3,
+    pub axis_x1: Dir3,
+    pub axis_y1: Dir3,
+    pub position2: Vec3,
+    pub axis_x2: Dir3,
+    pub axis_y2: Dir3,
+}
+
+/// Per-axis travel bands for a [`JointKind::SixDof`] joint, in frame units
+/// (meters for translation, radians for rotation). Per axis: min > max fixes
+/// it, +-large (≈FLT_MAX) frees it, otherwise the band clamps travel.
+#[derive(Clone, Copy, Debug)]
+pub struct SixDofLimits {
+    pub translation_min: Vec3,
+    pub translation_max: Vec3,
+    pub rotation_min: Vec3,
+    pub rotation_max: Vec3,
+}
+
+/// Bit index per six-DOF axis in the `motor_axes` mask: 0 = TX .. 5 = RZ.
+#[derive(Clone, Copy, Debug)]
+pub enum SixDofAxis {
+    TranslationX,
+    TranslationY,
+    TranslationZ,
+    RotationX,
+    RotationY,
+    RotationZ,
+}
+
+impl SixDofAxis {
+    pub const fn bit(self) -> u8 {
+        1 << (self as u8)
+    }
+}
 
 /// Constraint flavor plus its creation params. Mirrors the
 /// `JoltWorld::create_*_constraint` set one-to-one.
@@ -102,9 +142,10 @@ pub enum JointKind {
         twist_min_angle: f32,
         twist_max_angle: f32,
     },
-    SixDofSlider {
-        limit_y_min: f32,
-        limit_y_max: f32,
+    SixDof {
+        frame: SixDofFrame,
+        limits: SixDofLimits,
+        motor_axes: u8,
         motor: JointMotor,
     },
     Pulley {
@@ -337,23 +378,29 @@ impl JoltJoint {
         }
     }
 
-    /// `joint_space` is accepted for uniformity but ignored: the piston
-    /// locks to the bodies' current poses plus the Y band.
-    pub fn six_dof_slider(
+    /// Fully general six-DOF joint: reference frames, per-axis limits, and a
+    /// velocity motor on any axis subset (`motor_axes` bit `i`, see
+    /// [`SixDofAxis::bit`]). Pair with [`JoltMotorDrive`] to retarget every
+    /// driven axis each tick.
+    #[allow(clippy::too_many_arguments)]
+    pub fn six_dof(
         body_a: Entity,
         body_b: Entity,
-        limit_y_min: f32,
-        limit_y_max: f32,
+        frame: SixDofFrame,
+        limits: SixDofLimits,
+        motor_axes: u8,
+        motor: JointMotor,
         joint_space: JointSpace,
     ) -> Self {
         Self {
             body_a,
             body_b,
             joint_space,
-            kind: JointKind::SixDofSlider {
-                limit_y_min,
-                limit_y_max,
-                motor: JointMotor::default(),
+            kind: JointKind::SixDof {
+                frame,
+                limits,
+                motor_axes,
+                motor,
             },
         }
     }
@@ -625,11 +672,20 @@ pub fn create_jolt_joints(
                 twist_max_angle,
                 joint.joint_space,
             ),
-            JointKind::SixDofSlider {
-                limit_y_min,
-                limit_y_max,
+            JointKind::SixDof {
+                frame,
+                limits,
+                motor_axes,
                 motor,
-            } => world.create_six_dof_slider(body_a_raw, body_b_raw, limit_y_min, limit_y_max, motor),
+            } => world.create_six_dof(
+                body_a_raw,
+                body_b_raw,
+                frame,
+                limits,
+                motor_axes,
+                motor,
+                joint.joint_space,
+            ),
             JointKind::Pulley {
                 body_point1,
                 fixed_point1,

@@ -12,7 +12,7 @@ use jolt_sys::{
     bjolt_create_demo_car, bjolt_create_distance_constraint, bjolt_create_fixed_constraint,
     bjolt_create_floor, bjolt_create_gear_constraint, bjolt_create_hinge_constraint,
     bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
-    bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_six_dof_slider,
+    bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_six_dof,
     bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
     bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_gravity_factor, bjolt_init,
     bjolt_move_kinematic, bjolt_remove_constraint,
@@ -730,27 +730,61 @@ impl JoltWorld {
         }
     }
 
-    /// Six-DOF used as a piston: everything locked except free Y travel.
-    /// Positions lock to the current poses plus the Y band. The motor spring
-    /// engages on the first drive call. Returns 0 on failure.
-    pub fn create_six_dof_slider(
+    /// Fully general six-DOF joint: per-axis translation/rotation limits plus
+    /// a velocity motor on any axis subset. Limit conventions per axis: min >
+    /// max fixes it, +-large frees it. `motor_axes` bit `i` (0 = TX .. 5 = RZ)
+    /// arms that axis with `motor`. Returns 0 on failure.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_six_dof(
         &mut self,
         body1_raw: u32,
         body2_raw: u32,
-        limit_y_min: f32,
-        limit_y_max: f32,
+        frame: crate::joint_sync::SixDofFrame,
+        limits: crate::joint_sync::SixDofLimits,
+        motor_axes: u8,
         motor: crate::joint_sync::JointMotor,
+        joint_space: JointSpace,
     ) -> u32 {
         unsafe {
-            bjolt_create_six_dof_slider(
+            bjolt_create_six_dof(
                 self.world_ptr,
                 body1_raw,
                 body2_raw,
-                limit_y_min,
-                limit_y_max,
+                frame.position1.x,
+                frame.position1.y,
+                frame.position1.z,
+                frame.axis_x1.as_vec3().x,
+                frame.axis_x1.as_vec3().y,
+                frame.axis_x1.as_vec3().z,
+                frame.axis_y1.as_vec3().x,
+                frame.axis_y1.as_vec3().y,
+                frame.axis_y1.as_vec3().z,
+                frame.position2.x,
+                frame.position2.y,
+                frame.position2.z,
+                frame.axis_x2.as_vec3().x,
+                frame.axis_x2.as_vec3().y,
+                frame.axis_x2.as_vec3().z,
+                frame.axis_y2.as_vec3().x,
+                frame.axis_y2.as_vec3().y,
+                frame.axis_y2.as_vec3().z,
+                limits.translation_min.x,
+                limits.translation_max.x,
+                limits.translation_min.y,
+                limits.translation_max.y,
+                limits.translation_min.z,
+                limits.translation_max.z,
+                limits.rotation_min.x,
+                limits.rotation_max.x,
+                limits.rotation_min.y,
+                limits.rotation_max.y,
+                limits.rotation_min.z,
+                limits.rotation_max.z,
+                motor_axes,
                 motor.frequency_hz,
                 motor.damping,
                 motor.force_limit,
+                joint_space.ffi_space(),
             )
         }
     }
