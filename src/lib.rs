@@ -25,7 +25,9 @@ pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, Previous
 pub use crate::buoyancy::{JoltBuoyant, JoltWater};
 pub use crate::character::{
     CharacterGround, JoltCharacter, JoltCharacterGround, JoltCharacterId, JoltCharacterStep,
-    JoltCharacterTeleport, JoltCharacterVelocity,
+    JoltCharacterTeleport, JoltCharacterVelocity, JoltRigidCharacter, JoltRigidCharacterId,
+    JoltRigidCharacterImpulse, JoltRigidCharacterPush, JoltRigidCharacterTeleport,
+    JoltRigidCharacterVelocity,
 };
 pub use crate::contact_events::{
     JoltContactAdded, JoltContactRemoved, JoltSensor, MAX_CONTACT_EVENTS,
@@ -37,8 +39,8 @@ pub use crate::joint_sync::{
     path_knots_from_waypoints,
 };
 pub use crate::physics_world::{
-    BodySnapshot, CollisionLayers, CompoundGeometry, CompoundPart, JointSpace, JoltWorld, PhysicsShape,
-    SoftBendType, SoftBodyConfig,
+    BodySnapshot, CharacterDofs, CollisionLayers, CompoundGeometry, CompoundPart, JointSpace,
+    JoltWorld, PhysicsShape, SoftBendType, SoftBodyConfig,
 };
 pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStepConfig, step_physics_world};
 pub use crate::ragdoll::{JoltRagdoll, JoltRagdollParts, RagdollPart};

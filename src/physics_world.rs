@@ -11,10 +11,14 @@ use jolt_sys::{
     VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
     bjolt_apply_buoyancy, bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide,
     bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_set_damping, bjolt_body_set_sensor,
-    bjolt_body_state, bjolt_body_transform, bjolt_character_create, bjolt_character_destroy,
-    bjolt_character_move, bjolt_character_stance, bjolt_character_teleport, bjolt_constraint_drive_at,
-    bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
-    bjolt_create_capsule, bjolt_create_cloth_settings, bjolt_create_compound,
+    bjolt_body_state, bjolt_body_transform, bjolt_character_can_walk_stairs, bjolt_character_create,
+    bjolt_character_destroy, bjolt_character_ground, bjolt_character_move, bjolt_character_refresh_contacts,
+    bjolt_character_rotation, bjolt_character_set_mass, bjolt_character_set_padding,
+    bjolt_character_set_rotation, bjolt_character_set_shape_offset, bjolt_character_set_up,
+    bjolt_character_set_user_data, bjolt_character_stance, bjolt_character_stick_to_floor,
+    bjolt_character_teleport, bjolt_character_update, bjolt_character_walk_stairs,
+    bjolt_constraint_drive_at, bjolt_constraint_path_fraction, bjolt_constraint_path_looping,
+    bjolt_create_box, bjolt_create_capsule, bjolt_create_cloth_settings, bjolt_create_compound,
     bjolt_create_cone_constraint, bjolt_create_cube_settings, bjolt_create_cylinder,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
     bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_motorcycle,
@@ -28,8 +32,13 @@ use jolt_sys::{
     bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_ccd, bjolt_set_friction,
     bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_position,
     bjolt_set_position_rotation, bjolt_set_restitution, bjolt_set_rotation, bjolt_set_velocity,
-    bjolt_shared_face_count, bjolt_shared_faces, bjolt_shared_vertex_count, bjolt_soft_contacts,
-    bjolt_soft_destroy, bjolt_soft_iterations, bjolt_soft_inv_masses, bjolt_soft_pressure,
+    bjolt_shared_face_count, bjolt_shared_faces, bjolt_shared_vertex_count,
+    bjolt_rigid_character_add_impulse, bjolt_rigid_character_add_velocity, bjolt_rigid_character_body,
+    bjolt_rigid_character_create, bjolt_rigid_character_destroy, bjolt_rigid_character_ground,
+    bjolt_rigid_character_pose, bjolt_rigid_character_post, bjolt_rigid_character_set_layer,
+    bjolt_rigid_character_set_pose, bjolt_rigid_character_set_velocity, bjolt_rigid_character_stance,
+    bjolt_soft_contacts, bjolt_soft_destroy, bjolt_soft_iterations, bjolt_soft_inv_masses,
+    bjolt_soft_pressure,
     bjolt_soft_push, bjolt_soft_set_inv_masses, bjolt_soft_set_iterations, bjolt_soft_set_pressure,
     bjolt_soft_set_vertex_radius, bjolt_soft_velocities, bjolt_soft_vertex_count, bjolt_soft_vertex_radius,
     bjolt_soft_vertices, bjolt_soft_volume, bjolt_tracked_drive, bjolt_vehicle_drive,
@@ -126,6 +135,23 @@ impl Default for SoftBodyConfig {
             faces_double_sided: false,
             user_data: 0,
         }
+    }
+}
+
+/// Degrees of freedom for a rigid character body. Bitmask mirroring Jolt's
+/// `EAllowedDOFs`: lock axes the game never drives (e.g. freeze rotation
+/// for an upright capsule).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CharacterDofs(pub u8);
+
+impl CharacterDofs {
+    /// All translation + rotation.
+    pub const ALL: Self = Self(0b111111);
+    /// Upright capsule: moves freely, never tips.
+    pub const TRANSLATION_ONLY: Self = Self(0b000111);
+
+    fn ffi_dofs(self) -> u8 {
+        self.0
     }
 }
 
@@ -2029,6 +2055,422 @@ impl JoltWorld {
                 capsule_radius,
             )
         }
+    }
+
+    /// Sets virtual character rotation (usually yaw only).
+    pub fn character_set_rotation(&mut self, character_id_raw: u32, character_rotation: Quat) {
+        unsafe {
+            bjolt_character_set_rotation(
+                self.world_ptr,
+                character_id_raw,
+                character_rotation.x,
+                character_rotation.y,
+                character_rotation.z,
+                character_rotation.w,
+            )
+        }
+    }
+
+    /// Current virtual character rotation.
+    pub fn character_rotation(&self, character_id_raw: u32) -> Quat {
+        let mut raw_rotation = [0.0f32, 0.0, 0.0, 1.0];
+        unsafe {
+            bjolt_character_rotation(self.world_ptr, character_id_raw, raw_rotation.as_mut_ptr())
+        }
+        Quat::from_array(raw_rotation)
+    }
+
+    /// Sets virtual character mass + push strength live.
+    pub fn character_set_mass(&mut self, character_id_raw: u32, mass_kg: f32, max_strength: f32) {
+        unsafe { bjolt_character_set_mass(self.world_ptr, character_id_raw, mass_kg, max_strength) }
+    }
+
+    /// Sets penetration recovery live (padding is construction-only in Jolt).
+    pub fn character_set_recovery(&mut self, character_id_raw: u32, penetration_recovery: f32) {
+        unsafe {
+            bjolt_character_set_padding(self.world_ptr, character_id_raw, 0.0, penetration_recovery)
+        }
+    }
+
+    /// Sets virtual character up vector + max slope live.
+    pub fn character_set_up(
+        &mut self,
+        character_id_raw: u32,
+        up_direction: Vec3,
+        max_slope_degrees: f32,
+    ) {
+        unsafe {
+            bjolt_character_set_up(
+                self.world_ptr,
+                character_id_raw,
+                up_direction.x,
+                up_direction.y,
+                up_direction.z,
+                max_slope_degrees,
+            )
+        }
+    }
+
+    /// Sets virtual character shape offset live.
+    pub fn character_set_shape_offset(&mut self, character_id_raw: u32, shape_offset: Vec3) {
+        unsafe {
+            bjolt_character_set_shape_offset(
+                self.world_ptr,
+                character_id_raw,
+                shape_offset.x,
+                shape_offset.y,
+                shape_offset.z,
+            )
+        }
+    }
+
+    /// Sets virtual character user data.
+    pub fn character_set_user_data(&mut self, character_id_raw: u32, user_data: u64) {
+        unsafe { bjolt_character_set_user_data(self.world_ptr, character_id_raw, user_data) }
+    }
+
+    /// Plain update: collide + settle without stairs or floor stick.
+    /// Returns position + velocity + ground reading like the full move.
+    pub fn character_update(
+        &mut self,
+        character_id_raw: u32,
+        delta_time: f32,
+        wanted_velocity: Vec3,
+        world_gravity: Vec3,
+    ) -> (Vec3, Vec3, crate::character::JoltCharacterGround) {
+        let mut raw_position = [0.0f32; 3];
+        let mut raw_velocity = [0.0f32; 3];
+        let mut raw_normal = [0.0f32; 3];
+        let mut ground_state = 0u32;
+        let mut is_supported = 0u32;
+        unsafe {
+            bjolt_character_update(
+                self.world_ptr,
+                character_id_raw,
+                delta_time,
+                wanted_velocity.x,
+                wanted_velocity.y,
+                wanted_velocity.z,
+                world_gravity.x,
+                world_gravity.y,
+                world_gravity.z,
+                raw_position.as_mut_ptr(),
+                raw_velocity.as_mut_ptr(),
+                raw_normal.as_mut_ptr(),
+                &mut ground_state,
+                &mut is_supported,
+            );
+        }
+        (
+            Vec3::from_array(raw_position),
+            Vec3::from_array(raw_velocity),
+            crate::character::JoltCharacterGround {
+                ground_state: crate::character::CharacterGround::from_raw(ground_state),
+                ground_normal: Vec3::from_array(raw_normal),
+                is_supported: is_supported != 0,
+            },
+        )
+    }
+
+    /// Whether stairs are climbable in this direction right now.
+    pub fn character_can_walk_stairs(
+        &mut self,
+        character_id_raw: u32,
+        wanted_velocity: Vec3,
+    ) -> bool {
+        unsafe {
+            bjolt_character_can_walk_stairs(
+                self.world_ptr,
+                character_id_raw,
+                wanted_velocity.x,
+                wanted_velocity.y,
+                wanted_velocity.z,
+            )
+        }
+    }
+
+    /// Single stair climb (no settle). Returns true when a step landed.
+    pub fn character_walk_stairs(
+        &mut self,
+        character_id_raw: u32,
+        delta_time: f32,
+        step_up_height: f32,
+        step_forward: f32,
+        step_forward_test: f32,
+        step_down_extra: f32,
+    ) -> bool {
+        unsafe {
+            bjolt_character_walk_stairs(
+                self.world_ptr,
+                character_id_raw,
+                delta_time,
+                step_up_height,
+                step_forward,
+                step_forward_test,
+                step_down_extra,
+            )
+        }
+    }
+
+    /// Single floor stick (no settle). Returns true when ground caught.
+    pub fn character_stick_to_floor(
+        &mut self,
+        character_id_raw: u32,
+        stick_down_distance: f32,
+    ) -> bool {
+        unsafe {
+            bjolt_character_stick_to_floor(self.world_ptr, character_id_raw, stick_down_distance)
+        }
+    }
+
+    /// Re-resolves contacts after an external change (teleport, moving
+    /// platform jump). Call after moving things by hand.
+    pub fn character_refresh_contacts(&mut self, character_id_raw: u32) {
+        unsafe { bjolt_character_refresh_contacts(self.world_ptr, character_id_raw) }
+    }
+
+    /// Full ground reading: contact position, surface normal, surface
+    /// velocity, supporting body id (0 airborne), body user data.
+    pub fn character_ground_detail(&mut self, character_id_raw: u32) -> (Vec3, Vec3, Vec3, u32, u64) {
+        let mut raw_position = [0.0f32; 3];
+        let mut raw_normal = [0.0f32; 3];
+        let mut raw_velocity = [0.0f32; 3];
+        let mut ground_body = 0u32;
+        let mut ground_user_data = 0u64;
+        unsafe {
+            bjolt_character_ground(
+                self.world_ptr,
+                character_id_raw,
+                raw_position.as_mut_ptr(),
+                raw_normal.as_mut_ptr(),
+                raw_velocity.as_mut_ptr(),
+                &mut ground_body,
+                &mut ground_user_data,
+            );
+        }
+        (
+            Vec3::from_array(raw_position),
+            Vec3::from_array(raw_normal),
+            Vec3::from_array(raw_velocity),
+            ground_body,
+            ground_user_data,
+        )
+    }
+
+    /// Creates a rigid character: a real capsule body Jolt simulates.
+    /// Returns the character id (0 on failure).
+    #[allow(clippy::too_many_arguments)]
+    pub fn rigid_character_create(
+        &mut self,
+        character_position: Vec3,
+        character_rotation: Quat,
+        capsule_half_height: f32,
+        capsule_radius: f32,
+        object_layer: u16,
+        mass_kg: f32,
+        friction: f32,
+        gravity_factor: f32,
+        allowed_dofs: CharacterDofs,
+        user_data: u64,
+    ) -> u32 {
+        unsafe {
+            bjolt_rigid_character_create(
+                self.world_ptr,
+                character_position.x,
+                character_position.y,
+                character_position.z,
+                character_rotation.x,
+                character_rotation.y,
+                character_rotation.z,
+                character_rotation.w,
+                capsule_half_height,
+                capsule_radius,
+                object_layer,
+                mass_kg,
+                friction,
+                gravity_factor,
+                allowed_dofs.ffi_dofs(),
+                user_data,
+            )
+        }
+    }
+
+    /// Destroys a rigid character (removes its body first).
+    pub fn rigid_character_destroy(&mut self, character_id_raw: u32) {
+        unsafe { bjolt_rigid_character_destroy(self.world_ptr, character_id_raw) }
+    }
+
+    /// Refreshes ground state after the physics step. Call every tick
+    /// after stepping: without it the ground reading goes stale.
+    pub fn rigid_character_post(&mut self, character_id_raw: u32, max_separation: f32) {
+        unsafe { bjolt_rigid_character_post(self.world_ptr, character_id_raw, max_separation) }
+    }
+
+    /// Drives a rigid character by velocity (linear + angular).
+    pub fn rigid_character_set_velocity(
+        &mut self,
+        character_id_raw: u32,
+        linear_velocity: Vec3,
+        angular_velocity: Vec3,
+    ) {
+        unsafe {
+            bjolt_rigid_character_set_velocity(
+                self.world_ptr,
+                character_id_raw,
+                linear_velocity.x,
+                linear_velocity.y,
+                linear_velocity.z,
+                angular_velocity.x,
+                angular_velocity.y,
+                angular_velocity.z,
+            )
+        }
+    }
+
+    /// Adds world-space velocity to a rigid character.
+    pub fn rigid_character_add_velocity(&mut self, character_id_raw: u32, extra_velocity: Vec3) {
+        unsafe {
+            bjolt_rigid_character_add_velocity(
+                self.world_ptr,
+                character_id_raw,
+                extra_velocity.x,
+                extra_velocity.y,
+                extra_velocity.z,
+            )
+        }
+    }
+
+    /// Kicks a rigid character at its center of mass.
+    pub fn rigid_character_add_impulse(&mut self, character_id_raw: u32, kick_impulse: Vec3) {
+        unsafe {
+            bjolt_rigid_character_add_impulse(
+                self.world_ptr,
+                character_id_raw,
+                kick_impulse.x,
+                kick_impulse.y,
+                kick_impulse.z,
+            )
+        }
+    }
+
+    /// Rigid character pose + ground reading: position, rotation, velocity,
+    /// ground normal/state/support.
+    pub fn rigid_character_pose(
+        &mut self,
+        character_id_raw: u32,
+    ) -> (Vec3, Quat, Vec3, crate::character::JoltCharacterGround) {
+        let mut raw_position = [0.0f32; 3];
+        let mut raw_rotation = [0.0f32, 0.0, 0.0, 1.0];
+        let mut raw_velocity = [0.0f32; 3];
+        let mut raw_normal = [0.0f32; 3];
+        let mut ground_state = 0u32;
+        let mut is_supported = 0u32;
+        unsafe {
+            bjolt_rigid_character_pose(
+                self.world_ptr,
+                character_id_raw,
+                raw_position.as_mut_ptr(),
+                raw_rotation.as_mut_ptr(),
+                raw_velocity.as_mut_ptr(),
+                raw_normal.as_mut_ptr(),
+                &mut ground_state,
+                &mut is_supported,
+            );
+        }
+        (
+            Vec3::from_array(raw_position),
+            Quat::from_array(raw_rotation),
+            Vec3::from_array(raw_velocity),
+            crate::character::JoltCharacterGround {
+                ground_state: crate::character::CharacterGround::from_raw(ground_state),
+                ground_normal: Vec3::from_array(raw_normal),
+                is_supported: is_supported != 0,
+            },
+        )
+    }
+
+    /// Teleports a rigid character (position + rotation, keeps momentum:
+    /// zero velocity separately for a dead stop).
+    pub fn rigid_character_set_pose(
+        &mut self,
+        character_id_raw: u32,
+        target_position: Vec3,
+        target_rotation: Quat,
+    ) {
+        unsafe {
+            bjolt_rigid_character_set_pose(
+                self.world_ptr,
+                character_id_raw,
+                target_position.x,
+                target_position.y,
+                target_position.z,
+                target_rotation.x,
+                target_rotation.y,
+                target_rotation.z,
+                target_rotation.w,
+            )
+        }
+    }
+
+    /// Underlying rigid body id (for queries, sensors, debug draw).
+    pub fn rigid_character_body(&mut self, character_id_raw: u32) -> u32 {
+        unsafe { bjolt_rigid_character_body(self.world_ptr, character_id_raw) }
+    }
+
+    /// Moves a rigid character to another collision layer.
+    pub fn rigid_character_set_layer(&mut self, character_id_raw: u32, object_layer: u16) {
+        unsafe { bjolt_rigid_character_set_layer(self.world_ptr, character_id_raw, object_layer) }
+    }
+
+    /// Swaps the rigid capsule (stand/crouch). False = still penetrating,
+    /// old capsule keeps running.
+    pub fn rigid_character_stance(
+        &mut self,
+        character_id_raw: u32,
+        capsule_half_height: f32,
+        capsule_radius: f32,
+        max_penetration: f32,
+    ) -> bool {
+        unsafe {
+            bjolt_rigid_character_stance(
+                self.world_ptr,
+                character_id_raw,
+                capsule_half_height,
+                capsule_radius,
+                max_penetration,
+            )
+        }
+    }
+
+    /// Rigid ground detail: contact position, normal, surface velocity,
+    /// supporting body id, body user data.
+    pub fn rigid_character_ground_detail(
+        &mut self,
+        character_id_raw: u32,
+    ) -> (Vec3, Vec3, Vec3, u32, u64) {
+        let mut raw_position = [0.0f32; 3];
+        let mut raw_normal = [0.0f32; 3];
+        let mut raw_velocity = [0.0f32; 3];
+        let mut ground_body = 0u32;
+        let mut ground_user_data = 0u64;
+        unsafe {
+            bjolt_rigid_character_ground(
+                self.world_ptr,
+                character_id_raw,
+                raw_position.as_mut_ptr(),
+                raw_normal.as_mut_ptr(),
+                raw_velocity.as_mut_ptr(),
+                &mut ground_body,
+                &mut ground_user_data,
+            );
+        }
+        (
+            Vec3::from_array(raw_position),
+            Vec3::from_array(raw_normal),
+            Vec3::from_array(raw_velocity),
+            ground_body,
+            ground_user_data,
+        )
     }
 }
 

@@ -5,9 +5,9 @@
 use bevy::prelude::*;
 use bevy_jolt::{
     CharacterGround, JoltBody, JoltCharacter, JoltCharacterGround, JoltCharacterStep,
-    JoltCharacterVelocity, JoltDebugPlugin, JoltPlugin, JoltShape,
+    JoltCharacterVelocity, JoltDebugPlugin, JoltPlugin, JoltRigidCharacter,
+    JoltRigidCharacterVelocity, JoltShape,
 };
-
 const WALK_SPEED: f32 = 3.0;
 const STAFF_TICKS: u32 = 600;
 
@@ -24,8 +24,10 @@ fn main() {
 #[derive(Resource)]
 struct CharacterDemo {
     walker: Entity,
+    rigid_walker: Entity,
     start_height: f32,
 }
+
 fn spawn_character_scene(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
@@ -61,8 +63,21 @@ fn spawn_character_scene(mut commands: Commands) {
             JoltCharacterStep::default(),
         ))
         .id();
+    // Rigid twin: a real capsule body on the next lane, driven by velocity.
+    // Same stairs, same march: proves the rigid path climbs and grounds.
+    let rigid_walker = commands
+        .spawn((
+            Transform::from_xyz(-6.0, start_height, 3.0),
+            JoltRigidCharacter::new(0),
+            JoltRigidCharacterVelocity {
+                linear_velocity: Vec3::ZERO,
+                angular_velocity: Vec3::ZERO,
+            },
+        ))
+        .id();
     commands.insert_resource(CharacterDemo {
         walker,
+        rigid_walker,
         start_height,
     });
 }
@@ -71,7 +86,19 @@ fn drive_character(
     mut tick_count: Local<u32>,
     demo: Res<CharacterDemo>,
     mut velocity_query: Query<(&mut JoltCharacterVelocity, &Transform, &JoltCharacterGround)>,
-    mut camera_query: Query<&mut Transform, (With<Camera3d>, Without<JoltCharacterVelocity>)>,
+    mut rigid_query: Query<(
+        &mut JoltRigidCharacterVelocity,
+        &Transform,
+        &JoltCharacterGround,
+    )>,
+    mut camera_query: Query<
+        &mut Transform,
+        (
+            With<Camera3d>,
+            Without<JoltCharacterVelocity>,
+            Without<JoltRigidCharacterVelocity>,
+        ),
+    >,
     mut app_exit: MessageWriter<AppExit>,
 ) {
     *tick_count += 1;
@@ -80,8 +107,15 @@ fn drive_character(
     else {
         return;
     };
+    let Ok((mut rigid_velocity, rigid_pose, rigid_ground)) =
+        rigid_query.get_mut(demo.rigid_walker)
+    else {
+        return;
+    };
     // Steady march toward +x: stairs, then open floor again.
     walker_velocity.velocity = Vec3::new(WALK_SPEED, -2.0, 0.0);
+    rigid_velocity.linear_velocity = Vec3::new(WALK_SPEED, -2.0, 0.0);
+    rigid_velocity.angular_velocity = Vec3::ZERO;
     // Side-on tracking shot: the camera rides along with the walker.
     for mut camera_pose in &mut camera_query {
         *camera_pose =
@@ -90,12 +124,15 @@ fn drive_character(
     }
     if *tick_count % 60 == 0 {
         println!(
-            "tick {}: x={:.2} y={:.2} ground={:?} supported={}",
+            "tick {}: x={:.2} y={:.2} ground={:?} supported={} | rigid x={:.2} y={:.2} ground={:?}",
             *tick_count,
             walker_pose.translation.x,
             walker_pose.translation.y,
             walker_ground.ground_state,
             walker_ground.is_supported,
+            rigid_pose.translation.x,
+            rigid_pose.translation.y,
+            rigid_ground.ground_state,
         );
     }
     if *tick_count < STAFF_TICKS {
@@ -115,6 +152,19 @@ fn drive_character(
         CharacterGround::OnGround,
         "walker should end supported on the floor"
     );
+    assert!(
+        rigid_pose.translation.x > 0.0,
+        "rigid walker should march past the stairs"
+    );
+    assert_eq!(
+        rigid_ground.ground_state,
+        CharacterGround::OnGround,
+        "rigid walker should end supported on the floor"
+    );
     println!("Character walked, climbed, and stayed grounded.");
+    println!(
+        "Rigid twin at x={:.2} y={:.2}, grounded.",
+        rigid_pose.translation.x, rigid_pose.translation.y
+    );
     app_exit.write(AppExit::Success);
 }
