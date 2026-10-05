@@ -133,7 +133,7 @@ fn cloth_uvs(grid_nx: u32, grid_nz: u32) -> Vec<[f32; 2]> {
 /// Cloths missing their id (not baked yet) are skipped.
 pub fn sync_soft_body_meshes(
     soft_query: Query<(&JoltSoftBody, &JoltSoftBodyId, &Mesh3d)>,
-    mut meshes: Option<ResMut<Assets<Mesh>>>,
+    meshes: Option<ResMut<Assets<Mesh>>>,
     physics_world: Res<JoltPhysicsWorld>,
 ) {
     let Some(mut meshes) = meshes else {
