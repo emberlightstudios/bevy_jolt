@@ -10,7 +10,8 @@ use jolt_sys::{
     BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
     VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
     bjolt_apply_force, bjolt_apply_impulse, bjolt_body_is_active, bjolt_body_remove_destroy,
-    bjolt_body_state, bjolt_body_transform, bjolt_constraint_drive_at,
+    bjolt_body_state, bjolt_body_transform, bjolt_character_create, bjolt_character_destroy,
+    bjolt_character_move, bjolt_character_stance, bjolt_character_teleport, bjolt_constraint_drive_at,
     bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
     bjolt_create_capsule, bjolt_create_cone_constraint, bjolt_create_cylinder,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
@@ -148,6 +149,7 @@ impl Default for CollisionLayers {
 pub struct JoltWorld {
     world_ptr: *mut BJoltWorld,
     body_shapes: std::collections::HashMap<u32, PhysicsShape>,
+    character_positions: std::collections::HashMap<u32, (Vec3, crate::character::JoltCharacterGround)>,
 }
 
 impl JoltWorld {
@@ -167,6 +169,7 @@ impl JoltWorld {
         Self {
             world_ptr,
             body_shapes: std::collections::HashMap::new(),
+            character_positions: std::collections::HashMap::new(),
         }
     }
 
@@ -1277,6 +1280,144 @@ impl JoltWorld {
     pub fn remove_and_destroy_body(&mut self, body_id_raw: u32) {
         unsafe { bjolt_body_remove_destroy(self.world_ptr, body_id_raw) }
         self.body_shapes.remove(&body_id_raw);
+    }
+
+    /// Creates a virtual character capsule; bottom sits at the position.
+    /// Returns the character id (0 = Jolt rejected it).
+    #[allow(clippy::too_many_arguments)]
+    pub fn character_create(
+        &mut self,
+        character_position: Vec3,
+        capsule_half_height: f32,
+        capsule_radius: f32,
+        object_layer: u16,
+        mass_kg: f32,
+        max_strength: f32,
+        max_slope_degrees: f32,
+        character_padding: f32,
+        penetration_recovery: f32,
+    ) -> u32 {
+        unsafe {
+            bjolt_character_create(
+                self.world_ptr,
+                character_position.x,
+                character_position.y,
+                character_position.z,
+                capsule_half_height,
+                capsule_radius,
+                object_layer,
+                mass_kg,
+                max_strength,
+                max_slope_degrees,
+                character_padding,
+                penetration_recovery,
+            )
+        }
+    }
+
+    /// Destroys a character. Never touches bodies: order-independent.
+    pub fn character_destroy(&mut self, character_id_raw: u32) {
+        unsafe { bjolt_character_destroy(self.world_ptr, character_id_raw) }
+    }
+
+    /// One movement step: sets the velocity and runs ExtendedUpdate (move +
+    /// stick-to-floor + walk-stairs). Pose lands in the character; read it
+    /// back with [`JoltWorld::character_pose`].
+    pub fn character_move(
+        &mut self,
+        character_id_raw: u32,
+        delta_time: f32,
+        wanted_velocity: Vec3,
+        world_gravity: Vec3,
+        step_up_height: f32,
+        stick_to_floor_distance: f32,
+    ) {
+        let mut character_position = [0.0f32; 3];
+        let mut character_velocity = [0.0f32; 3];
+        let mut ground_normal = [0.0f32; 3];
+        let mut ground_state = 0u32;
+        let mut is_supported = 0u32;
+        unsafe {
+            bjolt_character_move(
+                self.world_ptr,
+                character_id_raw,
+                delta_time,
+                wanted_velocity.x,
+                wanted_velocity.y,
+                wanted_velocity.z,
+                world_gravity.x,
+                world_gravity.y,
+                world_gravity.z,
+                step_up_height,
+                stick_to_floor_distance,
+                character_position.as_mut_ptr(),
+                character_velocity.as_mut_ptr(),
+                ground_normal.as_mut_ptr(),
+                &mut ground_state,
+                &mut is_supported,
+            );
+        }
+        self.character_positions.insert(
+            character_id_raw,
+            (
+                Vec3::from_array(character_position),
+                crate::character::JoltCharacterGround {
+                    ground_state: crate::character::CharacterGround::from_raw(ground_state),
+                    ground_normal: Vec3::from_array(ground_normal),
+                    is_supported: is_supported != 0,
+                },
+            ),
+        );
+    }
+
+    /// Last move's position + ground reading for a character.
+    pub fn character_pose(
+        &mut self,
+        character_id_raw: u32,
+    ) -> (Vec3, crate::character::JoltCharacterGround) {
+        self.character_positions.remove(&character_id_raw).unwrap_or((
+            Vec3::ZERO,
+            crate::character::JoltCharacterGround::default(),
+        ))
+    }
+
+    /// Teleports a character to a position with a velocity.
+    pub fn character_teleport(
+        &mut self,
+        character_id_raw: u32,
+        target_position: Vec3,
+        target_velocity: Vec3,
+    ) {
+        unsafe {
+            bjolt_character_teleport(
+                self.world_ptr,
+                character_id_raw,
+                target_position.x,
+                target_position.y,
+                target_position.z,
+                target_velocity.x,
+                target_velocity.y,
+                target_velocity.z,
+            );
+        }
+    }
+
+    /// Swaps the character capsule (stand/crouch). Returns false when the new
+    /// shape stays penetrating: the old capsule keeps running.
+    pub fn character_stance(
+        &mut self,
+        character_id_raw: u32,
+        capsule_half_height: f32,
+        capsule_radius: f32,
+    ) -> bool {
+        unsafe {
+            bjolt_character_stance(
+                self.world_ptr,
+                character_id_raw,
+                capsule_half_height,
+                capsule_radius,
+            )
+        }
     }
 }
 

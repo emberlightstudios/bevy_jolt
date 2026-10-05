@@ -141,13 +141,16 @@ impl Plugin for JoltPlugin {
             max_sub_steps: self.max_sub_steps,
         });
         app.add_observer(crate::body_sync::spawn_jolt_body);
+        app.add_observer(crate::character::bake_jolt_character);
         app.add_observer(crate::body_forces::apply_jolt_impulse);
         app.add_observer(crate::body_forces::apply_jolt_set_velocity);
+        app.add_observer(crate::character::apply_jolt_character_teleport);
         app.add_observer(crate::joint_sync::despawn_jolt_joint);
         // Joint cascade before body destroy: constraint removals here are
         // synchronous, so the solver never sees a constraint on a dead body.
         app.add_observer(crate::joint_sync::cascade_body_remove_to_joints);
         app.add_observer(crate::body_sync::despawn_jolt_body);
+        app.add_observer(crate::character::despawn_jolt_character);
         app.add_observer(crate::vehicle::despawn_jolt_vehicle);
         app.add_systems(
             FixedUpdate,
@@ -168,13 +171,18 @@ impl Plugin for JoltPlugin {
                 crate::body_forces::apply_jolt_driven_velocities,
                 crate::joint_sync::apply_jolt_motor_drives,
                 crate::vehicle::apply_jolt_vehicle_drives,
+                crate::character::step_jolt_characters,
             )
                 .before(step_physics_world),
         );
         app.add_systems(FixedUpdate, step_physics_world);
         app.add_systems(
             FixedUpdate,
-            crate::body_sync::sync_body_transforms.after(step_physics_world),
+            (
+                crate::body_sync::sync_body_transforms,
+                crate::character::sync_character_transforms,
+            )
+                .after(step_physics_world),
         );
         app.add_systems(Update, crate::body_sync::interpolate_body_transforms);
     }

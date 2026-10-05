@@ -6,6 +6,7 @@
 
 mod body_forces;
 mod body_sync;
+mod character;
 mod debug_draw;
 mod joint_sync;
 mod physics_world;
@@ -17,6 +18,10 @@ pub use crate::body_forces::{
     JoltSetVelocity,
 };
 pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, PreviousBodyTransform};
+pub use crate::character::{
+    CharacterGround, JoltCharacter, JoltCharacterGround, JoltCharacterId, JoltCharacterStep,
+    JoltCharacterTeleport, JoltCharacterVelocity,
+};
 pub use crate::debug_draw::JoltDebugPlugin;
 pub use crate::joint_sync::{JointKind, JointMotor, JoltJoint, JoltJointId, JoltMotorDrive};
 pub use crate::joint_sync::{
