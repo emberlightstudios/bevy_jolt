@@ -3,9 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
-    JoltPlugin, JoltShape,
-    JointSpace,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
+    JoltPlugin, JoltShape, JointSpace,
 };
 
 const HINGE_POINT: Vec3 = Vec3::new(0.0, 3.2, 0.0);
@@ -16,7 +15,7 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(FixedUpdate, (start_motor_once, pingpong_motor).chain())
+        .add_systems(FixedUpdate, pingpong_motor)
         .add_systems(PostUpdate, draw_pin)
         .run();
 }
@@ -25,8 +24,6 @@ fn main() {
 struct Demo {
     joint: Entity,
     flip_in: u32,
-    forward: bool,
-    started: bool,
 }
 
 fn spawn_scene(
@@ -88,62 +85,40 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::hinge_limited(
-            post,
-            panel,
-            HINGE_POINT,
-            Dir3::Z,
-            Dir3::X,
-            -1.2,
-            1.2,
-            JointSpace::World,
+        .spawn((
+            JoltJoint::hinge_limited(
+                post,
+                panel,
+                HINGE_POINT,
+                Dir3::Z,
+                Dir3::X,
+                -1.2,
+                1.2,
+                JointSpace::World,
+            ),
+            JoltMotorDrive {
+                target_velocity: 1.2,
+            },
         ))
         .id();
-    commands.insert_resource(Demo {
-        joint,
-        flip_in: 300,
-        forward: true,
-        started: false,
-    });
-}
-
-fn start_motor_once(
-    mut demo: ResMut<Demo>,
-    joint_query: Query<&JoltJointId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    if demo.started {
-        return;
-    }
-    let Ok(joint_id) = joint_query.get(demo.joint) else {
-        return;
-    };
-    physics_world.constraint_drive_at(joint_id.constraint_id_raw, 1.2);
-    demo.started = true;
-    println!("hinge joint id {}", joint_id.constraint_id_raw);
+    commands.insert_resource(Demo { joint, flip_in: 300 });
 }
 
 fn pingpong_motor(
     mut demo: ResMut<Demo>,
-    joint_query: Query<&JoltJointId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
+    joint_query: Query<(), With<JoltJointId>>,
+    mut drive_query: Query<&mut JoltMotorDrive>,
 ) {
-    if !demo.started {
+    if joint_query.get(demo.joint).is_err() {
         return;
     }
-    let Ok(joint_id) = joint_query.get(demo.joint) else {
+    let Ok(mut drive) = drive_query.get_mut(demo.joint) else {
         return;
     };
     demo.flip_in = demo.flip_in.saturating_sub(1);
     if demo.flip_in == 0 {
-        demo.forward = !demo.forward;
         demo.flip_in = 300;
-        let speed = if demo.forward { 1.2 } else { -1.2 };
-        physics_world.constraint_drive_at(joint_id.constraint_id_raw, speed);
-        println!(
-            "hinge reversed ({}).",
-            if demo.forward { "forward" } else { "back" }
-        );
+        drive.target_velocity = -drive.target_velocity;
     }
 }
 

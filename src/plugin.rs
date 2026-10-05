@@ -161,6 +161,7 @@ impl Plugin for JoltPlugin {
             (
                 crate::body_forces::apply_jolt_forces,
                 crate::body_forces::apply_jolt_driven_velocities,
+                crate::joint_sync::apply_jolt_motor_drives,
             )
                 .before(step_physics_world),
         );

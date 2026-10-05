@@ -677,6 +677,27 @@ pub fn create_jolt_joints(
     }
 }
 
+/// Held motor target: retargets the joint's velocity motor every tick while
+/// present. Attach alongside [`JoltJoint`]; the sync system pushes the value
+/// into Jolt before the physics step. Change the field to change speed,
+/// remove the component to leave the last target in place.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct JoltMotorDrive {
+    /// Target motor speed: m/s for sliders/paths, rad/s for hinges.
+    pub target_velocity: f32,
+}
+
+/// Pushes every [`JoltMotorDrive`] into its joint's motor before the physics
+/// step. Joints missing their id (not baked yet) are skipped for the tick.
+pub fn apply_jolt_motor_drives(
+    drive_query: Query<(&JoltJointId, &JoltMotorDrive)>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (joint_id, drive) in &drive_query {
+        physics_world.constraint_drive_at(joint_id.constraint_id_raw, drive.target_velocity);
+    }
+}
+
 /// Removes the Jolt constraint when its joint entity is despawned, and drops
 /// gear-style joints whose sub-joint died with it.
 pub fn despawn_jolt_joint(

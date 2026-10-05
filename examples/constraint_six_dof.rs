@@ -1,11 +1,10 @@
 //! Six-DOF piston: every axis locked except free Y travel.
-//! A velocity motor ping-pongs every 5s so the block shuttles.
+//! A held [`JoltMotorDrive`] ping-pongs every 5s so the block shuttles.
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltPhysicsWorld,
-    JoltPlugin, JoltShape,
-    JointSpace,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
+    JoltPlugin, JoltShape, JointSpace,
 };
 
 fn main() {
@@ -14,19 +13,15 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(FixedUpdate, (start_motor_once, pingpong_motor).chain())
-        .add_systems(FixedPostUpdate, report)
+        .add_systems(FixedUpdate, pingpong_motor)
         .add_systems(PostUpdate, draw_rail)
         .run();
 }
 
 #[derive(Resource)]
 struct Demo {
-    block: Entity,
     joint: Entity,
     flip_in: u32,
-    forward: bool,
-    started: bool,
 }
 
 fn spawn_scene(
@@ -81,76 +76,32 @@ fn spawn_scene(
         ))
         .id();
     let joint = commands
-        .spawn(JoltJoint::six_dof_slider(rail, block, -1.5, 0.5, JointSpace::World))
+        .spawn((
+            JoltJoint::six_dof_slider(rail, block, -1.5, 0.5, JointSpace::World),
+            JoltMotorDrive {
+                target_velocity: -1.5,
+            },
+        ))
         .id();
-    commands.insert_resource(Demo {
-        block,
-        joint,
-        flip_in: 300,
-        forward: false,
-        started: false,
-    });
-}
-
-fn start_motor_once(
-    mut demo: ResMut<Demo>,
-    joint_query: Query<&JoltJointId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    if demo.started {
-        return;
-    }
-    let Ok(joint_id) = joint_query.get(demo.joint) else {
-        return;
-    };
-    physics_world.constraint_drive_at(joint_id.constraint_id_raw, -1.5);
-    demo.started = true;
-    println!("six-dof joint id {}", joint_id.constraint_id_raw);
+    commands.insert_resource(Demo { joint, flip_in: 300 });
 }
 
 fn pingpong_motor(
     mut demo: ResMut<Demo>,
-    joint_query: Query<&JoltJointId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    if !demo.started {
-        return;
-    }
-    let Ok(joint_id) = joint_query.get(demo.joint) else {
-        return;
-    };
-    demo.flip_in = demo.flip_in.saturating_sub(1);
-    if demo.flip_in == 0 {
-        demo.forward = !demo.forward;
-        demo.flip_in = 300;
-        let speed = if demo.forward { 1.5 } else { -1.5 };
-        physics_world.constraint_drive_at(joint_id.constraint_id_raw, speed);
-        println!("six-dof reversed ({}).", if demo.forward { "up" } else { "down" });
-    }
-}
-
-fn report(
-    mut tick: Local<u32>,
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
     joint_query: Query<(), With<JoltJointId>>,
+    mut drive_query: Query<&mut JoltMotorDrive>,
 ) {
     if joint_query.get(demo.joint).is_err() {
         return;
     }
-    *tick += 1;
-    if *tick % 300 != 0 {
-        return;
-    }
-    let Ok(block) = transform_query.get(demo.block) else {
+    let Ok(mut drive) = drive_query.get_mut(demo.joint) else {
         return;
     };
-    let position = block.translation;
-    println!("tick {}: 6-dof piston height {:.3}.", *tick, position.y);
-    assert!(
-        position.x.abs() < 0.2 && position.z.abs() < 0.2,
-        "6-dof block should stay on its rail"
-    );
+    demo.flip_in = demo.flip_in.saturating_sub(1);
+    if demo.flip_in == 0 {
+        demo.flip_in = 300;
+        drive.target_velocity = -drive.target_velocity;
+    }
 }
 
 fn draw_rail(
