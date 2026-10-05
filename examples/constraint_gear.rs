@@ -108,6 +108,8 @@ fn spawn_scene(
             DISC1_POS,
             Dir3::Z,
             Dir3::X,
+            Dir3::Z,
+            Dir3::X,
             JointSpace::World,
         ))
         .id();
@@ -116,6 +118,8 @@ fn spawn_scene(
             floor,
             disc2,
             DISC2_POS,
+            Dir3::Z,
+            Dir3::X,
             Dir3::Z,
             Dir3::X,
             JointSpace::World,

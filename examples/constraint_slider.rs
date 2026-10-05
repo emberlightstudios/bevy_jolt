@@ -88,6 +88,8 @@ fn spawn_scene(
                 block,
                 Dir3::Y,
                 Dir3::X,
+                Dir3::Y,
+                Dir3::X,
                 -1.5,
                 0.5,
                 JointSpace::World,

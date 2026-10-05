@@ -92,6 +92,8 @@ fn spawn_scene(
                 HINGE_POINT,
                 Dir3::Z,
                 Dir3::X,
+                Dir3::Z,
+                Dir3::X,
                 -1.2,
                 1.2,
                 JointSpace::World,

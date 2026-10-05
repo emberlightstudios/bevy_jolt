@@ -110,6 +110,8 @@ fn spawn_scene(
             PINION_POS,
             Dir3::Z,
             Dir3::X,
+            Dir3::Z,
+            Dir3::X,
             JointSpace::World,
         ))
         .id();
@@ -117,6 +119,8 @@ fn spawn_scene(
         .spawn(JoltJoint::slider(
             slider_anchor,
             rack,
+            Dir3::Y,
+            Dir3::X,
             Dir3::Y,
             Dir3::X,
             -1.5,
