@@ -142,12 +142,12 @@ impl Plugin for JoltPlugin {
         });
         app.add_observer(crate::body_sync::spawn_jolt_body);
         app.add_observer(crate::character::bake_jolt_character);
+        app.add_observer(crate::ragdoll::bake_jolt_ragdoll);
         app.add_observer(crate::body_forces::apply_jolt_impulse);
         app.add_observer(crate::body_forces::apply_jolt_set_velocity);
         app.add_observer(crate::character::apply_jolt_character_teleport);
         app.add_observer(crate::joint_sync::despawn_jolt_joint);
         // Joint cascade before body destroy: constraint removals here are
-        // synchronous, so the solver never sees a constraint on a dead body.
         app.add_observer(crate::joint_sync::cascade_body_remove_to_joints);
         app.add_observer(crate::body_sync::despawn_jolt_body);
         app.add_observer(crate::character::despawn_jolt_character);
@@ -155,12 +155,12 @@ impl Plugin for JoltPlugin {
         app.add_systems(
             FixedUpdate,
             (
+                crate::ragdoll::bake_ragdoll_links,
                 crate::joint_sync::create_jolt_joints,
                 crate::vehicle::create_jolt_vehicles,
             )
                 .before(step_physics_world),
         );
-        // Held forces re-add before the step so they act this tick. Driven
         // velocities overwrite before the step for the same reason. One-shot
         // impulses and velocity sets need no scheduling: their observers fire
         // the moment the event triggers.

@@ -9,11 +9,12 @@ use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
     BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
     VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
-    bjolt_apply_force, bjolt_apply_impulse, bjolt_body_is_active, bjolt_body_remove_destroy,
-    bjolt_body_state, bjolt_body_transform, bjolt_character_create, bjolt_character_destroy,
-    bjolt_character_move, bjolt_character_stance, bjolt_character_teleport, bjolt_constraint_drive_at,
-    bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
-    bjolt_create_capsule, bjolt_create_compound, bjolt_create_cone_constraint, bjolt_create_cylinder,
+    bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide, bjolt_body_is_active,
+    bjolt_body_remove_destroy, bjolt_body_state, bjolt_body_transform, bjolt_character_create,
+    bjolt_character_destroy, bjolt_character_move, bjolt_character_stance, bjolt_character_teleport,
+    bjolt_constraint_drive_at, bjolt_constraint_path_fraction, bjolt_constraint_path_looping,
+    bjolt_create_box, bjolt_create_capsule, bjolt_create_compound, bjolt_create_cone_constraint,
+    bjolt_create_cylinder,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
     bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_motorcycle,
     bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
@@ -1375,8 +1376,13 @@ impl JoltWorld {
         self.body_shapes.remove(&body_id_raw);
     }
 
+    /// Stops two bodies colliding (ragdoll parent-child pairs). Shared group
+    /// table per pair; game code calls this once per link at bake.
+    pub fn set_bodies_no_collide(&mut self, body_a_raw: u32, body_b_raw: u32) {
+        unsafe { bjolt_bodies_no_collide(self.world_ptr, body_a_raw, body_b_raw) }
+    }
+
     /// Creates a virtual character capsule; bottom sits at the position.
-    /// Returns the character id (0 = Jolt rejected it).
     #[allow(clippy::too_many_arguments)]
     pub fn character_create(
         &mut self,
