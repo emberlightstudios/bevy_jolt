@@ -473,7 +473,7 @@ impl Default for VehicleSpec {
             }
         }
         Self {
-            object_layer: 1,
+            object_layer: 0,
             half_extents: Vec3::new(0.9, 0.6, 2.2),
             center_of_mass_offset: Vec3::new(0.0, -0.9, 0.0),
             mass_kg: 1500.0,

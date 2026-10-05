@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape,
+JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape,
 };
 
 fn main() {
@@ -27,37 +27,37 @@ fn spawn_physics_scene(mut commands: Commands) {
 
     commands.spawn((
         Transform::from_xyz(0.0, 0.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltBody::fixed(0),
         JoltShape::plane(Vec3::Y, 0.0),
     ));
     commands.spawn((
         Transform::from_xyz(-1.0, 3.0, 0.0),
-        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltBody::dynamic(0),
         JoltShape::box_shape(Vec3::splat(0.5)),
     ));
     commands.spawn((
         Transform::from_xyz(1.0, 4.0, 0.0),
-        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltBody::dynamic(0),
         JoltShape::capsule(0.5, 0.3),
     ));
     commands.spawn((
         Transform::from_xyz(0.0, 5.0, 0.0),
-        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltBody::dynamic(0),
         JoltShape::sphere(0.5),
     ));
     commands.spawn((
         Transform::from_xyz(-2.5, 3.0, 0.0),
-        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltBody::dynamic(0),
         JoltShape::cylinder(0.4, 0.5),
     ));
     commands.spawn((
         Transform::from_xyz(2.5, 3.0, 0.0),
-        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltBody::dynamic(0),
         JoltShape::tapered_cylinder(0.4, 0.3, 0.5),
     ));
     commands.spawn((
         Transform::from_xyz(0.0, 7.0, 0.0),
-        JoltBody::dynamic(CollisionLayers::MOVING),
+        JoltBody::dynamic(0),
         JoltShape::tapered_capsule(0.4, 0.3, 0.5),
     ));
 }

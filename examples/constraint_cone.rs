@@ -2,7 +2,7 @@
 //! angular velocity, swinging freely inside the cone. 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint,
+JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint,
     JoltPlugin, JoltShape, JointSpace,
 };
 
@@ -46,7 +46,7 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltBody::fixed(0),
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
@@ -64,7 +64,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.4, 0.4, 0.4))),
             MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
             Transform::from_translation(ANCHOR),
-            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltBody::fixed(0),
             JoltShape::box_shape(Vec3::splat(0.2)),
         ))
         .id();
@@ -76,7 +76,7 @@ fn spawn_scene(
             MeshMaterial3d(materials.add(Color::srgb(0.3, 0.8, 0.6))),
             Transform::from_translation(BALL_SPAWN)
                 .with_rotation(Quat::from_rotation_arc(dir.as_vec3(), Vec3::Y)),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(0),
             JoltShape::sphere(0.3),
             JoltAngularVelocity {
                 angular_velocity: Vec3::ZERO,

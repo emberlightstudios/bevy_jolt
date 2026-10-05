@@ -6,7 +6,7 @@
 // (`--test-threads=1`) until worlds share one pool or tests share one App.
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltBodyId, JoltJoint, JoltJointId, JoltPlugin, JoltShape,
+JoltBody, JoltBodyId, JoltJoint, JoltJointId, JoltPlugin, JoltShape,
     JointSpace,
 };
 
@@ -15,7 +15,7 @@ fn spawn_pair(app: &mut App) -> (Entity, Entity, Entity) {
         .world_mut()
         .spawn((
             Transform::from_xyz(0.0, 1.5, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(0),
             JoltShape::box_shape(Vec3::splat(0.5)),
         ))
         .id();
@@ -23,7 +23,7 @@ fn spawn_pair(app: &mut App) -> (Entity, Entity, Entity) {
         .world_mut()
         .spawn((
             Transform::from_xyz(0.0, 2.6, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(0),
             JoltShape::box_shape(Vec3::splat(0.5)),
         ))
         .id();

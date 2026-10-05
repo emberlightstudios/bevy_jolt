@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin, JoltShape,
+JoltBody, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin, JoltShape,
 };
 
 fn main() {
@@ -45,7 +45,7 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltBody::fixed(0),
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
@@ -63,7 +63,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(6.0, 0.4, 3.0))),
             MeshMaterial3d(materials.add(Color::srgb(0.3, 0.6, 0.9))),
             Transform::from_xyz(0.0, 1.5, 0.0),
-            JoltBody::kinematic(CollisionLayers::MOVING),
+            JoltBody::kinematic(0),
             JoltShape::box_shape(Vec3::new(3.0, 0.2, 1.5)),
         ))
         .id();
@@ -72,7 +72,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Sphere::new(0.4))),
             MeshMaterial3d(materials.add(Color::srgb(0.9, 0.4, 0.2))),
             Transform::from_xyz(0.0, 2.5, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(0),
             JoltShape::sphere(0.4),
         ))
         .id();

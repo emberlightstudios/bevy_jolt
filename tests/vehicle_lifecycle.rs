@@ -3,7 +3,7 @@
 // global job plumbing doesn't survive two worlds on worker threads at once.
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltTrackedDrive, JoltVehicleDrive, JoltVehicleId, JoltVehicleShift,
+    JoltTrackedDrive, JoltVehicleDrive, JoltVehicleId, JoltVehicleShift,
     JoltPlugin, VehicleSpec, VehicleTrack, VehicleWheel,
 };
 
@@ -15,7 +15,7 @@ fn tick(app: &mut App) {
 fn spawn_car(app: &mut App) -> Entity {
     app.world_mut()
         .spawn((
-            VehicleSpec::new(CollisionLayers::MOVING),
+            VehicleSpec::new(0),
             JoltVehicleDrive {
                 forward: 0.5,
                 steer: 0.0,
@@ -61,7 +61,7 @@ fn wheeled_vehicle_gains_id_and_drives() {
 fn tracked_vehicle_builds_two_tracks() {
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, JoltPlugin::new()));
-    let mut spec = VehicleSpec::new(CollisionLayers::MOVING);
+    let mut spec = VehicleSpec::new(0);
     spec.wheels = (0..4)
         .map(|i| VehicleWheel {
             mount_position: Vec3::new(if i % 2 == 0 { 0.9 } else { -0.9 }, -0.5, if i < 2 { 1.0 } else { -1.0 }),
@@ -118,7 +118,7 @@ fn motorcycle_preset_builds() {
     let bike = app
         .world_mut()
         .spawn((
-            VehicleSpec::motorcycle(CollisionLayers::MOVING),
+            VehicleSpec::motorcycle(0),
             JoltVehicleDrive {
                 forward: 0.3,
                 steer: 0.0,

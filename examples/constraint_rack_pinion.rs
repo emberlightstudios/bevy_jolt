@@ -2,7 +2,7 @@
 //! Alternating kicks keep the jack pumping up and down.
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
+JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
     JoltShape, JointSpace,
 };
 
@@ -50,7 +50,7 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+        JoltBody::fixed(0), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
         Text::new("rack-and-pinion (jack)"),
@@ -69,7 +69,7 @@ fn spawn_scene(
     let hinge_anchor = commands
         .spawn((
             Transform::from_translation(PINION_POS),
-            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltBody::fixed(0),
             JoltShape::box_shape(Vec3::splat(0.1)),
         ))
         .id();
@@ -78,7 +78,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cylinder::new(0.5, 0.2))),
             MeshMaterial3d(materials.add(Color::srgb(0.8, 0.6, 0.2))),
             Transform::from_translation(PINION_POS).with_rotation(face_rotation),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(0),
             JoltShape::cylinder(0.1, 0.5),
             children![(
                 Mesh3d(meshes.add(Cuboid::new(0.12, 0.9, 0.22))),
@@ -90,7 +90,7 @@ fn spawn_scene(
     let slider_anchor = commands
         .spawn((
             Transform::from_translation(RACK_POS + Vec3::new(0.0, 1.5, 0.)),
-            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltBody::fixed(0),
             JoltShape::box_shape(Vec3::splat(0.1)),
         ))
         .id();
@@ -99,7 +99,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.25, 1.8, 0.25))),
             MeshMaterial3d(materials.add(Color::srgb(0.3, 0.6, 0.9))),
             Transform::from_translation(RACK_POS),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(0),
             JoltShape::box_shape(Vec3::new(0.125, 0.9, 0.125)),
         ))
         .id();

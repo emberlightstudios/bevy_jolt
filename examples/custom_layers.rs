@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use bevy_jolt::{CollisionLayers, JoltBody, JoltPlugin, JoltShape};
 
+const GROUND_LAYER: u16 = 0;
+const BODY_LAYER: u16 = 1;
 const GHOST_LAYER: u16 = 2;
 const SETTLE_TICKS: u32 = 300;
 
@@ -9,8 +11,8 @@ fn main() {
     // nothing, not even each other. Custom teams ride on the plugin: the
     // layer table is handed to Jolt once at world creation.
     let mut collision_layers = CollisionLayers::new(3);
-    collision_layers.set_collide(GHOST_LAYER, CollisionLayers::NON_MOVING, false);
-    collision_layers.set_collide(GHOST_LAYER, CollisionLayers::MOVING, false);
+    collision_layers.set_collide(GHOST_LAYER, GROUND_LAYER, false);
+    collision_layers.set_collide(GHOST_LAYER, BODY_LAYER, false);
     collision_layers.set_collide(GHOST_LAYER, GHOST_LAYER, false);
 
     App::new()
@@ -34,13 +36,13 @@ struct LayerDemoBodies {
 fn spawn_layer_demo(mut commands: Commands) {
     commands.spawn((
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltBody::fixed(GROUND_LAYER),
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     let normal_box = commands
         .spawn((
             Transform::from_xyz(-1.0, 3.0, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(BODY_LAYER),
             JoltShape::box_shape(Vec3::splat(0.5)),
         ))
         .id();

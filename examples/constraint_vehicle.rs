@@ -1,16 +1,13 @@
-//! Vehicle: a four-wheel car with ray-cast wheels laps a paddock.
-//! Gas held down, WASD steers from the keyboard, Space is the foot brake,
-//! H is the handbrake. A held [`JoltVehicleDrive`] steers back toward the
-//! paddock instead of driving away forever.
+//! Vehicle: a default `VehicleSpec` car with WASD driving (W gas,
+//! S brake/reverse, A/D steer). No keys: sits still.
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape, JoltVehicleDrive, JoltVehicleId,
+JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape, JoltVehicleDrive,
     VehicleSpec,
 };
 
 const CAR_SPAWN: Vec3 = Vec3::new(0.0, 1.2, 0.0);
-const PADDOCK_HALF: f32 = 30.0;
 
 fn main() {
     App::new()
@@ -18,15 +15,8 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(PreUpdate, steer_car)
-        .add_systems(PostUpdate, sync_car_mesh)
+        .add_systems(PreUpdate, drive_car)
         .run();
-}
-
-#[derive(Resource)]
-struct Demo {
-    car: Entity,
-    car_mesh: Entity,
 }
 
 fn spawn_scene(
@@ -49,111 +39,43 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(300.0, 2.0, 300.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(150.0, 1.0, 150.0)),
+        JoltBody::fixed(0),
+        JoltShape::box_shape(Vec3::new(150.0, 1.0, 150.0)),
     ));
     commands.spawn((
-        Text::new("vehicle (WASD to steer)"),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(12.0),
-            left: Val::Px(16.0),
-            ..default()
+        Mesh3d(meshes.add(Cuboid::new(1.8, 1.2, 4.4))),
+        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.15, 0.2))),
+        Transform::from_translation(CAR_SPAWN),
+        VehicleSpec::new(0),
+        JoltVehicleDrive {
+            forward: 0.0,
+            steer: 0.0,
+            brake: 0.0,
+            hand_brake: 0.0,
         },
     ));
-
-    let car_mesh = commands
-        .spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.8, 1.2, 4.4))),
-            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.15, 0.2))),
-            Transform::from_translation(CAR_SPAWN),
-        ))
-        .id();
-    let car = commands
-        .spawn((
-            VehicleSpec::new(CollisionLayers::MOVING),
-            JoltVehicleDrive {
-                forward: 0.6,
-                steer: 0.0,
-                brake: 0.0,
-                hand_brake: 0.0,
-            },
-            Transform::from_translation(CAR_SPAWN),
-        ))
-        .id();
-    commands.insert_resource(Demo { car, car_mesh });
 }
 
-fn steer_car(
-    demo: Res<Demo>,
+/// WASD driving: W gas, S brake/reverse, A/D steer. Car sits still
+/// with no keys held.
+fn drive_car(
     keyboard: Res<ButtonInput<KeyCode>>,
-    vehicle_query: Query<&JoltVehicleId>,
-    mut drive_query: Query<(&mut JoltVehicleDrive, &Transform)>,
+    mut drive_query: Query<&mut JoltVehicleDrive>,
 ) {
-    // Creation bakes a flush after spawn: no id yet means not drivable.
-    if vehicle_query.get(demo.car).is_err() {
-        return;
+    for mut drive in &mut drive_query {
+        drive.forward = if keyboard.pressed(KeyCode::KeyW) {
+            1.0
+        } else if keyboard.pressed(KeyCode::KeyS) {
+            -0.6
+        } else {
+            0.0
+        };
+        drive.steer = if keyboard.pressed(KeyCode::KeyA) {
+            -0.6
+        } else if keyboard.pressed(KeyCode::KeyD) {
+            0.6
+        } else {
+            0.0
+        };
     }
-    let Ok((mut drive, car_transform)) = drive_query.get_mut(demo.car) else {
-        return;
-    };
-    let forward = if keyboard.pressed(KeyCode::KeyW) {
-        1.0
-    } else if keyboard.pressed(KeyCode::KeyS) {
-        -0.6
-    } else {
-        // Cruise so the demo moves on its own; keys override.
-        0.6
-    };
-    let steer = if keyboard.pressed(KeyCode::KeyA) {
-        -0.6
-    } else if keyboard.pressed(KeyCode::KeyD) {
-        0.6
-    } else {
-        0.0
-    };
-    let brake = if keyboard.pressed(KeyCode::Space) {
-        1.0
-    } else {
-        0.0
-    };
-    let hand_brake = if keyboard.pressed(KeyCode::KeyH) {
-        1.0
-    } else {
-        0.0
-    };
-    // Steer back toward the paddock instead of teleporting: turn around when
-    // near the edge so the car laps on its own.
-    let car_position = car_transform.translation;
-    let (drive_forward, drive_steer) = if car_position.x.abs() > PADDOCK_HALF - 6.0
-        || car_position.z.abs() > PADDOCK_HALF - 6.0
-    {
-        (
-            0.6,
-            if car_position.x > car_position.z {
-                0.6
-            } else {
-                -0.6
-            },
-        )
-    } else {
-        (forward, steer)
-    };
-    drive.forward = drive_forward;
-    drive.steer = drive_steer;
-    drive.brake = brake;
-    drive.hand_brake = hand_brake;
-}
-
-fn sync_car_mesh(
-    demo: Res<Demo>,
-    car_query: Query<&Transform, With<VehicleSpec>>,
-    mut mesh_query: Query<&mut Transform, Without<VehicleSpec>>,
-) {
-    let Ok(car_pose) = car_query.get(demo.car) else {
-        return;
-    };
-    let Ok(mut mesh_pose) = mesh_query.get_mut(demo.car_mesh) else {
-        return;
-    };
-    *mesh_pose = *car_pose;
 }

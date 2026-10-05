@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_jolt::{CollisionLayers, JoltBody, JoltShape, JoltBodyId, JoltDebugPlugin, JoltPlugin};
+use bevy_jolt::{JoltBody, JoltShape, JoltBodyId, JoltDebugPlugin, JoltPlugin};
 
 fn main() {
     App::new()
@@ -36,7 +36,7 @@ fn spawn_physics_entities(
 
     commands.spawn((
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+        JoltBody::fixed(0), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
 
     let box_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
@@ -46,7 +46,7 @@ fn spawn_physics_entities(
             Mesh3d(box_mesh),
             MeshMaterial3d(box_material),
             Transform::from_xyz(-1.0, 3.0, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::box_shape(Vec3::splat(0.5)),
+            JoltBody::dynamic(0), JoltShape::box_shape(Vec3::splat(0.5)),
         ))
         .id();
 
@@ -57,7 +57,7 @@ fn spawn_physics_entities(
             Mesh3d(sphere_mesh),
             MeshMaterial3d(sphere_material),
             Transform::from_xyz(1.0, 4.0, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING), JoltShape::sphere(0.5),
+            JoltBody::dynamic(0), JoltShape::sphere(0.5),
         ))
         .id();
 

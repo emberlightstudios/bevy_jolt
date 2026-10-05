@@ -79,9 +79,10 @@ pub enum PhysicsShape {
 }
 
 /// Which object layers exist and which pairs can collide, decided in Rust
-/// and handed to Jolt once at world creation. The default table uses
-/// [`CollisionLayers::NON_MOVING`] (static ground) and
-/// [`CollisionLayers::MOVING`] (dynamic bodies); custom teams start at 2.
+/// and handed to Jolt once at world creation. Layer ids are plain `u16`
+/// values with no built-in names: declare every team your game needs up
+/// front with [`CollisionLayers::new`] and wire who-hits-who with
+/// [`CollisionLayers::set_collide`].
 #[derive(Clone, Debug)]
 pub struct CollisionLayers {
     layer_count: usize,
@@ -89,25 +90,31 @@ pub struct CollisionLayers {
 }
 
 impl CollisionLayers {
-    /// Static ground layer in the default table.
-    pub const NON_MOVING: u16 = 0;
-
-    /// Dynamic bodies layer in the default table.
-    pub const MOVING: u16 = 1;
+    /// Single self-colliding layer 0: every body on layer 0 hits every
+    /// other body on layer 0. Enough for demos with one team; real games
+    /// declare their own table with [`CollisionLayers::new`].
+    pub fn single_layer() -> Self {
+        let mut collide_matrix = [[0u8; jolt_sys::MAX_OBJECT_LAYERS]; jolt_sys::MAX_OBJECT_LAYERS];
+        collide_matrix[0][0] = 1;
+        Self {
+            layer_count: 1,
+            collide_matrix,
+        }
+    }
 
     pub fn new(layer_count: usize) -> Self {
         assert!(
-            (2..=jolt_sys::MAX_OBJECT_LAYERS).contains(&layer_count),
-            "layer count {} out of range 2..={}",
+            (1..=jolt_sys::MAX_OBJECT_LAYERS).contains(&layer_count),
+            "layer count {} out of range 1..={}",
             layer_count,
             jolt_sys::MAX_OBJECT_LAYERS
         );
-        let mut collide_matrix = jolt_sys::default_collision_matrix();
-        // New custom layers collide with everything until told otherwise.
-        for custom_layer in 2..layer_count {
+        // Every layer collides with everything until told otherwise; carve
+        // out the pairs that should not meet with `set_collide`.
+        let mut collide_matrix = [[0u8; jolt_sys::MAX_OBJECT_LAYERS]; jolt_sys::MAX_OBJECT_LAYERS];
+        for first_layer in 0..layer_count {
             for other_layer in 0..layer_count {
-                collide_matrix[custom_layer][other_layer] = 1;
-                collide_matrix[other_layer][custom_layer] = 1;
+                collide_matrix[first_layer][other_layer] = 1;
             }
         }
         Self {
@@ -139,7 +146,7 @@ impl CollisionLayers {
 
 impl Default for CollisionLayers {
     fn default() -> Self {
-        Self::new(2)
+        Self::single_layer()
     }
 }
 

@@ -3,7 +3,7 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
+JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
     JoltPlugin, JoltShape, JointSpace,
 };
 
@@ -44,7 +44,7 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltBody::fixed(0),
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
@@ -66,7 +66,7 @@ fn spawn_scene(
     let rail = commands
         .spawn((
             Transform::from_xyz(0.0, 4.2, 0.0),
-            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltBody::fixed(0),
             JoltShape::box_shape(Vec3::splat(0.25)),
         ))
         .id();
@@ -75,7 +75,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.6, 0.6, 0.6))),
             MeshMaterial3d(materials.add(Color::srgb(0.2, 0.5, 0.9))),
             Transform::from_xyz(0.0, 2.6, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(0),
             JoltShape::box_shape(Vec3::splat(0.3)),
         ))
         .id();

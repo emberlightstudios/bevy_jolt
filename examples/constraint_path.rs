@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
+JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
     JoltPlugin, JoltShape, JointMotor, JointSpace, PathRotation,
 };
 
@@ -81,7 +81,7 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltBody::fixed(0),
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
@@ -101,7 +101,7 @@ fn spawn_scene(
             Mesh3d(meshes.add(Cuboid::new(0.4, 0.4, 0.4))),
             MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.55))),
             Transform::from_xyz(0.0, 3.5, 0.0),
-            JoltBody::fixed(CollisionLayers::MOVING),
+            JoltBody::fixed(0),
             JoltShape::box_shape(Vec3::splat(0.2)),
         ))
         .id();
@@ -116,7 +116,7 @@ fn spawn_scene(
                 Mesh3d(cart_mesh.clone()),
                 MeshMaterial3d(materials.add(*cart_color)),
                 Transform::from_translation(start_position),
-                JoltBody::dynamic(CollisionLayers::MOVING),
+                JoltBody::dynamic(0),
                 JoltShape::box_shape(Vec3::splat(0.35)),
             ))
             .id();

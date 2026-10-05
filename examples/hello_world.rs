@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_jolt::{CollisionLayers, JoltBody, JoltBodyId, JoltPhysicsWorld, JoltPlugin, JoltShape};
+use bevy_jolt::{JoltBody, JoltBodyId, JoltPhysicsWorld, JoltPlugin, JoltShape};
 
 const MAX_PHYSICS_STEPS: u32 = 600;
 
@@ -20,13 +20,13 @@ struct FallingSphere {
 fn spawn_physics_scene(mut commands: Commands) {
     commands.spawn((
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(CollisionLayers::NON_MOVING),
+        JoltBody::fixed(0),
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     let sphere = commands
         .spawn((
             Transform::from_xyz(0.0, 2.0, 0.0),
-            JoltBody::dynamic(CollisionLayers::MOVING),
+            JoltBody::dynamic(0),
             JoltShape::sphere(0.5),
         ))
         .id();
