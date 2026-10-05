@@ -53,7 +53,7 @@ fn spawn_scene(
         JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
-        Text::new("six-dof (as piston)"),
+        Text::new("six-dof (as slider)"),
         Node {
             position_type: PositionType::Absolute,
             top: Val::Px(12.0),
