@@ -21,6 +21,10 @@ pub use crate::joint_sync::{JointKind, JointMotor, JoltJoint, JoltJointId, JoltM
 pub use crate::joint_sync::{SixDofAxis, SixDofFrame, SixDofLimits};
 pub use crate::physics_world::{BodySnapshot, CollisionLayers, JointSpace, JoltWorld, PhysicsShape, RayHit};
 pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStepConfig, step_physics_world};
-pub use crate::vehicle::{JoltVehicle, JoltVehicleDrive, JoltVehicleId};
+pub use crate::vehicle::{
+    JoltTrackedDrive, JoltVehicle, JoltVehicleDrive, JoltVehicleId, JoltVehicleShift, VehicleDifferential,
+    VehicleEngine, VehicleKind, VehicleLean, VehicleRollBar, VehicleSpec, VehicleTrack,
+    VehicleTransmission, VehicleWheel, VEHICLE_NO_FLIP_LIMIT,
+};
 pub use jolt_sys::MAX_OBJECT_LAYERS;
 

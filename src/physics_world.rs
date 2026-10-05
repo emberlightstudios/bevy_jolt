@@ -6,18 +6,20 @@
 use crate::body_sync::JoltMotion;
 use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
-    BJoltWorld, bjolt_apply_force, bjolt_apply_impulse, bjolt_body_is_active, bjolt_body_remove_destroy,
-    bjolt_body_state, bjolt_body_transform, bjolt_cast_ray, bjolt_constraint_drive_at,
-    bjolt_create_box, bjolt_create_capsule, bjolt_create_cone_constraint, bjolt_create_cylinder,
-    bjolt_create_demo_car, bjolt_create_distance_constraint, bjolt_create_fixed_constraint,
-    bjolt_create_floor, bjolt_create_gear_constraint, bjolt_create_hinge_constraint,
-    bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
-    bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_six_dof,
-    bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
-    bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_gravity_factor, bjolt_init,
-    bjolt_move_kinematic, bjolt_remove_constraint,
-    bjolt_set_angular_velocity, bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity,
-    bjolt_set_rotation, bjolt_set_velocity, bjolt_vehicle_drive, bjolt_world_create_with_layers,
+    BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi, VehicleLeanFfi, VehicleRollBarFfi,
+    VehicleTransmissionFfi, VehicleWheelFfi, bjolt_apply_force, bjolt_apply_impulse,
+    bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_state, bjolt_body_transform,
+    bjolt_cast_ray, bjolt_constraint_drive_at, bjolt_create_box, bjolt_create_capsule,
+    bjolt_create_cone_constraint, bjolt_create_cylinder, bjolt_create_distance_constraint,
+    bjolt_create_fixed_constraint, bjolt_create_floor, bjolt_create_gear_constraint,
+    bjolt_create_hinge_constraint, bjolt_create_motorcycle, bjolt_create_path_cart, bjolt_create_plane,
+    bjolt_create_point_constraint, bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint,
+    bjolt_create_six_dof, bjolt_create_sphere, bjolt_create_slider_constraint,
+    bjolt_create_swing_twist_constraint, bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder,
+    bjolt_create_tracked_vehicle, bjolt_create_wheeled_vehicle, bjolt_gravity_factor, bjolt_init,
+    bjolt_move_kinematic, bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_gravity,
+    bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_rotation, bjolt_set_velocity,
+    bjolt_tracked_drive, bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_world_create_with_layers,
     bjolt_world_destroy, bjolt_world_gravity, bjolt_world_update,
 };
 
@@ -918,33 +920,169 @@ impl JoltWorld {
         }
     }
 
-    /// Four-wheel demo car: spawns the chassis body plus ray-cast wheels and
-    /// returns both the body and the vehicle constraint id. Drive it with
-    /// [`JoltWorld::vehicle_drive`]. Returns `None` on failure.
-    pub fn create_demo_car(
+    /// Fully specified vehicle: chassis box plus wheels, engine, gearbox,
+    /// and controller tuning from a [`VehicleSpec`](crate::vehicle::VehicleSpec).
+    /// Returns the chassis body + constraint ids for
+    /// [`JoltVehicleId`](crate::vehicle::JoltVehicleId), or `None` on failure.
+    pub fn create_vehicle(
         &mut self,
-        object_layer: u16,
+        spec: &crate::vehicle::VehicleSpec,
         spawn_position: Vec3,
-    ) -> Option<(u32, u32)> {
+    ) -> Option<crate::vehicle::JoltVehicleId> {
+        use jolt_sys::{MAX_VEHICLE_DIFFS, MAX_VEHICLE_ROLL_BARS, MAX_VEHICLE_WHEELS};
         let mut body_raw = 0u32;
         let mut constraint_id = 0u32;
-        let created = unsafe {
-            bjolt_create_demo_car(
-                self.world_ptr,
-                object_layer,
-                spawn_position.x,
-                spawn_position.y,
-                spawn_position.z,
-                &mut body_raw,
-                &mut constraint_id,
-            )
+        let wheels: Vec<VehicleWheelFfi> =
+            spec.wheels.iter().map(|wheel| wheel.to_ffi()).collect();
+        let engine: VehicleEngineFfi = spec.engine.to_ffi();
+        let gearbox: VehicleTransmissionFfi = spec.transmission.to_ffi();
+        let created = match &spec.kind {
+            crate::vehicle::VehicleKind::Wheeled {
+                differentials,
+                roll_bars,
+                limited_slip_ratio,
+            } => {
+                let diffs: Vec<VehicleDifferentialFfi> = differentials
+                    .iter()
+                    .map(|diff| diff.to_ffi())
+                    .collect();
+                let bars: Vec<VehicleRollBarFfi> =
+                    roll_bars.iter().map(|bar| bar.to_ffi()).collect();
+                unsafe {
+                    bjolt_create_wheeled_vehicle(
+                        self.world_ptr,
+                        spec.object_layer,
+                        spawn_position.x,
+                        spawn_position.y,
+                        spawn_position.z,
+                        spec.half_extents.x,
+                        spec.half_extents.y,
+                        spec.half_extents.z,
+                        spec.center_of_mass_offset.x,
+                        spec.center_of_mass_offset.y,
+                        spec.center_of_mass_offset.z,
+                        spec.mass_kg,
+                        spec.max_pitch_roll_angle,
+                        spec.tester_radius,
+                        wheels.as_ptr(),
+                        wheels.len().min(MAX_VEHICLE_WHEELS) as u8,
+                        &engine,
+                        &gearbox,
+                        diffs.as_ptr(),
+                        diffs.len().min(MAX_VEHICLE_DIFFS) as u8,
+                        bars.as_ptr(),
+                        bars.len().min(MAX_VEHICLE_ROLL_BARS) as u8,
+                        *limited_slip_ratio,
+                        &mut body_raw,
+                        &mut constraint_id,
+                    )
+                }
+            }
+            crate::vehicle::VehicleKind::Tracked { tracks } => {
+                let track_ffis = [tracks[0].to_ffi(), tracks[1].to_ffi()];
+                unsafe {
+                    bjolt_create_tracked_vehicle(
+                        self.world_ptr,
+                        spec.object_layer,
+                        spawn_position.x,
+                        spawn_position.y,
+                        spawn_position.z,
+                        spec.half_extents.x,
+                        spec.half_extents.y,
+                        spec.half_extents.z,
+                        spec.center_of_mass_offset.x,
+                        spec.center_of_mass_offset.y,
+                        spec.center_of_mass_offset.z,
+                        spec.mass_kg,
+                        spec.max_pitch_roll_angle,
+                        spec.tester_radius,
+                        wheels.as_ptr(),
+                        wheels.len().min(MAX_VEHICLE_WHEELS) as u8,
+                        &engine,
+                        &gearbox,
+                        track_ffis.as_ptr(),
+                        &mut body_raw,
+                        &mut constraint_id,
+                    )
+                }
+            }
+            crate::vehicle::VehicleKind::Motorcycle {
+                differentials,
+                lean,
+            } => {
+                let diffs: Vec<VehicleDifferentialFfi> = differentials
+                    .iter()
+                    .map(|diff| diff.to_ffi())
+                    .collect();
+                let lean_ffi: VehicleLeanFfi = lean.to_ffi();
+                unsafe {
+                    bjolt_create_motorcycle(
+                        self.world_ptr,
+                        spec.object_layer,
+                        spawn_position.x,
+                        spawn_position.y,
+                        spawn_position.z,
+                        spec.half_extents.x,
+                        spec.half_extents.y,
+                        spec.half_extents.z,
+                        spec.center_of_mass_offset.x,
+                        spec.center_of_mass_offset.y,
+                        spec.center_of_mass_offset.z,
+                        spec.mass_kg,
+                        spec.max_pitch_roll_angle,
+                        spec.tester_radius,
+                        wheels.as_ptr(),
+                        wheels.len().min(MAX_VEHICLE_WHEELS) as u8,
+                        &engine,
+                        &gearbox,
+                        diffs.as_ptr(),
+                        diffs.len().min(MAX_VEHICLE_DIFFS) as u8,
+                        &lean_ffi,
+                        &mut body_raw,
+                        &mut constraint_id,
+                    )
+                }
+            }
         };
-        (created != 0).then_some((body_raw, constraint_id))
+        (created != 0).then_some(crate::vehicle::JoltVehicleId {
+            body_id_raw: body_raw,
+            constraint_id_raw: constraint_id,
+        })
     }
 
-    /// Gas, steering, brake in [-1, 1]-ish ranges. No-op on bad ids.
-    pub fn vehicle_drive(&mut self, constraint_id: u32, forward: f32, right: f32, brake: f32) {
-        unsafe { bjolt_vehicle_drive(self.world_ptr, constraint_id, forward, right, brake) }
+    /// Wheeled/motorcycle input: gas, steer, foot brake, hand brake.
+    /// No-op on bad ids.
+    pub fn vehicle_drive(
+        &mut self,
+        constraint_id: u32,
+        forward: f32,
+        right: f32,
+        brake: f32,
+        hand_brake: f32,
+    ) {
+        unsafe {
+            bjolt_vehicle_drive(self.world_ptr, constraint_id, forward, right, brake, hand_brake)
+        }
+    }
+
+    /// Tank input: gas plus per-track multipliers. No-op on bad ids.
+    pub fn tracked_drive(
+        &mut self,
+        constraint_id: u32,
+        forward: f32,
+        left_ratio: f32,
+        right_ratio: f32,
+        brake: f32,
+    ) {
+        unsafe {
+            bjolt_tracked_drive(self.world_ptr, constraint_id, forward, left_ratio, right_ratio, brake)
+        }
+    }
+
+    /// Manual gear: -1 reverse, 0 neutral, 1+ forward, plus clutch 0..1.
+    /// Auto boxes ignore it. No-op on bad ids.
+    pub fn vehicle_shift(&mut self, constraint_id: u32, gear: i32, clutch_friction: f32) {
+        unsafe { bjolt_vehicle_shift(self.world_ptr, constraint_id, gear, clutch_friction) }
     }
 
     /// One-shot linear + angular impulse at center of mass. Zero halves are

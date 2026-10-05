@@ -1,11 +1,12 @@
 //! Vehicle: a four-wheel car with ray-cast wheels laps a paddock.
-//! Gas held down, WASD steers from the keyboard. A held [`JoltVehicleDrive`]
-//! steers back toward the paddock instead of driving away forever.
+//! Gas held down, WASD steers from the keyboard, Space is the foot brake,
+//! H is the handbrake. A held [`JoltVehicleDrive`] steers back toward the
+//! paddock instead of driving away forever.
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CollisionLayers, JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape, JoltVehicle,
-    JoltVehicleDrive, JoltVehicleId,
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape, JoltVehicleDrive, JoltVehicleId,
+    VehicleSpec,
 };
 
 const CAR_SPAWN: Vec3 = Vec3::new(0.0, 1.2, 0.0);
@@ -69,11 +70,12 @@ fn spawn_scene(
         .id();
     let car = commands
         .spawn((
-            JoltVehicle::new(CollisionLayers::MOVING),
+            VehicleSpec::new(CollisionLayers::MOVING),
             JoltVehicleDrive {
                 forward: 0.6,
                 steer: 0.0,
                 brake: 0.0,
+                hand_brake: 0.0,
             },
             Transform::from_translation(CAR_SPAWN),
         ))
@@ -114,6 +116,11 @@ fn steer_car(
     } else {
         0.0
     };
+    let hand_brake = if keyboard.pressed(KeyCode::KeyH) {
+        1.0
+    } else {
+        0.0
+    };
     // Steer back toward the paddock instead of teleporting: turn around when
     // near the edge so the car laps on its own.
     let car_position = car_transform.translation;
@@ -134,12 +141,13 @@ fn steer_car(
     drive.forward = drive_forward;
     drive.steer = drive_steer;
     drive.brake = brake;
+    drive.hand_brake = hand_brake;
 }
 
 fn sync_car_mesh(
     demo: Res<Demo>,
-    car_query: Query<&Transform, With<JoltVehicle>>,
-    mut mesh_query: Query<&mut Transform, Without<JoltVehicle>>,
+    car_query: Query<&Transform, With<VehicleSpec>>,
+    mut mesh_query: Query<&mut Transform, Without<VehicleSpec>>,
 ) {
     let Ok(car_pose) = car_query.get(demo.car) else {
         return;
