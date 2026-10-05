@@ -38,9 +38,7 @@ pub fn bake_jolt_soft_body(
     trigger: On<Add, JoltSoftBody>,
     mut commands: Commands,
     soft_query: Query<(&JoltSoftBody, &Transform)>,
-    mut meshes: Option<ResMut<Assets<Mesh>>>,
-    mut materials: Option<ResMut<Assets<StandardMaterial>>>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
+    meshes: Option<ResMut<Assets<Mesh>>>,
 ) {
     let soft_entity = trigger.event().entity;
     let Ok((soft, soft_transform)) = soft_query.get(soft_entity) else {
