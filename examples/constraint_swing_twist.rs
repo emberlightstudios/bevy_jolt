@@ -100,7 +100,7 @@ fn spawn_scene(
             shoulder,
             arm,
             ANCHOR,
-            Dir3::Y,
+            Dir3::NEG_Y,
             Dir3::X,
             Dir3::new(arm_axis).unwrap(),
             Dir3::new(plane_axis).unwrap(),
