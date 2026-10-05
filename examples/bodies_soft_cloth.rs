@@ -70,7 +70,6 @@ fn watch_cloth_scene(
     let mut cloth_positions = vec![Vec3::ZERO; vertex_total];
     let written = physics_world.soft_vertices(soft_id.body_id_raw, &mut cloth_positions);
     assert_eq!(written as usize, vertex_total, "cloth should report every vertex");
-    // Top row pins: z == 0 in grid order sits at the spawn line forever.
     for x in 0..GRID_NX {
         let pin_height = cloth_positions[x as usize].y;
         assert!(

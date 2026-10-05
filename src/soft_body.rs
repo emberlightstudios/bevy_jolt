@@ -86,6 +86,10 @@ pub fn bake_jolt_soft_body(
     .with_inserted_indices(Indices::U32(cloth_indices(soft.grid_nx, soft.grid_nz)));
     commands.entity(soft_entity).insert((
         JoltSoftBodyId { body_id_raw },
+        // World-space mesh: Jolt hands us world verts, so the entity sits
+        // at the origin. (Leaving the spawn Transform here would offset
+        // the banner twice and fling it off-camera.)
+        Transform::IDENTITY,
         Mesh3d(meshes.into_inner().add(cloth_mesh)),
         MeshMaterial3d(materials.into_inner().add(StandardMaterial {
             base_color: Color::srgb(0.7, 0.2, 0.2),
@@ -94,7 +98,6 @@ pub fn bake_jolt_soft_body(
         })),
     ));
 }
-
 /// Grid triangulation, wound for an upward face: two triangles per quad,
 /// same winding as the Jolt faces so the visible side matches.
 fn cloth_indices(grid_nx: u32, grid_nz: u32) -> Vec<u32> {
