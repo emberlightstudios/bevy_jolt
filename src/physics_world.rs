@@ -28,7 +28,7 @@ use jolt_sys::{
     bjolt_set_rotation, bjolt_set_velocity, bjolt_tracked_drive, bjolt_vehicle_drive,
     bjolt_vehicle_shift, bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_gravity,
     bjolt_world_update, bjolt_drain_contact_added, bjolt_drain_contact_removed,
-    bjolt_soft_vertex_count, bjolt_soft_vertices, bjolt_soft_destroy,
+    bjolt_soft_destroy, bjolt_soft_push, bjolt_soft_vertex_count, bjolt_soft_vertices,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -1403,6 +1403,20 @@ impl JoltWorld {
     /// Destroys a soft body. Never touches rigid bodies.
     pub fn soft_destroy(&mut self, body_id_raw: u32) {
         unsafe { bjolt_soft_destroy(self.world_ptr, body_id_raw) }
+    }
+
+    /// Wind for one tick: uniform breeze over the sheet, pins hold the top
+    /// so folds ripple. Call every Fixed tick before the step per cloth.
+    pub fn soft_push(&mut self, body_id_raw: u32, push_force: Vec3) {
+        unsafe {
+            bjolt_soft_push(
+                self.world_ptr,
+                body_id_raw,
+                push_force.x,
+                push_force.y,
+                push_force.z,
+            )
+        }
     }
 
     /// Moves a live body (spawn fix-up, respawns, resets). Wakes the body;

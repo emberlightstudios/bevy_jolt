@@ -59,6 +59,14 @@ fn watch_cloth_scene(
     let Ok(soft_id) = soft_query.get(banner) else {
         return;
     };
+    // Gusting breeze across the sheet: pins hold the hem, folds ripple.
+    // Force lands for the next step whether this runs before or after it.
+    // Scaled to the sheet's weight (~1900 N): a whisper does nothing.
+    let breeze_phase = *tick_count as f32 * 0.15;
+    physics_world.soft_push(
+        soft_id.body_id_raw,
+        Vec3::new(0.0, 0.0, 1200.0 + 800.0 * breeze_phase.sin()),
+    );
     *tick_count += 1;
     if *tick_count < SETTLE_TICKS {
         return;
@@ -81,12 +89,17 @@ fn watch_cloth_scene(
         .iter()
         .map(|vertex_position| vertex_position.y)
         .fold(f32::MAX, f32::min);
-    println!("cloth pins hold at y={PIN_HEIGHT}, free edge sags to y={lowest_y:.3}");
+    // Free-edge swing: breeze billows the sheet sideways. Bottom row z
+    // should swing well past its ±0.24 seed folds.
+    let bottom_swing = cloth_positions
+        .iter()
+        .skip(((GRID_NZ - 1) * GRID_NX) as usize)
+        .map(|vertex_position| vertex_position.z.abs())
+        .fold(0.0f32, f32::max);
+    println!("cloth pins hold at y={PIN_HEIGHT}, free edge sags to y={lowest_y:.3}, billows z={bottom_swing:.3}");
     assert!(
-        PIN_HEIGHT - lowest_y > 1.0,
-        "cloth should drape at least 1m below the pins, sagged {:.3}",
-        PIN_HEIGHT - lowest_y
+        bottom_swing > 0.5,
+        "breeze should billow the free edge past 0.5m, got z={bottom_swing:.3}"
     );
-    println!("Banner hangs: pins fixed, cloth draped.");
     app_exit.write(AppExit::Success);
 }
