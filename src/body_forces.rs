@@ -46,6 +46,16 @@ impl JoltImpulse {
             angular_impulse,
         }
     }
+
+    /// Combined shove + spin in one trigger. Zero halves are skipped, so
+    /// either side can be zero for a pure shove or a pure spin.
+    pub fn swinging(body_entity: Entity, linear_impulse: Vec3, angular_impulse: Vec3) -> Self {
+        Self {
+            body_entity,
+            linear_impulse,
+            angular_impulse,
+        }
+    }
 }
 
 /// One-shot velocity overwrite (not a kick): zero halves stop that axis

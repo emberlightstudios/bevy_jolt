@@ -1,16 +1,18 @@
-//! Swing-twist (arm) joint: a capsule hangs off a shoulder with separate
-//! swing and twist limits. Re-kicked every 10s so the swing loops.
+//! Swing-twist (shoulder) joint: a capsule arm hangs off a shoulder anchor
+//! with separate swing and twist limits. Alternating sideways and twist
+//! kicks show both freedoms: the arm sweeps its cone, then spins in place.
 
 use bevy::prelude::*;
 use bevy_jolt::{
     CollisionLayers, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
-    JoltShape,
-    JointSpace,
+    JoltShape, JointSpace,
 };
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 4.2, 0.0);
 const ARM_SPAWN: Vec3 = Vec3::new(0.6, 2.8, 0.0);
-const KICK_EVERY_N_TICKS: u32 = 300;
+const KICK_EVERY_N_TICKS: u32 = 200;
+const SWING_KICK: Vec3 = Vec3::new(2000.0, 0.0, 800.0);
+const TWIST_SPIN: Vec3 = Vec3::new(0.0, 60.0, 0.0);
 
 fn main() {
     App::new()
@@ -29,6 +31,7 @@ struct Demo {
     arm: Entity,
     joint: Entity,
     kick_in: u32,
+    swing_turn: bool,
 }
 
 fn spawn_scene(
@@ -38,7 +41,7 @@ fn spawn_scene(
 ) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 3.5, 10.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Dir3::Y),
+        Transform::from_xyz(3.0, 3.5, 10.0).looking_at(Vec3::new(0.0, 3.0, 0.0), Dir3::Y),
     ));
     commands.spawn((
         DirectionalLight {
@@ -64,6 +67,9 @@ fn spawn_scene(
         },
     ));
 
+    // Static anchor: every Jolt joint is a two-body constraint, so the arm
+    // needs a partner even though only it moves. Keeps its cube so the
+    // shoulder reads in the scene.
     let shoulder = commands
         .spawn((
             Mesh3d(meshes.add(Cuboid::new(0.5, 0.5, 0.5))),
@@ -75,20 +81,26 @@ fn spawn_scene(
         .id();
     let arm = commands
         .spawn((
-            Mesh3d(meshes.add(Capsule3d::new(0.2, 1.0))),
+            //Mesh3d(meshes.add(Capsule3d::new(0.2, 1.0))),
             MeshMaterial3d(materials.add(Color::srgb(0.85, 0.6, 0.2))),
             Transform::from_translation(ARM_SPAWN),
             JoltBody::dynamic(CollisionLayers::MOVING),
             JoltShape::capsule(0.5, 0.2),
         ))
         .id();
+    // Twist axis along the arm (anchor -> spawn), not a fixed world axis:
+    // the cone opens around the limb, so a hardcoded down-axis starts the
+    // joint pre-twisted against its own limits. Plane axis perpendicular.
+    let arm_axis = (ARM_SPAWN - ANCHOR).normalize();
+    let plane_axis = arm_axis.cross(Vec3::Z).normalize();
     let joint = commands
         .spawn(JoltJoint::swing_twist(
             shoulder,
             arm,
             ANCHOR,
-            Dir3::NEG_Y,
-            Dir3::X,
+            Dir3::new(arm_axis).unwrap(),
+            Dir3::new(plane_axis).unwrap(),
+            //Dir3::new(plane_axis).unwrap(),
             0.4,
             0.4,
             -0.5,
@@ -100,7 +112,8 @@ fn spawn_scene(
         shoulder,
         arm,
         joint,
-        kick_in: KICK_EVERY_N_TICKS,
+        kick_in: 60,
+        swing_turn: true,
     });
 }
 
@@ -114,9 +127,15 @@ fn kick_arm(
     }
     demo.kick_in = demo.kick_in.saturating_sub(1);
     if demo.kick_in == 0 {
-        commands.trigger(JoltImpulse::linear(demo.arm, Vec3::new(0.0, 2000.0, 0.0)));
+        // Swing shove and twist spin alternate: one sweeps the cone, the
+        // next spins the arm in place, showing each limit in turn.
+        if demo.swing_turn {
+            commands.trigger(JoltImpulse::linear(demo.arm, SWING_KICK));
+        } else {
+            commands.trigger(JoltImpulse::swinging(demo.arm, SWING_KICK, TWIST_SPIN));
+        }
+        demo.swing_turn = !demo.swing_turn;
         demo.kick_in = KICK_EVERY_N_TICKS;
-        println!("kicked the arm");
     }
 }
 
