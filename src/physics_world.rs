@@ -10,11 +10,11 @@ use jolt_sys::{
     BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
     VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
     bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide, bjolt_body_is_active,
-    bjolt_body_remove_destroy, bjolt_body_set_sensor, bjolt_body_state, bjolt_body_transform,
-    bjolt_character_create, bjolt_character_destroy, bjolt_character_move, bjolt_character_stance,
-    bjolt_character_teleport, bjolt_constraint_drive_at, bjolt_constraint_path_fraction,
-    bjolt_constraint_path_looping, bjolt_create_box, bjolt_create_capsule, bjolt_create_compound,
-    bjolt_create_cone_constraint, bjolt_create_cylinder,
+    bjolt_body_remove_destroy, bjolt_body_set_damping, bjolt_body_set_sensor, bjolt_body_state,
+    bjolt_body_transform, bjolt_character_create, bjolt_character_destroy, bjolt_character_move,
+    bjolt_character_stance, bjolt_character_teleport, bjolt_constraint_drive_at,
+    bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
+    bjolt_create_capsule, bjolt_create_compound, bjolt_create_cone_constraint, bjolt_create_cylinder,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
     bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_motorcycle,
     bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
@@ -172,6 +172,7 @@ pub struct JoltWorld {
     world_ptr: *mut BJoltWorld,
     body_shapes: std::collections::HashMap<u32, PhysicsShape>,
     character_positions: std::collections::HashMap<u32, (Vec3, crate::character::JoltCharacterGround)>,
+    character_shapes: std::collections::HashMap<u32, (f32, f32)>,
 }
 
 impl JoltWorld {
@@ -192,6 +193,7 @@ impl JoltWorld {
             world_ptr,
             body_shapes: std::collections::HashMap::new(),
             character_positions: std::collections::HashMap::new(),
+            character_shapes: std::collections::HashMap::new(),
         }
     }
 
@@ -1327,6 +1329,15 @@ impl JoltWorld {
         unsafe { bjolt_gravity_factor(self.world_ptr, body_id_raw) }
     }
 
+    /// Linear + angular damping on a live body (0 = Jolt default glide).
+    /// Takes effect on the next step; ragdolls use it to settle instead of
+    /// crawling on joint micro-motion.
+    pub fn set_body_damping(&mut self, body_id_raw: u32, linear_damping: f32, angular_damping: f32) {
+        unsafe {
+            bjolt_body_set_damping(self.world_ptr, body_id_raw, linear_damping, angular_damping)
+        }
+    }
+
     /// Changes the gravity multiplier on a live body (0 floats, 2 pulls
     /// double). Takes effect on the next step, no re-bake needed.
     pub fn set_body_gravity_factor(&mut self, body_id_raw: u32, gravity_factor: f32) {
@@ -1427,7 +1438,7 @@ impl JoltWorld {
         character_padding: f32,
         penetration_recovery: f32,
     ) -> u32 {
-        unsafe {
+        let character_id_raw = unsafe {
             bjolt_character_create(
                 self.world_ptr,
                 character_position.x,
@@ -1442,12 +1453,16 @@ impl JoltWorld {
                 character_padding,
                 penetration_recovery,
             )
-        }
+        };
+        self.character_shapes
+            .insert(character_id_raw, (capsule_half_height, capsule_radius));
+        character_id_raw
     }
 
     /// Destroys a character. Never touches bodies: order-independent.
     pub fn character_destroy(&mut self, character_id_raw: u32) {
         unsafe { bjolt_character_destroy(self.world_ptr, character_id_raw) }
+        self.character_shapes.remove(&character_id_raw);
     }
 
     /// One movement step: sets the velocity and runs ExtendedUpdate (move +

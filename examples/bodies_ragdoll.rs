@@ -3,8 +3,10 @@
 //! the rest span, then it exits.
 
 use bevy::prelude::*;
-use bevy_jolt::{JoltBody, JoltDebugPlugin, JoltPlugin, JoltRagdoll, JoltRagdollParts, JoltShape};
-
+use bevy_jolt::{
+    JoltBody, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin, JoltRagdoll, JoltRagdollParts,
+    JoltShape,
+};
 const SETTLE_TICKS: u32 = 400;
 
 fn main() {
@@ -49,6 +51,8 @@ fn watch_ragdoll_scene(
     demo: Res<RagdollDemo>,
     ragdoll_query: Query<&JoltRagdollParts>,
     transform_query: Query<&Transform>,
+    body_ids: Query<&JoltBodyId>,
+    physics_world: Res<JoltPhysicsWorld>,
     mut app_exit: MessageWriter<AppExit>,
 ) {
     *tick_count += 1;
@@ -85,4 +89,20 @@ fn watch_ragdoll_scene(
         "ragdoll should crumple flat, span is {:.3}",
         highest_y - lowest_y
     );
+    let mut sleeping_parts = 0;
+    for part_entity in &ragdoll_parts.part_entities {
+        let Ok(part_id) = body_ids.get(*part_entity) else {
+            return;
+        };
+        if !physics_world.body_is_active(part_id.body_id_raw) {
+            sleeping_parts += 1;
+        }
+    }
+    println!("ragdoll sleeps {sleeping_parts}/11 parts");
+    assert_eq!(
+        sleeping_parts, 11,
+        "damping should settle every part to sleep"
+    );
+    println!("Ragdoll fell, folded, and slept.");
+    app_exit.write(AppExit::Success);
 }

@@ -41,8 +41,12 @@ pub struct JoltRagdoll {
     pub parts: Vec<RagdollPart>,
     pub object_layer: u16,
     pub density_kg_per_m3: f32,
+    /// Linear damping bled from every part (Jolt default 0.05). Higher
+    /// settles faster; the humanoid default stills joint crawl in seconds.
+    pub linear_damping: f32,
+    /// Angular damping bled from every part. Same scale as linear.
+    pub angular_damping: f32,
 }
-
 impl JoltRagdoll {
     /// A small humanoid: hips root, torso, head, two arms (upper + lower),
     /// two legs (upper + lower). Offsets hang down -y from the spawn.
@@ -130,6 +134,8 @@ impl JoltRagdoll {
             ],
             object_layer,
             density_kg_per_m3: 1000.0,
+            linear_damping: 3.0,
+            angular_damping: 3.0,
         }
     }
 }
@@ -196,6 +202,8 @@ pub fn bake_jolt_ragdoll(
             .iter()
             .map(|part| part.swing_half_cone_angle)
             .collect(),
+        linear_damping: ragdoll.linear_damping,
+        angular_damping: ragdoll.angular_damping,
     });
 }
 
@@ -207,6 +215,8 @@ pub struct RagdollLinksPending {
     part_offsets: Vec<Vec3>,
     parent_indices: Vec<Option<usize>>,
     swing_angles: Vec<f32>,
+    linear_damping: f32,
+    angular_damping: f32,
 }
 
 /// Files joints + no-collide pairs once every part owns a [`JoltBodyId`].
@@ -226,6 +236,19 @@ pub fn bake_ragdoll_links(
             continue;
         }
         let ragdoll_origin = ragdoll_pose.translation;
+        // Damping lands before the first joint exists: every part bleeds
+        // joint crawl from tick one instead of micro-sliding for 30 s.
+        for part_entity in &pending_links.part_entities {
+            let part_id = body_ids
+                .get(*part_entity)
+                .expect("ragdoll part baked above")
+                .body_id_raw;
+            physics_world.set_body_damping(
+                part_id,
+                pending_links.linear_damping,
+                pending_links.angular_damping,
+            );
+        }
         for (part_index, part_entity) in pending_links.part_entities.iter().enumerate() {
             let Some(parent_index) = pending_links.parent_indices[part_index] else {
                 continue;

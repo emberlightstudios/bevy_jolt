@@ -31,6 +31,7 @@ impl Plugin for JoltDebugPlugin {
 
 fn draw_physics_shapes(
     physics_world: Res<JoltPhysicsWorld>,
+    character_query: Query<(&crate::character::JoltCharacter, &Transform)>,
     mut gizmos: Gizmos,
 ) {
 
@@ -141,8 +142,23 @@ fn draw_physics_shapes(
             }
         }
     }
+    // Characters are not rigid bodies, so they never appear in the body
+    // table. Jolt positions the capsule base at the entity origin: center
+    // the outline half-height + radius above it. Same outline style as a
+    // dynamic body capsule.
+    for (character, character_pose) in &character_query {
+        let capsule_center = character_pose.translation
+            + character_pose.rotation * Vec3::Y * (character.capsule_half_height + character.capsule_radius);
+        draw_capsule_outline(
+            &mut gizmos,
+            capsule_center,
+            character_pose.rotation,
+            character.capsule_half_height,
+            character.capsule_radius,
+            DYNAMIC_BODY_COLOR,
+        );
+    }
 }
-
 fn body_debug_color(body_active: bool) -> Color {
     if body_active {
         DYNAMIC_BODY_COLOR
