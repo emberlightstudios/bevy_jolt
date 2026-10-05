@@ -1,15 +1,17 @@
 //! Ragdoll: an 11-part humanoid drops onto the floor, crumples, and
-//! settles. Prints the hips rest height and exits.
+//! settles. Bodies render as physics wireframes; the console still prints
+//! the rest span, then it exits.
 
 use bevy::prelude::*;
-use bevy_jolt::{JoltBody, JoltPlugin, JoltRagdoll, JoltRagdollParts, JoltShape};
+use bevy_jolt::{JoltBody, JoltDebugPlugin, JoltPlugin, JoltRagdoll, JoltRagdollParts, JoltShape};
 
 const SETTLE_TICKS: u32 = 400;
 
 fn main() {
     App::new()
-        .add_plugins(MinimalPlugins)
+        .add_plugins(DefaultPlugins)
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
+        .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_ragdoll_scene)
         .add_systems(FixedUpdate, watch_ragdoll_scene)
         .run();
@@ -19,8 +21,15 @@ fn main() {
 struct RagdollDemo {
     doll: Entity,
 }
-
 fn spawn_ragdoll_scene(mut commands: Commands) {
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 2.5, 6.0).looking_at(Vec3::new(0.0, 0.5, 0.0), Vec3::Y),
+    ));
+    commands.spawn((
+        DirectionalLight::default(),
+        Transform::from_xyz(3.0, 8.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
     commands.spawn((
         Transform::from_xyz(0.0, -1.0, 0.0),
         JoltBody::fixed(0),
