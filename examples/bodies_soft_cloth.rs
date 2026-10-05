@@ -3,8 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    JoltBody, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin, JoltShape, JoltSoftBody,
-    JoltSoftBodyId,
+    JoltBody, JoltBodyId, JoltDebugPlugin, JoltLinearVelocity, JoltPhysicsWorld, JoltPlugin, JoltShape,
+    JoltSoftBody, JoltSoftBodyId,
 };
 
 const GRID_NX: u32 = 16;
@@ -64,6 +64,9 @@ fn spawn_cloth_scene(mut commands: Commands, mut demo: ResMut<ClothDemo>) {
             Transform::from_xyz(0.0, 4.6, SLIDE_OUT_Z),
             JoltBody::kinematic(0),
             JoltShape::box_shape(Vec3::new(0.8, 0.8, 0.8)),
+            JoltLinearVelocity {
+                linear_velocity: Vec3::ZERO,
+            },
         ))
         .id();
     demo.banner = Some(banner);
@@ -71,31 +74,33 @@ fn spawn_cloth_scene(mut commands: Commands, mut demo: ResMut<ClothDemo>) {
 }
 
 /// Sine-wave slide: cube glides from clear of the sheet to pressed into it
-/// and back. `MoveKinematic` derives velocity so the cloth feels the shove.
+/// and back. Each tick steers a [`JoltLinearVelocity`] toward the sine
+/// target, so the crate's velocity drive moves the cube and the cloth
+/// feels the shove through real velocity, not a teleport.
 fn drive_slider(
     mut slide_ticks: Local<u32>,
     demo: Res<ClothDemo>,
-    body_ids: Query<&JoltBodyId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-    fixed_time: Res<Time<Fixed>>,
+    transform_query: Query<&Transform>,
+    mut velocity_query: Query<&mut JoltLinearVelocity>,
 ) {
     let Some(slider) = demo.slider else {
         return;
     };
-    let Ok(slider_id) = body_ids.get(slider) else {
+    let Ok(slider_pose) = transform_query.get(slider) else {
+        return;
+    };
+    let Ok(mut slider_drive) = velocity_query.get_mut(slider) else {
         return;
     };
     *slide_ticks += 1;
     let slide_phase = (*slide_ticks as f32 / SLIDE_TICKS as f32) * std::f32::consts::TAU;
     // Cosine eases out and back: tick 0 out, half period fully in.
     let slide_blend = 0.5 - 0.5 * slide_phase.cos();
-    let slider_z = SLIDE_OUT_Z + (SLIDE_IN_Z - SLIDE_OUT_Z) * slide_blend;
-    physics_world.move_kinematic(
-        slider_id.body_id_raw,
-        Vec3::new(0.0, 4.6, slider_z),
-        Quat::IDENTITY,
-        fixed_time.delta().as_secs_f32(),
-    );
+    let target_z = SLIDE_OUT_Z + (SLIDE_IN_Z - SLIDE_OUT_Z) * slide_blend;
+    // Proportional steer toward the sine target, clamped to sane speeds.
+    // The error shrinks on arrival, so no overshoot past the sheet.
+    let position_error = target_z - slider_pose.translation.z;
+    slider_drive.linear_velocity = Vec3::Z * (position_error * 8.0).clamp(-6.0, 6.0);
 }
 
 fn watch_cloth_scene(
