@@ -76,9 +76,38 @@ impl PathKnot {
     }
 }
 
+/// Builds Hermite knots from waypoints the Jolt-sample way: central
+/// differences for tangents (`0.5 * (next - prev)`), constant up normal.
+/// Endpoints use one-sided differences. Looping wraps the neighbor lookup.
+/// Caps at `MAX_PATH_KNOTS`; needs at least 2 points.
+pub fn path_knots_from_waypoints(waypoints: &[Vec3], looping: bool) -> Vec<PathKnot> {
+    let point_count = waypoints.len().min(MAX_PATH_KNOTS);
+    if point_count < 2 {
+        return Vec::new();
+    }
+    (0..point_count)
+        .map(|knot_index| {
+            let prev_index = if knot_index == 0 {
+                if looping { point_count - 1 } else { knot_index }
+            } else {
+                knot_index - 1
+            };
+            let next_index = if knot_index + 1 == point_count {
+                if looping { 0 } else { knot_index }
+            } else {
+                knot_index + 1
+            };
+            PathKnot {
+                knot_position: waypoints[knot_index],
+                knot_tangent: 0.5 * (waypoints[next_index] - waypoints[prev_index]),
+                knot_normal: Vec3::Y,
+            }
+        })
+        .collect()
+}
+
 /// Reference frames for a [`JointKind::SixDof`] joint: anchor + basis per
 /// body. Differing body2 vectors offset the rest pose without moving the
-/// joint center, like the cone and swing-twist axes.
 #[derive(Clone, Copy, Debug)]
 pub struct SixDofFrame {
     pub position1: Vec3,
@@ -534,30 +563,24 @@ impl JoltJoint {
         }
     }
 
-    /// Two-stop straight shuttle: the old path behavior as a knot pair.
-    /// Tangent spans the segment, normal is track up.
-    pub fn path_shuttle(
+    /// Waypoint track: builds Hermite knots via
+    /// [`path_knots_from_waypoints`] (central-difference tangents, up
+    /// normals) and calls [`JoltJoint::path_cart`].
+    pub fn path_waypoints(
         static_body: Entity,
         cart_body: Entity,
-        track_from: Vec3,
-        track_to: Vec3,
+        waypoints: &[Vec3],
+        looping: bool,
+        motor: JointMotor,
         joint_space: JointSpace,
     ) -> Self {
-        let segment = track_to - track_from;
-        let track_up = if segment.normalize_or_zero().y.abs() < 0.99 {
-            Vec3::Y
-        } else {
-            Vec3::X
-        };
+        let track_knots = path_knots_from_waypoints(waypoints, looping);
         Self::path_cart(
             static_body,
             cart_body,
-            &[
-                PathKnot::straight(track_from, segment, track_up),
-                PathKnot::straight(track_to, segment, track_up),
-            ],
-            false,
-            JointMotor::default(),
+            &track_knots,
+            looping,
+            motor,
             joint_space,
         )
     }
@@ -835,13 +858,11 @@ pub fn create_jolt_joints(
 
 /// Held motor target: retargets the joint's velocity motor every tick while
 /// present. Attach alongside [`JoltJoint`]; the sync system pushes the value
-/// into Jolt before the physics step. Change the field to change speed,
+/// into Jolt before the physics step. Change the value to change speed,
 /// remove the component to leave the last target in place.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct JoltMotorDrive {
-    /// Target motor speed: m/s for sliders/paths, rad/s for hinges.
-    pub target_velocity: f32,
-}
+/// Target motor speed: m/s for sliders/paths, rad/s for hinges.
+#[derive(Component, Clone, Copy, Debug, Deref, DerefMut)]
+pub struct JoltMotorDrive(pub f32);
 
 /// Pushes every [`JoltMotorDrive`] into its joint's motor before the physics
 /// step. Joints missing their id (not baked yet) are skipped for the tick.
@@ -850,7 +871,7 @@ pub fn apply_jolt_motor_drives(
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     for (joint_id, drive) in &drive_query {
-        physics_world.constraint_drive_at(joint_id.constraint_id_raw, drive.target_velocity);
+        physics_world.constraint_drive_at(joint_id.constraint_id_raw, drive.0);
     }
 }
 

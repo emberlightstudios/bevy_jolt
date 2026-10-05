@@ -98,9 +98,7 @@ fn spawn_scene(
                 1.2,
                 JointSpace::World,
             ),
-            JoltMotorDrive {
-                target_velocity: 1.2,
-            },
+            JoltMotorDrive(1.2),
         ))
         .id();
     commands.insert_resource(Demo { joint, flip_in: 300 });
@@ -120,7 +118,7 @@ fn pingpong_motor(
     demo.flip_in = demo.flip_in.saturating_sub(1);
     if demo.flip_in == 0 {
         demo.flip_in = 300;
-        drive.target_velocity = -drive.target_velocity;
+        drive.0 = -drive.0;
     }
 }
 

@@ -1,13 +1,9 @@
-//! Full vehicle authoring: chassis, wheels, engine, gearbox, and drive.
+//! Vehicle (car / tank / bike) creation, drive, and teardown.
 //!
-//! Game code spawns an entity with [`JoltVehicle`] (a [`VehicleSpec`] plus
-//! the spawn `Transform`); the plugin builds the Jolt chassis body plus
-//! wheels once, stores the resulting [`JoltVehicleId`], and destroys both
-//! when the entity leaves. Held input lives as [`JoltVehicleDrive`] on the
-//! same entity: attach once, then change its fields to drive. The sync
-//! system pushes it into Jolt before the physics step, so gameplay never
-//! touches the world directly.
-//!
+//! Game code spawns an entity with [`VehicleSpec`] (plus the spawn
+//! `Transform` and a [`JoltVehicleDrive`] or [`JoltTrackedDrive`]); the
+//! plugin builds the Jolt chassis body plus wheels once, stores the
+//! resulting [`JoltVehicleId`], and destroys both when the entity leaves.
 //! Three controller kinds: [`VehicleKind::Wheeled`] (cars, slip-curve
 //! tires), [`VehicleKind::Tracked`] (tanks, per-track multipliers instead
 //! of steering), [`VehicleKind::Motorcycle`] (wheeled pair plus a
@@ -595,19 +591,6 @@ impl VehicleSpec {
     }
 }
 
-/// Back-compat constructor: `JoltVehicle::new(layer)` spawns the default
-/// demo car spec. Prefer [`VehicleSpec`] for new code.
-#[derive(Component, Clone, Debug)]
-pub struct JoltVehicle {
-    pub object_layer: u16,
-}
-
-impl JoltVehicle {
-    pub fn new(object_layer: u16) -> Self {
-        Self { object_layer }
-    }
-}
-
 /// Jolt chassis body + vehicle constraint owned by an entity. Inserted by
 /// the creation system; game code reads it but never writes it.
 #[derive(Component, Clone, Copy, Debug)]
@@ -656,7 +639,6 @@ pub struct JoltVehicleShift {
 pub fn create_jolt_vehicles(
     mut commands: Commands,
     pending_specs: Query<(Entity, &VehicleSpec, &Transform), Without<JoltVehicleId>>,
-    pending_legacy: Query<(Entity, &JoltVehicle, &Transform), Without<JoltVehicleId>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     for (vehicle_entity, spec, spawn_transform) in &pending_specs {
@@ -666,15 +648,6 @@ pub fn create_jolt_vehicles(
             panic!("Jolt rejected vehicle creation on {vehicle_entity:?}: {spec:?}");
         };
         insert_vehicle_id(&mut commands, vehicle_entity, vehicle_id, spec, spawn_transform);
-    }
-    for (vehicle_entity, legacy, spawn_transform) in &pending_legacy {
-        let spec = VehicleSpec::new(legacy.object_layer);
-        let Some(vehicle_id) =
-            physics_world.create_vehicle(&spec, spawn_transform.translation)
-        else {
-            panic!("Jolt rejected vehicle creation on {vehicle_entity:?}: {spec:?}");
-        };
-        insert_vehicle_id(&mut commands, vehicle_entity, vehicle_id, &spec, spawn_transform);
     }
 }
 
