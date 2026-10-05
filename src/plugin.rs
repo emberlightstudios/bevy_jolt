@@ -148,9 +148,14 @@ impl Plugin for JoltPlugin {
         // synchronous, so the solver never sees a constraint on a dead body.
         app.add_observer(crate::joint_sync::cascade_body_remove_to_joints);
         app.add_observer(crate::body_sync::despawn_jolt_body);
+        app.add_observer(crate::vehicle::despawn_jolt_vehicle);
         app.add_systems(
             FixedUpdate,
-            crate::joint_sync::create_jolt_joints.before(step_physics_world),
+            (
+                crate::joint_sync::create_jolt_joints,
+                crate::vehicle::create_jolt_vehicles,
+            )
+                .before(step_physics_world),
         );
         // Held forces re-add before the step so they act this tick. Driven
         // velocities overwrite before the step for the same reason. One-shot
@@ -162,6 +167,7 @@ impl Plugin for JoltPlugin {
                 crate::body_forces::apply_jolt_forces,
                 crate::body_forces::apply_jolt_driven_velocities,
                 crate::joint_sync::apply_jolt_motor_drives,
+                crate::vehicle::apply_jolt_vehicle_drives,
             )
                 .before(step_physics_world),
         );

@@ -1,8 +1,12 @@
-//! Vehicle: a four-wheel demo car with ray-cast wheels laps a paddock.
-//! Gas held down, WASD steers from the keyboard.
+//! Vehicle: a four-wheel car with ray-cast wheels laps a paddock.
+//! Gas held down, WASD steers from the keyboard. A held [`JoltVehicleDrive`]
+//! steers back toward the paddock instead of driving away forever.
 
 use bevy::prelude::*;
-use bevy_jolt::{CollisionLayers, JoltBody, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin, JoltShape};
+use bevy_jolt::{
+    CollisionLayers, JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape, JoltVehicle,
+    JoltVehicleDrive, JoltVehicleId,
+};
 
 const CAR_SPAWN: Vec3 = Vec3::new(0.0, 1.2, 0.0);
 const PADDOCK_HALF: f32 = 30.0;
@@ -13,17 +17,15 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(PreUpdate, create_car_once)
-        .add_systems(PreUpdate, drive_car.after(create_car_once))
+        .add_systems(PreUpdate, steer_car)
         .add_systems(PostUpdate, sync_car_mesh)
         .run();
 }
 
 #[derive(Resource)]
 struct Demo {
+    car: Entity,
     car_mesh: Entity,
-    car_body: u32,
-    car_joint: u32,
 }
 
 fn spawn_scene(
@@ -65,37 +67,33 @@ fn spawn_scene(
             Transform::from_translation(CAR_SPAWN),
         ))
         .id();
-    commands.insert_resource(Demo {
-        car_mesh,
-        car_body: 0,
-        car_joint: 0,
-    });
+    let car = commands
+        .spawn((
+            JoltVehicle::new(CollisionLayers::MOVING),
+            JoltVehicleDrive {
+                forward: 0.6,
+                steer: 0.0,
+                brake: 0.0,
+            },
+            Transform::from_translation(CAR_SPAWN),
+        ))
+        .id();
+    commands.insert_resource(Demo { car, car_mesh });
 }
 
-fn create_car_once(
-    mut demo: ResMut<Demo>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    if demo.car_joint != 0 {
-        return;
-    }
-    let Some((body, joint)) = physics_world
-        .create_demo_car(CollisionLayers::MOVING, CAR_SPAWN)
-    else {
-        panic!("car creation failed");
-    };
-    demo.car_body = body;
-    demo.car_joint = joint;
-}
-
-fn drive_car(
+fn steer_car(
     demo: Res<Demo>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
+    vehicle_query: Query<&JoltVehicleId>,
+    mut drive_query: Query<(&mut JoltVehicleDrive, &Transform)>,
 ) {
-    if demo.car_joint == 0 {
+    // Creation bakes a flush after spawn: no id yet means not drivable.
+    if vehicle_query.get(demo.car).is_err() {
         return;
     }
+    let Ok((mut drive, car_transform)) = drive_query.get_mut(demo.car) else {
+        return;
+    };
     let forward = if keyboard.pressed(KeyCode::KeyW) {
         1.0
     } else if keyboard.pressed(KeyCode::KeyS) {
@@ -111,35 +109,43 @@ fn drive_car(
     } else {
         0.0
     };
-    let brake = if keyboard.pressed(KeyCode::Space) { 1.0 } else { 0.0 };
+    let brake = if keyboard.pressed(KeyCode::Space) {
+        1.0
+    } else {
+        0.0
+    };
     // Steer back toward the paddock instead of teleporting: turn around when
     // near the edge so the car laps on its own.
-    let (car_position, _) = physics_world.body_full_transform(demo.car_body);
-    let (mut drive_forward, mut drive_steer) = (forward, steer);
-    if car_position.x.abs() > PADDOCK_HALF - 6.0 || car_position.z.abs() > PADDOCK_HALF - 6.0 {
-        drive_forward = 0.6;
-        drive_steer = if car_position.x > car_position.z {
-            0.6
-        } else {
-            -0.6
-        };
-    }
-    physics_world.vehicle_drive(demo.car_joint, drive_forward, drive_steer, brake);
+    let car_position = car_transform.translation;
+    let (drive_forward, drive_steer) = if car_position.x.abs() > PADDOCK_HALF - 6.0
+        || car_position.z.abs() > PADDOCK_HALF - 6.0
+    {
+        (
+            0.6,
+            if car_position.x > car_position.z {
+                0.6
+            } else {
+                -0.6
+            },
+        )
+    } else {
+        (forward, steer)
+    };
+    drive.forward = drive_forward;
+    drive.steer = drive_steer;
+    drive.brake = brake;
 }
 
 fn sync_car_mesh(
     demo: Res<Demo>,
-    physics_world: Res<JoltPhysicsWorld>,
-    mut transform_query: Query<&mut Transform>,
+    car_query: Query<&Transform, With<JoltVehicle>>,
+    mut mesh_query: Query<&mut Transform, Without<JoltVehicle>>,
 ) {
-    if demo.car_body == 0 {
-        return;
-    }
-    let Ok(mut mesh) = transform_query.get_mut(demo.car_mesh) else {
+    let Ok(car_pose) = car_query.get(demo.car) else {
         return;
     };
-    let (position, rotation) = physics_world
-        .body_full_transform(demo.car_body);
-    mesh.translation = position;
-    mesh.rotation = rotation;
+    let Ok(mut mesh_pose) = mesh_query.get_mut(demo.car_mesh) else {
+        return;
+    };
+    *mesh_pose = *car_pose;
 }

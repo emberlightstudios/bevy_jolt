@@ -170,6 +170,12 @@ impl JoltWorld {
         &self.body_shapes
     }
 
+    /// Registers an outline recipe for a body created outside the shape
+    /// builders (vehicles). Debug draw only; physics owns the real shape.
+    pub fn register_shape(&mut self, body_id_raw: u32, outline: PhysicsShape) {
+        self.body_shapes.insert(body_id_raw, outline);
+    }
+
     pub fn create_floor(&mut self, half_extents: Vec3, floor_position_height: f32) -> u32 {
         let body_id_raw = unsafe {
             bjolt_create_floor(
