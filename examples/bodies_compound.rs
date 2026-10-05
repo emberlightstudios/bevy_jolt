@@ -1,15 +1,17 @@
 //! Compound colliders: a table (top + four legs) and a hammer (head +
-//! handle) drop onto the floor and settle. Prints resting heights and exits.
+//! handle) drop onto the floor and settle. Bodies render as physics
+//! wireframes; the console still prints resting heights, then it exits.
 
 use bevy::prelude::*;
-use bevy_jolt::{CompoundGeometry, CompoundPart, JoltBody, JoltPlugin, JoltShape};
+use bevy_jolt::{CompoundGeometry, CompoundPart, JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape};
 
 const SETTLE_TICKS: u32 = 300;
 
 fn main() {
     App::new()
-        .add_plugins(MinimalPlugins)
+        .add_plugins(DefaultPlugins)
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
+        .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_compound_scene)
         .add_systems(FixedUpdate, watch_compound_scene)
         .run();
@@ -28,8 +30,15 @@ fn box_part(part_offset: Vec3, part_half_extents: Vec3) -> CompoundPart {
         part_rotation: Quat::IDENTITY,
     }
 }
-
 fn spawn_compound_scene(mut commands: Commands) {
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 4.0, 10.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
+    ));
+    commands.spawn((
+        DirectionalLight::default(),
+        Transform::from_xyz(3.0, 8.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
     commands.spawn((
         Transform::from_xyz(0.0, -1.0, 0.0),
         JoltBody::fixed(0),
