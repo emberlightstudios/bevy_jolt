@@ -19,6 +19,10 @@ pub struct JoltBody {
     pub friction: f32,
     /// Bounciness 0 (dead) to 1 (superball). Jolt default 0.
     pub restitution: f32,
+    /// Sweep the shape between steps (LinearCast) so fast bodies stop at
+    /// the first hit instead of tunneling. Costs more; leave off unless
+    /// the body outruns its own size in one tick (bullets, swung swords).
+    pub use_ccd: bool,
 }
 
 /// Jolt motion type: static never moves, kinematic moves by velocity and
@@ -51,6 +55,7 @@ impl JoltBody {
             gravity_factor: Self::DEFAULT_GRAVITY,
             friction: Self::DEFAULT_FRICTION,
             restitution: Self::DEFAULT_RESTITUTION,
+            use_ccd: false,
         }
     }
 
@@ -62,6 +67,7 @@ impl JoltBody {
             gravity_factor: Self::DEFAULT_GRAVITY,
             friction: Self::DEFAULT_FRICTION,
             restitution: Self::DEFAULT_RESTITUTION,
+            use_ccd: false,
         }
     }
 
@@ -73,6 +79,7 @@ impl JoltBody {
             gravity_factor: Self::DEFAULT_GRAVITY,
             friction: Self::DEFAULT_FRICTION,
             restitution: Self::DEFAULT_RESTITUTION,
+            use_ccd: false,
         }
     }
 
@@ -118,6 +125,14 @@ impl JoltBody {
             restitution
         );
         self.restitution = restitution;
+        self
+    }
+
+    /// Sweep the shape between steps so this body cannot tunnel at speed.
+    /// Costs more per tick; reserve for bodies that outrun their own size
+    /// in one step.
+    pub fn with_ccd(mut self, use_ccd: bool) -> Self {
+        self.use_ccd = use_ccd;
         self
     }
 }
@@ -316,6 +331,9 @@ pub fn spawn_jolt_body(
     }
     if body.restitution != JoltBody::DEFAULT_RESTITUTION {
         physics_world.set_body_restitution(body_id_raw, body.restitution);
+    }
+    if body.use_ccd {
+        physics_world.set_body_ccd(body_id_raw, true);
     }
     commands.entity(trigger_entity).insert((
         JoltBodyId { body_id_raw },

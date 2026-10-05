@@ -171,6 +171,7 @@ impl Plugin for JoltPlugin {
             (
                 crate::body_forces::apply_jolt_forces,
                 crate::body_forces::apply_jolt_driven_velocities,
+                crate::buoyancy::apply_buoyancy,
                 crate::joint_sync::apply_jolt_motor_drives,
                 crate::vehicle::apply_jolt_vehicle_drives,
                 crate::character::step_jolt_characters,

@@ -9,10 +9,10 @@ use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
     BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
     VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
-    bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide, bjolt_body_is_active,
-    bjolt_body_remove_destroy, bjolt_body_set_damping, bjolt_body_set_sensor, bjolt_body_state,
-    bjolt_body_transform, bjolt_character_create, bjolt_character_destroy, bjolt_character_move,
-    bjolt_character_stance, bjolt_character_teleport, bjolt_constraint_drive_at,
+    bjolt_apply_buoyancy, bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide,
+    bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_set_damping, bjolt_body_set_sensor,
+    bjolt_body_state, bjolt_body_transform, bjolt_character_create, bjolt_character_destroy,
+    bjolt_character_move, bjolt_character_stance, bjolt_character_teleport, bjolt_constraint_drive_at,
     bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
     bjolt_create_capsule, bjolt_create_compound, bjolt_create_cone_constraint, bjolt_create_cylinder,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
@@ -22,11 +22,12 @@ use jolt_sys::{
     bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
     bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_create_tracked_vehicle,
     bjolt_create_wheeled_vehicle, bjolt_gravity_factor, bjolt_init, bjolt_move_kinematic,
-    bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_friction, bjolt_set_gravity,
-    bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_position, bjolt_set_position_rotation,
-    bjolt_set_restitution, bjolt_set_rotation, bjolt_set_velocity, bjolt_tracked_drive,
-    bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_world_create_with_layers, bjolt_world_destroy,
-    bjolt_world_gravity, bjolt_world_update, bjolt_drain_contact_added, bjolt_drain_contact_removed,
+    bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_ccd, bjolt_set_friction,
+    bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_position,
+    bjolt_set_position_rotation, bjolt_set_restitution, bjolt_set_rotation, bjolt_set_velocity,
+    bjolt_tracked_drive, bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_world_create_with_layers,
+    bjolt_world_destroy, bjolt_world_gravity, bjolt_world_update, bjolt_drain_contact_added,
+    bjolt_drain_contact_removed,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -1314,6 +1315,45 @@ impl JoltWorld {
     /// Bounciness on a live body (0 dead, 1 superball). Same timing as friction.
     pub fn set_body_restitution(&mut self, body_id_raw: u32, restitution: f32) {
         unsafe { bjolt_set_restitution(self.world_ptr, body_id_raw, restitution) }
+    }
+
+    /// Continuous collision on a live body: sweeps the shape so fast bodies
+    /// stop at the first hit. Applied at bake for flagged bodies.
+    pub fn set_body_ccd(&mut self, body_id_raw: u32, use_ccd: bool) {
+        unsafe { bjolt_set_ccd(self.world_ptr, body_id_raw, use_ccd) }
+    }
+
+    /// Buoyancy push for one tick: Jolt lifts the submerged part toward
+    /// the surface, with water drag. Called every Fixed tick per floater.
+    #[allow(clippy::too_many_arguments)]
+    pub fn apply_buoyancy(
+        &mut self,
+        body_id_raw: u32,
+        surface_height: f32,
+        buoyancy: f32,
+        linear_drag: f32,
+        angular_drag: f32,
+        current_velocity: Vec3,
+        world_gravity: Vec3,
+        tick_delta: f32,
+    ) {
+        unsafe {
+            bjolt_apply_buoyancy(
+                self.world_ptr,
+                body_id_raw,
+                surface_height,
+                buoyancy,
+                linear_drag,
+                angular_drag,
+                current_velocity.x,
+                current_velocity.y,
+                current_velocity.z,
+                world_gravity.x,
+                world_gravity.y,
+                world_gravity.z,
+                tick_delta,
+            )
+        }
     }
 
     /// Moves a live body (spawn fix-up, respawns, resets). Wakes the body;

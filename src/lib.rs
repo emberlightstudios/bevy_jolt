@@ -6,6 +6,7 @@
 
 mod body_forces;
 mod body_sync;
+mod buoyancy;
 mod character;
 mod contact_events;
 mod debug_draw;
@@ -20,6 +21,7 @@ pub use crate::body_forces::{
     JoltSetVelocity, JoltTeleport,
 };
 pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, PreviousBodyTransform};
+pub use crate::buoyancy::{JoltBuoyant, JoltWater};
 pub use crate::character::{
     CharacterGround, JoltCharacter, JoltCharacterGround, JoltCharacterId, JoltCharacterStep,
     JoltCharacterTeleport, JoltCharacterVelocity,
