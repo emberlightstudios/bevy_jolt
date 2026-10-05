@@ -28,7 +28,9 @@ pub use crate::joint_sync::{
     MAX_PATH_KNOTS, PathKnot, PathRotation, SixDofAxis, SixDofFrame, SixDofLimits,
     path_knots_from_waypoints,
 };
-pub use crate::physics_world::{BodySnapshot, CollisionLayers, JointSpace, JoltWorld, PhysicsShape};
+pub use crate::physics_world::{
+    BodySnapshot, CollisionLayers, CompoundGeometry, CompoundPart, JointSpace, JoltWorld, PhysicsShape,
+};
 pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStepConfig, step_physics_world};
 pub use crate::spatial_queries::{MAX_QUERY_HITS, OverlapHit, QueryProbe, RayHit};
 pub use crate::vehicle::{

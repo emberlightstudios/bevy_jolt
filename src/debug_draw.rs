@@ -9,7 +9,7 @@ use bevy::color::palettes::basic::{BLUE, GREEN, RED, YELLOW};
 use bevy::math::Isometry3d;
 use bevy::prelude::*;
 
-use crate::physics_world::PhysicsShape;
+use crate::physics_world::{CompoundGeometry, PhysicsShape};
 use crate::plugin::JoltPhysicsWorld;
 
 const DYNAMIC_BODY_COLOR: Color = Color::Srgba(GREEN);
@@ -37,13 +37,13 @@ fn draw_physics_shapes(
     for (body_id_raw, body_shape) in physics_world.body_shapes().iter() {
         let (body_position, body_rotation) = physics_world.body_full_transform(*body_id_raw);
         let body_active = physics_world.body_is_active(*body_id_raw);
-        match *body_shape {
+        match body_shape {
             PhysicsShape::Box { half_extents } => {
                 let debug_color = body_debug_color(body_active);
                 let box_transform = Transform {
                     translation: body_position,
                     rotation: body_rotation,
-                    scale: half_extents * 2.0,
+                    scale: *half_extents * 2.0,
                 };
                 gizmos.cube(box_transform, debug_color);
             }
@@ -51,7 +51,7 @@ fn draw_physics_shapes(
                 let debug_color = body_debug_color(body_active);
                 gizmos.sphere(
                     Isometry3d::new(body_position, body_rotation),
-                    sphere_radius,
+                    *sphere_radius,
                     debug_color,
                 );
             }
@@ -64,8 +64,8 @@ fn draw_physics_shapes(
                     &mut gizmos,
                     body_position,
                     body_rotation,
-                    capsule_half_height,
-                    capsule_radius,
+                    *capsule_half_height,
+                    *capsule_radius,
                     debug_color,
                 );
             }
@@ -78,8 +78,8 @@ fn draw_physics_shapes(
                     &mut gizmos,
                     body_position,
                     body_rotation,
-                    cylinder_half_height,
-                    cylinder_radius,
+                    *cylinder_half_height,
+                    *cylinder_radius,
                     debug_color,
                 );
             }
@@ -93,9 +93,9 @@ fn draw_physics_shapes(
                     &mut gizmos,
                     body_position,
                     body_rotation,
-                    tapered_half_height,
-                    top_radius,
-                    bottom_radius,
+                    *tapered_half_height,
+                    *top_radius,
+                    *bottom_radius,
                     debug_color,
                 );
             }
@@ -109,9 +109,9 @@ fn draw_physics_shapes(
                     &mut gizmos,
                     body_position,
                     body_rotation,
-                    tapered_half_height,
-                    top_radius,
-                    bottom_radius,
+                    *tapered_half_height,
+                    *top_radius,
+                    *bottom_radius,
                     debug_color,
                 );
             }
@@ -121,11 +121,23 @@ fn draw_physics_shapes(
             } => {
                 draw_plane_grid(
                     &mut gizmos,
-                    surface_normal,
-                    plane_constant,
+                    *surface_normal,
+                    *plane_constant,
                     body_position,
                     body_rotation,
                 );
+            }
+            PhysicsShape::Compound { compound_parts } => {
+                let debug_color = body_debug_color(body_active);
+                for compound_part in compound_parts {
+                    let part_pose = part_world_pose(
+                        body_position,
+                        body_rotation,
+                        compound_part.part_offset,
+                        compound_part.part_rotation,
+                    );
+                    draw_compound_part(&mut gizmos, part_pose, compound_part.part_geometry, debug_color);
+                }
             }
         }
     }
@@ -136,6 +148,62 @@ fn body_debug_color(body_active: bool) -> Color {
         DYNAMIC_BODY_COLOR
     } else {
         STATIC_BODY_COLOR
+    }
+}
+
+/// World pose of one compound part: body pose composed with the part's local
+/// offset + rotation.
+fn part_world_pose(
+    body_position: Vec3,
+    body_rotation: Quat,
+    part_offset: Vec3,
+    part_rotation: Quat,
+) -> Transform {
+    Transform {
+        translation: body_position + body_rotation * part_offset,
+        rotation: body_rotation * part_rotation,
+        scale: Vec3::ONE,
+    }
+}
+
+/// Draws one compound part with the same outline style as its standalone
+/// shape: boxes as cubes, spheres as spheres, capsules as line capsules.
+fn draw_compound_part(
+    gizmos: &mut Gizmos,
+    part_pose: Transform,
+    part_geometry: CompoundGeometry,
+    debug_color: Color,
+) {
+    match part_geometry {
+        CompoundGeometry::Box { part_half_extents } => {
+            gizmos.cube(
+                Transform {
+                    scale: part_half_extents * 2.0,
+                    ..part_pose
+                },
+                debug_color,
+            );
+        }
+        CompoundGeometry::Sphere { part_radius } => {
+            gizmos.sphere(
+                Isometry3d::new(part_pose.translation, part_pose.rotation),
+                part_radius,
+                debug_color,
+            );
+        }
+        CompoundGeometry::Capsule {
+            part_half_height,
+            part_radius,
+        } => {
+            draw_capsule_outline(
+                gizmos,
+                part_pose.translation,
+                part_pose.rotation,
+                part_half_height,
+                part_radius,
+                debug_color,
+            );
+        }
     }
 }
 

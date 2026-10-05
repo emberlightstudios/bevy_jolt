@@ -1,14 +1,6 @@
-//! Entity ↔ physics body sync: spawn, transform copy, despawn.
-//!
-//! Game code spawns an entity with [`JoltBody`] (motion + layer) plus
-//! [`JoltShape`] (geometry) plus `Transform` (spawn pose). The
-//! [`JoltPlugin`](crate::JoltPlugin) creates the Jolt body when the
-//! component is added, copies position + rotation into `Transform` after each
-//! physics tick, and destroys the Jolt body when the entity leaves.
-
 use bevy::prelude::*;
 
-use crate::physics_world::PhysicsShape;
+use crate::physics_world::{CompoundPart, PhysicsShape};
 use crate::plugin::JoltPhysicsWorld;
 
 /// Rigid-body descriptor: motion type + collision layer + density. Add
@@ -94,7 +86,8 @@ impl JoltBody {
 
 /// Pure collision geometry for one physics body. Add alongside [`JoltBody`].
 /// Mirrors Jolt's `Shape`: immutable geometry with no motion of its own.
-#[derive(Component, Clone, Copy, Debug)]
+/// `Clone` (not `Copy`): compounds own a heap part list.
+#[derive(Component, Clone, Debug)]
 pub struct JoltShape(pub PhysicsShape);
 
 impl JoltShape {
@@ -150,6 +143,12 @@ impl JoltShape {
             plane_constant,
         })
     }
+
+    /// One body from box/sphere/capsule parts (a table = top + legs, a
+    /// hammer = head + handle). At most 16 parts; empty rejects at bake.
+    pub fn compound(compound_parts: Vec<CompoundPart>) -> Self {
+        Self(PhysicsShape::Compound { compound_parts })
+    }
 }
 
 /// Jolt body id owned by an entity. Inserted by the spawn observer;
@@ -184,9 +183,9 @@ pub fn spawn_jolt_body(
     };
 
     let spawn_position = spawn_transform.translation;
-    let body_id_raw = match shape.0 {
+    let body_id_raw = match &shape.0 {
         PhysicsShape::Box { half_extents } => physics_world.create_box(
-            half_extents,
+            *half_extents,
             spawn_position,
             body.object_layer,
             body.motion,
@@ -194,7 +193,7 @@ pub fn spawn_jolt_body(
             body.gravity_factor,
         ),
         PhysicsShape::Sphere { sphere_radius } => physics_world.create_sphere(
-            sphere_radius,
+            *sphere_radius,
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
@@ -204,8 +203,8 @@ pub fn spawn_jolt_body(
             capsule_half_height,
             capsule_radius,
         } => physics_world.create_capsule(
-            capsule_half_height,
-            capsule_radius,
+            *capsule_half_height,
+            *capsule_radius,
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
@@ -215,8 +214,8 @@ pub fn spawn_jolt_body(
             cylinder_half_height,
             cylinder_radius,
         } => physics_world.create_cylinder(
-            cylinder_half_height,
-            cylinder_radius,
+            *cylinder_half_height,
+            *cylinder_radius,
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
@@ -227,9 +226,9 @@ pub fn spawn_jolt_body(
             top_radius,
             bottom_radius,
         } => physics_world.create_tapered_cylinder(
-            tapered_half_height,
-            top_radius,
-            bottom_radius,
+            *tapered_half_height,
+            *top_radius,
+            *bottom_radius,
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
@@ -240,9 +239,9 @@ pub fn spawn_jolt_body(
             top_radius,
             bottom_radius,
         } => physics_world.create_tapered_capsule(
-            tapered_half_height,
-            top_radius,
-            bottom_radius,
+            *tapered_half_height,
+            *top_radius,
+            *bottom_radius,
             spawn_position,
             body.object_layer,
             body.density_kg_per_m3,
@@ -252,10 +251,18 @@ pub fn spawn_jolt_body(
             surface_normal,
             plane_constant,
         } => physics_world.create_plane(
-            surface_normal,
-            plane_constant,
+            *surface_normal,
+            *plane_constant,
             50.0,
             body.object_layer,
+        ),
+        PhysicsShape::Compound { compound_parts } => physics_world.create_compound(
+            compound_parts,
+            spawn_position,
+            body.object_layer,
+            body.motion,
+            body.density_kg_per_m3,
+            body.gravity_factor,
         ),
     };
     // Creation bakes identity rotation, so rotate the live body into the

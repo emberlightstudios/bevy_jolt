@@ -13,7 +13,7 @@ use jolt_sys::{
     bjolt_body_state, bjolt_body_transform, bjolt_character_create, bjolt_character_destroy,
     bjolt_character_move, bjolt_character_stance, bjolt_character_teleport, bjolt_constraint_drive_at,
     bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
-    bjolt_create_capsule, bjolt_create_cone_constraint, bjolt_create_cylinder,
+    bjolt_create_capsule, bjolt_create_compound, bjolt_create_cone_constraint, bjolt_create_cylinder,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
     bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_motorcycle,
     bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
@@ -54,7 +54,10 @@ pub struct BodySnapshot {
 }
 
 /// What a body looks like, remembered at creation so the debug visualizer
-#[derive(Clone, Copy, Debug)]
+/// can draw it. Jolt owns the real shape; this is just the outline recipe.
+/// `Clone` (not `Copy`): a compound owns a heap part list, and copying that
+/// implicitly per frame would hide real cost.
+#[derive(Clone, Debug)]
 pub enum PhysicsShape {
     Box { half_extents: Vec3 },
     Sphere { sphere_radius: f32 },
@@ -71,10 +74,28 @@ pub enum PhysicsShape {
         bottom_radius: f32,
     },
     Plane { surface_normal: Vec3, plane_constant: f32 },
+    Compound { compound_parts: Vec<CompoundPart> },
+}
+
+/// One chunk of a compound body: a box, sphere, or capsule posed relative to
+/// the body origin. Offsets in meters, rotation as a quaternion.
+#[derive(Clone, Copy, Debug)]
+pub struct CompoundPart {
+    pub part_geometry: CompoundGeometry,
+    pub part_offset: Vec3,
+    pub part_rotation: Quat,
+}
+
+/// Box spans half extents; sphere uses one radius; capsule pairs the
+/// cylinder half height with the cap radius.
+#[derive(Clone, Copy, Debug)]
+pub enum CompoundGeometry {
+    Box { part_half_extents: Vec3 },
+    Sphere { part_radius: f32 },
+    Capsule { part_half_height: f32, part_radius: f32 },
 }
 
 /// Which object layers exist and which pairs can collide, decided in Rust
-/// and handed to Jolt once at world creation. Layer ids are plain `u16`
 /// values with no built-in names: declare every team your game needs up
 /// front with [`CollisionLayers::new`] and wire who-hits-who with
 /// [`CollisionLayers::set_collide`].
@@ -251,6 +272,78 @@ impl JoltWorld {
             PhysicsShape::Plane {
                 surface_normal,
                 plane_constant,
+            },
+        );
+        body_id_raw
+    }
+
+    /// One rigid body from box/sphere/capsule parts posed relative to the
+    /// body origin. Empty and over-16 lists assert: Jolt would reject them
+    /// with a silent 0.
+    pub fn create_compound(
+        &mut self,
+        compound_parts: &[CompoundPart],
+        spawn_position: Vec3,
+        object_layer: u16,
+        motion: JoltMotion,
+        density_kg_per_m3: f32,
+        gravity_factor: f32,
+    ) -> u32 {
+        assert!(
+            !compound_parts.is_empty()
+                && compound_parts.len() <= jolt_sys::MAX_COMPOUND_PARTS,
+            "compound needs 1..={} parts, got {}",
+            jolt_sys::MAX_COMPOUND_PARTS,
+            compound_parts.len()
+        );
+        let ffi_parts: Vec<jolt_sys::CompoundPartFfi> = compound_parts
+            .iter()
+            .map(|compound_part| {
+                let (part_kind, part_half_x, part_half_y, part_half_z) =
+                    match compound_part.part_geometry {
+                        CompoundGeometry::Box { part_half_extents } => {
+                            (0, part_half_extents.x, part_half_extents.y, part_half_extents.z)
+                        }
+                        CompoundGeometry::Sphere { part_radius } => (1, part_radius, 0.0, 0.0),
+                        CompoundGeometry::Capsule {
+                            part_half_height,
+                            part_radius,
+                        } => (2, part_half_height, part_radius, 0.0),
+                    };
+                jolt_sys::CompoundPartFfi {
+                    part_kind,
+                    part_half_x,
+                    part_half_y,
+                    part_half_z,
+                    offset_x: compound_part.part_offset.x,
+                    offset_y: compound_part.part_offset.y,
+                    offset_z: compound_part.part_offset.z,
+                    rot_x: compound_part.part_rotation.x,
+                    rot_y: compound_part.part_rotation.y,
+                    rot_z: compound_part.part_rotation.z,
+                    rot_w: compound_part.part_rotation.w,
+                }
+            })
+            .collect();
+        let body_id_raw = unsafe {
+            bjolt_create_compound(
+                self.world_ptr,
+                ffi_parts.as_ptr(),
+                ffi_parts.len() as u32,
+                spawn_position.x,
+                spawn_position.y,
+                spawn_position.z,
+                object_layer,
+                motion as u8,
+                density_kg_per_m3,
+                gravity_factor,
+            )
+        };
+        assert_ne!(body_id_raw, 0, "Jolt rejected the compound shape");
+        self.body_shapes.insert(
+            body_id_raw,
+            PhysicsShape::Compound {
+                compound_parts: compound_parts.to_vec(),
             },
         );
         body_id_raw
