@@ -668,14 +668,17 @@ impl JoltWorld {
     }
 
     /// Shoulder-style joint: separate swing cone plus twist range.
-    /// Returns 0 on failure.
+    /// Per-body axes (like the cone): differing body2 vectors offset the
+    /// rest pose inside the cone without moving its center. Returns 0 on failure.
     pub fn create_swing_twist_constraint(
         &mut self,
         body1_raw: u32,
         body2_raw: u32,
         constraint_position: Vec3,
-        twist_axis: Dir3,
-        plane_axis: Dir3,
+        twist_axis1: Dir3,
+        plane_axis1: Dir3,
+        twist_axis2: Dir3,
+        plane_axis2: Dir3,
         normal_half_cone_angle: f32,
         plane_half_cone_angle: f32,
         twist_min_angle: f32,
@@ -690,12 +693,18 @@ impl JoltWorld {
                 constraint_position.x,
                 constraint_position.y,
                 constraint_position.z,
-                twist_axis.as_vec3().x,
-                twist_axis.as_vec3().y,
-                twist_axis.as_vec3().z,
-                plane_axis.as_vec3().x,
-                plane_axis.as_vec3().y,
-                plane_axis.as_vec3().z,
+                twist_axis1.as_vec3().x,
+                twist_axis1.as_vec3().y,
+                twist_axis1.as_vec3().z,
+                plane_axis1.as_vec3().x,
+                plane_axis1.as_vec3().y,
+                plane_axis1.as_vec3().z,
+                twist_axis2.as_vec3().x,
+                twist_axis2.as_vec3().y,
+                twist_axis2.as_vec3().z,
+                plane_axis2.as_vec3().x,
+                plane_axis2.as_vec3().y,
+                plane_axis2.as_vec3().z,
                 normal_half_cone_angle,
                 plane_half_cone_angle,
                 twist_min_angle,

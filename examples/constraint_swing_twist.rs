@@ -88,9 +88,11 @@ fn spawn_scene(
             JoltShape::capsule(0.5, 0.2),
         ))
         .id();
-    // Twist axis along the arm (anchor -> spawn), not a fixed world axis:
-    // the cone opens around the limb, so a hardcoded down-axis starts the
-    // joint pre-twisted against its own limits. Plane axis perpendicular.
+    // Body1 (anchor) defines the cone center: straight up, the middle of the
+    // shoulder's range. Body2 (arm) carries its own twist axis along the limb,
+    // so the creation pose sits off-center inside the cone: the arm starts
+    // partway toward one wall, with more travel the other way. Same vector
+    // on both sides would center rest; differing vectors offset it.
     let arm_axis = (ARM_SPAWN - ANCHOR).normalize();
     let plane_axis = arm_axis.cross(Vec3::Z).normalize();
     let joint = commands
@@ -98,9 +100,10 @@ fn spawn_scene(
             shoulder,
             arm,
             ANCHOR,
+            Dir3::Y,
+            Dir3::X,
             Dir3::new(arm_axis).unwrap(),
             Dir3::new(plane_axis).unwrap(),
-            //Dir3::new(plane_axis).unwrap(),
             0.4,
             0.4,
             -0.5,
