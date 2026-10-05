@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_jolt::{JoltBody, JoltBodyId, JoltPhysicsWorld, JoltPlugin, JoltShape};
+use bevy_jolt::{JoltBody, JoltBodyId, JoltPhysicsWorld, JoltPlugin, JoltShape, JoltTeleport};
 
 const MAX_PHYSICS_STEPS: u32 = 600;
 
@@ -38,18 +38,29 @@ fn watch_falling_sphere(
     falling_sphere: Res<FallingSphere>,
     body_query: Query<(&Transform, &JoltBodyId)>,
     physics_world: Res<JoltPhysicsWorld>,
+    mut commands: Commands,
     mut app_exit: MessageWriter<AppExit>,
 ) {
     let Ok((sphere_transform, sphere_id)) = body_query.get(falling_sphere.sphere) else {
         return;
     };
     *sphere_step_count += 1;
-    let sphere_position = sphere_transform.translation;
-    println!(
-        "Step {}: Position = ({:.3}, {:.3}, {:.3})",
-        *sphere_step_count, sphere_position.x, sphere_position.y, sphere_position.z,
-    );
-
+    if *sphere_step_count == 60 {
+        commands.trigger(JoltTeleport {
+            body_entity: falling_sphere.sphere,
+            target_position: Vec3::new(3.0, 4.0, 0.0),
+            target_rotation: Quat::IDENTITY,
+        });
+        println!("teleported the sphere to (3, 4, 0)");
+    }
+    if *sphere_step_count == 61 {
+        assert!(
+            (sphere_transform.translation - Vec3::new(3.0, 4.0, 0.0)).length() < 0.5,
+            "teleport should land the sphere near (3, 4, 0), got {:?}",
+            sphere_transform.translation
+        );
+        println!("teleport confirmed at {:?}", sphere_transform.translation);
+    }
     let sphere_sleeping = !physics_world.body_is_active(sphere_id.body_id_raw);
     if sphere_sleeping || *sphere_step_count >= MAX_PHYSICS_STEPS {
         println!("Sphere slept after {} steps.", *sphere_step_count);

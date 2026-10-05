@@ -145,7 +145,7 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::ragdoll::bake_jolt_ragdoll);
         app.add_observer(crate::body_forces::apply_jolt_impulse);
         app.add_observer(crate::body_forces::apply_jolt_set_velocity);
-        app.add_observer(crate::character::apply_jolt_character_teleport);
+        app.add_observer(crate::body_forces::apply_jolt_teleport);
         app.add_observer(crate::contact_events::bake_jolt_sensor);
         app.add_observer(crate::joint_sync::despawn_jolt_joint);
         // Joint cascade before body destroy: constraint removals here are

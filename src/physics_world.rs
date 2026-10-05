@@ -22,8 +22,9 @@ use jolt_sys::{
     bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
     bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_create_tracked_vehicle,
     bjolt_create_wheeled_vehicle, bjolt_gravity_factor, bjolt_init, bjolt_move_kinematic,
-    bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_gravity, bjolt_set_gravity_factor,
-    bjolt_set_linear_velocity, bjolt_set_rotation, bjolt_set_velocity, bjolt_tracked_drive,
+    bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_friction, bjolt_set_gravity,
+    bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_position, bjolt_set_position_rotation,
+    bjolt_set_restitution, bjolt_set_rotation, bjolt_set_velocity, bjolt_tracked_drive,
     bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_world_create_with_layers, bjolt_world_destroy,
     bjolt_world_gravity, bjolt_world_update, bjolt_drain_contact_added, bjolt_drain_contact_removed,
 };
@@ -1303,6 +1304,50 @@ impl JoltWorld {
             )
         }
     }
+
+    /// Surface grip on a live body (0 ice, 1+ rubber). Applied at bake and
+    /// changeable at runtime.
+    pub fn set_body_friction(&mut self, body_id_raw: u32, friction: f32) {
+        unsafe { bjolt_set_friction(self.world_ptr, body_id_raw, friction) }
+    }
+
+    /// Bounciness on a live body (0 dead, 1 superball). Same timing as friction.
+    pub fn set_body_restitution(&mut self, body_id_raw: u32, restitution: f32) {
+        unsafe { bjolt_set_restitution(self.world_ptr, body_id_raw, restitution) }
+    }
+
+    /// Moves a live body (spawn fix-up, respawns, resets). Wakes the body;
+    pub fn move_body(&mut self, body_id_raw: u32, body_position: Vec3) {
+        unsafe {
+            bjolt_set_position(
+                self.world_ptr,
+                body_id_raw,
+                body_position.x,
+                body_position.y,
+                body_position.z,
+            )
+        }
+    }
+
+    /// Full pose teleport: position + rotation atomically, so the body
+    /// never observes a half-moved frame. Keeps prior momentum: follow
+    /// with `set_body_velocity` to zero for a dead stop.
+    pub fn teleport_body(&mut self, body_id_raw: u32, body_position: Vec3, body_rotation: Quat) {
+        unsafe {
+            bjolt_set_position_rotation(
+                self.world_ptr,
+                body_id_raw,
+                body_position.x,
+                body_position.y,
+                body_position.z,
+                body_rotation.x,
+                body_rotation.y,
+                body_rotation.z,
+                body_rotation.w,
+            )
+        }
+    }
+
 
     /// Velocity motor on a slider, hinge, or path joint. False on bad ids.
     pub fn constraint_drive_at(&mut self, constraint_id: u32, target_velocity: f32) -> bool {

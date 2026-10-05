@@ -15,6 +15,10 @@ pub struct JoltBody {
     pub object_layer: u16,
     pub density_kg_per_m3: f32,
     pub gravity_factor: f32,
+    /// Surface grip 0 (ice) to 1+ (rubber). Jolt default 0.2.
+    pub friction: f32,
+    /// Bounciness 0 (dead) to 1 (superball). Jolt default 0.
+    pub restitution: f32,
 }
 
 /// Jolt motion type: static never moves, kinematic moves by velocity and
@@ -33,12 +37,20 @@ impl JoltBody {
     /// Default gravity pull: full world gravity, matches Jolt's own default.
     pub const DEFAULT_GRAVITY: f32 = 1.0;
 
+    /// Default surface grip, matches Jolt's own default.
+    pub const DEFAULT_FRICTION: f32 = 0.2;
+
+    /// Default bounciness (dead), matches Jolt's own default.
+    pub const DEFAULT_RESTITUTION: f32 = 0.0;
+
     pub fn dynamic(object_layer: u16) -> Self {
         Self {
             motion: JoltMotion::Dynamic,
             object_layer,
             density_kg_per_m3: Self::DEFAULT_DENSITY,
             gravity_factor: Self::DEFAULT_GRAVITY,
+            friction: Self::DEFAULT_FRICTION,
+            restitution: Self::DEFAULT_RESTITUTION,
         }
     }
 
@@ -48,6 +60,8 @@ impl JoltBody {
             object_layer,
             density_kg_per_m3: Self::DEFAULT_DENSITY,
             gravity_factor: Self::DEFAULT_GRAVITY,
+            friction: Self::DEFAULT_FRICTION,
+            restitution: Self::DEFAULT_RESTITUTION,
         }
     }
 
@@ -57,6 +71,8 @@ impl JoltBody {
             object_layer,
             density_kg_per_m3: Self::DEFAULT_DENSITY,
             gravity_factor: Self::DEFAULT_GRAVITY,
+            friction: Self::DEFAULT_FRICTION,
+            restitution: Self::DEFAULT_RESTITUTION,
         }
     }
 
@@ -80,6 +96,28 @@ impl JoltBody {
             gravity_factor
         );
         self.gravity_factor = gravity_factor;
+        self
+    }
+
+    /// Surface grip 0 (ice) to 1+ (rubber). Must be finite, non-negative.
+    pub fn with_friction(mut self, friction: f32) -> Self {
+        assert!(
+            friction.is_finite() && friction >= 0.0,
+            "friction must be non-negative, got {}",
+            friction
+        );
+        self.friction = friction;
+        self
+    }
+
+    /// Bounciness 0 (dead) to 1 (superball). Must be finite, 0..=1.
+    pub fn with_restitution(mut self, restitution: f32) -> Self {
+        assert!(
+            restitution.is_finite() && (0.0..=1.0).contains(&restitution),
+            "restitution must be 0..=1, got {}",
+            restitution
+        );
+        self.restitution = restitution;
         self
     }
 }
@@ -270,6 +308,14 @@ pub fn spawn_jolt_body(
     // round-trip for the common unrotated case.
     if spawn_transform.rotation != Quat::IDENTITY {
         physics_world.set_body_rotation(body_id_raw, spawn_transform.rotation);
+    }
+    // Materials ride the same path: creation takes no friction args, so
+    // apply non-default values here. Defaults skip the FFI round-trip.
+    if body.friction != JoltBody::DEFAULT_FRICTION {
+        physics_world.set_body_friction(body_id_raw, body.friction);
+    }
+    if body.restitution != JoltBody::DEFAULT_RESTITUTION {
+        physics_world.set_body_restitution(body_id_raw, body.restitution);
     }
     commands.entity(trigger_entity).insert((
         JoltBodyId { body_id_raw },

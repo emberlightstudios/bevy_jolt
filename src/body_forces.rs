@@ -86,7 +86,18 @@ impl JoltSetVelocity {
     }
 }
 
-/// Persistent linear force, re-applied every tick while present. Jolt
+/// One-shot pose teleport: moves the body inside Jolt (position + rotation
+/// atomically), wakes it, and the sync carries the pose out to Bevy. Zero
+/// velocities on arrival unless told otherwise: a teleported body keeps its
+/// old momentum by default, pass `JoltSetVelocity::stop` after for a dead
+/// stop. Missing bodies are skipped, same as impulses.
+#[derive(EntityEvent, Clone, Copy, Debug)]
+pub struct JoltTeleport {
+    #[event_target]
+    pub body_entity: Entity,
+    pub target_position: Vec3,
+    pub target_rotation: Quat,
+}
 /// clears accumulated forces each step, so the system re-adds it before
 /// the physics step. Remove the component to stop pushing.
 #[derive(Component, Clone, Copy, Debug)]
@@ -148,6 +159,22 @@ pub fn apply_jolt_set_velocity(
         body_id.body_id_raw,
         velocity.linear_velocity,
         velocity.angular_velocity,
+    );
+}
+/// Applies a triggered [`JoltTeleport`] to the target entity's Jolt body.
+pub fn apply_jolt_teleport(
+    trigger: On<JoltTeleport>,
+    body_ids: Query<&JoltBodyId>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    let teleport = trigger.event();
+    let Ok(body_id) = body_ids.get(teleport.body_entity) else {
+        return;
+    };
+    physics_world.teleport_body(
+        body_id.body_id_raw,
+        teleport.target_position,
+        teleport.target_rotation,
     );
 }
 

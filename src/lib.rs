@@ -17,7 +17,7 @@ mod spatial_queries;
 mod vehicle;
 pub use crate::body_forces::{
     JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltLinearForce, JoltLinearVelocity,
-    JoltSetVelocity,
+    JoltSetVelocity, JoltTeleport,
 };
 pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, PreviousBodyTransform};
 pub use crate::character::{
@@ -42,7 +42,7 @@ pub use crate::spatial_queries::{MAX_QUERY_HITS, OverlapHit, QueryProbe, RayHit}
 pub use crate::vehicle::{
     CurveKnot, JoltTrackedDrive, JoltVehicleDrive, JoltVehicleId, JoltVehicleShift,
     VehicleDifferential, VehicleEngine, VehicleKind, VehicleLean, VehicleRollBar, VehicleSpec,
-    VehicleTrack, VehicleTransmission, VehicleWheel, STOCK_ENGINE_TORQUE, STOCK_TIRE_LATERAL,
+    VehicleTrack, VehicleTransmission, VehicleWheel, STOCK_ENGINE_TORQUE, STOCK_TIRE_LATERAL, STOCK_TIRE_LONGITUDINAL,
 };
 pub use jolt_sys::MAX_OBJECT_LAYERS;
 
