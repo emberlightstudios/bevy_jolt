@@ -51,6 +51,31 @@ impl Default for JointMotor {
         }
     }
 }
+/// Max Hermite knots per path track. Matches `BJOLT_MAX_PATH_POINTS` /
+/// `MAX_PATH_POINTS` in the FFI.
+pub const MAX_PATH_KNOTS: usize = 16;
+
+/// One Hermite spline knot for a [`JointKind::PathCart`] track: position
+/// plus tangent (arrival direction scaled by segment weight) and normal
+/// (track up). Jolt interpolates all three between knots.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PathKnot {
+    pub knot_position: Vec3,
+    pub knot_tangent: Vec3,
+    pub knot_normal: Vec3,
+}
+
+impl PathKnot {
+    /// Pair two of these for the old two-stop shuttle.
+    pub fn straight(knot_position: Vec3, segment: Vec3, track_up: Vec3) -> Self {
+        Self {
+            knot_position,
+            knot_tangent: segment,
+            knot_normal: track_up,
+        }
+    }
+}
+
 /// Reference frames for a [`JointKind::SixDof`] joint: anchor + basis per
 /// body. Differing body2 vectors offset the rest pose without moving the
 /// joint center, like the cone and swing-twist axes.
@@ -171,8 +196,9 @@ pub enum JointKind {
         rack_slider: Entity,
     },
     PathCart {
-        track_from: Vec3,
-        track_to: Vec3,
+        track_knots: [PathKnot; MAX_PATH_KNOTS],
+        knot_count: u8,
+        looping: bool,
         motor: JointMotor,
     },
 }
@@ -481,25 +507,59 @@ impl JoltJoint {
         }
     }
 
+    /// General Hermite spline track: knot slice plus a looping flag.
     /// `joint_space` is accepted for uniformity but ignored: track points
     /// are path-local to the static body's frame.
     pub fn path_cart(
+        static_body: Entity,
+        cart_body: Entity,
+        track_knots: &[PathKnot],
+        looping: bool,
+        motor: JointMotor,
+        joint_space: JointSpace,
+    ) -> Self {
+        let mut knots = [PathKnot::default(); MAX_PATH_KNOTS];
+        let knot_count = track_knots.len().min(MAX_PATH_KNOTS);
+        knots[..knot_count].copy_from_slice(&track_knots[..knot_count]);
+        Self {
+            body_a: static_body,
+            body_b: cart_body,
+            joint_space,
+            kind: JointKind::PathCart {
+                track_knots: knots,
+                knot_count: knot_count as u8,
+                looping,
+                motor,
+            },
+        }
+    }
+
+    /// Two-stop straight shuttle: the old path behavior as a knot pair.
+    /// Tangent spans the segment, normal is track up.
+    pub fn path_shuttle(
         static_body: Entity,
         cart_body: Entity,
         track_from: Vec3,
         track_to: Vec3,
         joint_space: JointSpace,
     ) -> Self {
-        Self {
-            body_a: static_body,
-            body_b: cart_body,
+        let segment = track_to - track_from;
+        let track_up = if segment.normalize_or_zero().y.abs() < 0.99 {
+            Vec3::Y
+        } else {
+            Vec3::X
+        };
+        Self::path_cart(
+            static_body,
+            cart_body,
+            &[
+                PathKnot::straight(track_from, segment, track_up),
+                PathKnot::straight(track_to, segment, track_up),
+            ],
+            false,
+            JointMotor::default(),
             joint_space,
-            kind: JointKind::PathCart {
-                track_from,
-                track_to,
-                motor: JointMotor::default(),
-            },
-        }
+        )
     }
 
     /// True when this joint's creation depends on another joint entity
@@ -751,10 +811,17 @@ pub fn create_jolt_joints(
                 )
             }
             JointKind::PathCart {
-                track_from,
-                track_to,
+                track_knots,
+                knot_count,
+                looping,
                 motor,
-            } => world.create_path_cart(body_a_raw, body_b_raw, track_from, track_to, motor),
+            } => world.create_path_cart(
+                body_a_raw,
+                body_b_raw,
+                &track_knots[..knot_count as usize],
+                looping,
+                motor,
+            ),
         };
         assert!(
             constraint_id != 0,

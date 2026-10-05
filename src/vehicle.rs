@@ -19,13 +19,47 @@ use std::f32::consts::PI;
 
 use crate::plugin::JoltPhysicsWorld;
 use jolt_sys::{
-    MAX_VEHICLE_GEARS, MAX_VEHICLE_WHEELS, VehicleDifferentialFfi, VehicleEngineFfi, VehicleLeanFfi,
-    VehicleRollBarFfi, VehicleTrackFfi, VehicleTransmissionFfi, VehicleWheelFfi,
+    CurvePointFfi, MAX_CURVE_POINTS, MAX_VEHICLE_GEARS, MAX_VEHICLE_WHEELS, VehicleDifferentialFfi,
+    VehicleEngineFfi, VehicleLeanFfi, VehicleRollBarFfi, VehicleTrackFfi, VehicleTransmissionFfi,
+    VehicleWheelFfi,
 };
 
-/// One wheel: mount + suspension + tire. Friction curves stay Jolt defaults
-/// (tire profile); tracked wheels use the plain friction pair instead.
-#[derive(Clone, Copy, Debug)]
+/// One `(x, y)` knot for a Jolt `LinearCurve`: slip ratio/angle or RPM
+/// fraction on X, friction or torque ratio on Y.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CurveKnot {
+    pub knot_x: f32,
+    pub knot_y: f32,
+}
+
+/// Jolt's stock car-tire longitudinal curve: slip ratio -> friction.
+/// (0, 0), (0.06, 1.2), (0.2, 1.0).
+pub const STOCK_TIRE_LONGITUDINAL: [CurveKnot; 3] = [
+    CurveKnot { knot_x: 0.0, knot_y: 0.0 },
+    CurveKnot { knot_x: 0.06, knot_y: 1.2 },
+    CurveKnot { knot_x: 0.2, knot_y: 1.0 },
+];
+
+/// Jolt's stock car-tire lateral curve: slip angle (degrees) -> friction.
+/// (0, 0), (3, 1.2), (20, 1.0).
+pub const STOCK_TIRE_LATERAL: [CurveKnot; 3] = [
+    CurveKnot { knot_x: 0.0, knot_y: 0.0 },
+    CurveKnot { knot_x: 3.0, knot_y: 1.2 },
+    CurveKnot { knot_x: 20.0, knot_y: 1.0 },
+];
+
+/// Jolt's stock engine curve: RPM fraction -> torque ratio.
+/// (0, 0.8), (0.66, 1.0), (1.0, 0.8).
+pub const STOCK_ENGINE_TORQUE: [CurveKnot; 3] = [
+    CurveKnot { knot_x: 0.0, knot_y: 0.8 },
+    CurveKnot { knot_x: 0.66, knot_y: 1.0 },
+    CurveKnot { knot_x: 1.0, knot_y: 0.8 },
+];
+
+/// One wheel: mount + suspension + tire. Empty friction curves keep Jolt's
+/// stock tire profile ([`STOCK_TIRE_LONGITUDINAL`]/[`STOCK_TIRE_LATERAL`]);
+/// tracked wheels use the plain friction pair instead.
+#[derive(Clone, Debug)]
 pub struct VehicleWheel {
     /// Suspension attachment in chassis space (meters).
     pub mount_position: Vec3,
@@ -47,6 +81,10 @@ pub struct VehicleWheel {
     pub wheel_damping: f32,
     pub max_brake_torque: f32,
     pub max_hand_brake_torque: f32,
+    /// Slip curves: (slip ratio -> friction) and (slip angle -> friction).
+    /// Empty keeps Jolt's stock tire profile.
+    pub longitudinal_curve: Vec<CurveKnot>,
+    pub lateral_curve: Vec<CurveKnot>,
     /// Tracked wheels only: plain friction pair.
     pub track_longitudinal_friction: f32,
     pub track_lateral_friction: f32,
@@ -71,6 +109,8 @@ impl Default for VehicleWheel {
             wheel_damping: 0.2,
             max_brake_torque: 1500.0,
             max_hand_brake_torque: 4000.0,
+            longitudinal_curve: Vec::new(),
+            lateral_curve: Vec::new(),
             track_longitudinal_friction: 4.0,
             track_lateral_friction: 2.0,
             tracked: false,
@@ -79,7 +119,7 @@ impl Default for VehicleWheel {
 }
 
 impl VehicleWheel {
-    pub(crate) fn to_ffi(self) -> VehicleWheelFfi {
+    pub(crate) fn to_ffi(&self) -> VehicleWheelFfi {
         VehicleWheelFfi {
             pos_x: self.mount_position.x,
             pos_y: self.mount_position.y,
@@ -102,19 +142,25 @@ impl VehicleWheel {
             track_longitudinal_friction: self.track_longitudinal_friction,
             track_lateral_friction: self.track_lateral_friction,
             kind: u8::from(self.tracked),
+            long_curve_count: self.longitudinal_curve.len().min(MAX_CURVE_POINTS) as u8,
+            lat_curve_count: self.lateral_curve.len().min(MAX_CURVE_POINTS) as u8,
+            long_curve: curve_to_ffi(&self.longitudinal_curve),
+            lat_curve: curve_to_ffi(&self.lateral_curve),
         }
     }
 }
 
-/// Engine: torque + rev band + spin. Torque curve stays Jolt default
-/// (0.8 / 1.0 / 0.8 across the rev fraction).
-#[derive(Clone, Copy, Debug)]
+/// Engine: torque + rev band + spin. Empty `torque_curve` keeps Jolt's
+/// stock 0.8 / 1.0 / 0.8 curve ([`STOCK_ENGINE_TORQUE`]).
+#[derive(Clone, Debug)]
 pub struct VehicleEngine {
     pub max_torque: f32,
     pub min_rpm: f32,
     pub max_rpm: f32,
     pub engine_inertia: f32,
     pub engine_damping: f32,
+    /// Normalized torque: RPM fraction (0 = min, 1 = max) -> torque ratio.
+    pub torque_curve: Vec<CurveKnot>,
 }
 
 impl Default for VehicleEngine {
@@ -125,20 +171,33 @@ impl Default for VehicleEngine {
             max_rpm: 6000.0,
             engine_inertia: 0.5,
             engine_damping: 0.2,
+            torque_curve: Vec::new(),
         }
     }
 }
 
 impl VehicleEngine {
-    pub(crate) fn to_ffi(self) -> VehicleEngineFfi {
+    pub(crate) fn to_ffi(&self) -> VehicleEngineFfi {
         VehicleEngineFfi {
             max_torque: self.max_torque,
             min_rpm: self.min_rpm,
             max_rpm: self.max_rpm,
             engine_inertia: self.engine_inertia,
             engine_damping: self.engine_damping,
+            torque_curve_count: self.torque_curve.len().min(MAX_CURVE_POINTS) as u8,
+            torque_curve: curve_to_ffi(&self.torque_curve),
         }
     }
+}
+
+/// Copies up to [`MAX_CURVE_POINTS`] knots into a fixed FFI array.
+fn curve_to_ffi(curve_knots: &[CurveKnot]) -> [CurvePointFfi; MAX_CURVE_POINTS] {
+    let mut knots = [CurvePointFfi { knot_x: 0.0, knot_y: 0.0 }; MAX_CURVE_POINTS];
+    for (slot, knot) in knots.iter_mut().zip(curve_knots.iter()) {
+        slot.knot_x = knot.knot_x;
+        slot.knot_y = knot.knot_y;
+    }
+    knots
 }
 
 /// Gearbox: auto or manual plus ratio tables and auto-shift tuning.
@@ -437,6 +496,101 @@ impl VehicleSpec {
         Self {
             object_layer,
             ..Self::default()
+        }
+    }
+
+    /// Tank preset: 6 tracked wheels (3 per side), left/right track sides
+    /// with the middle wheel driven. Heavier chassis, tank-tuned gearbox.
+    pub fn tank(object_layer: u16) -> Self {
+        let mut wheels = Vec::with_capacity(6);
+        for side in [1.0, -1.0] {
+            for z in [1.2, 0.0, -1.2] {
+                wheels.push(VehicleWheel {
+                    mount_position: Vec3::new(1.0 * side, -0.5, z),
+                    wheel_radius: 0.35,
+                    wheel_width: 0.3,
+                    suspension_min_length: 0.2,
+                    suspension_max_length: 0.4,
+                    tracked: true,
+                    ..VehicleWheel::default()
+                });
+            }
+        }
+        Self {
+            object_layer,
+            half_extents: Vec3::new(1.1, 0.7, 1.8),
+            center_of_mass_offset: Vec3::new(0.0, -0.5, 0.0),
+            mass_kg: 3000.0,
+            max_pitch_roll_angle: 60.0f32.to_radians(),
+            tester_radius: 0.15,
+            wheels,
+            engine: VehicleEngine {
+                min_rpm: 500.0,
+                max_rpm: 4000.0,
+                ..VehicleEngine::default()
+            },
+            transmission: VehicleTransmission {
+                gear_ratios: vec![4.0, 3.0, 2.0, 1.0],
+                reverse_gear_ratios: vec![-4.0, -3.0],
+                shift_up_rpm: 3500.0,
+                shift_down_rpm: 1000.0,
+                ..VehicleTransmission::default()
+            },
+            kind: VehicleKind::Tracked {
+                tracks: [
+                    VehicleTrack {
+                        wheel_indices: vec![0, 1, 2],
+                        driven_wheel: 1,
+                        ..VehicleTrack::default()
+                    },
+                    VehicleTrack {
+                        wheel_indices: vec![3, 4, 5],
+                        driven_wheel: 1,
+                        ..VehicleTrack::default()
+                    },
+                ],
+            },
+        }
+    }
+
+    /// Motorcycle preset: 2 wheels in line, lean-spring balance, single
+    /// differential. Jolt flags the controller as in development: expect
+    /// tuning.
+    pub fn motorcycle(object_layer: u16) -> Self {
+        let wheels = vec![
+            VehicleWheel {
+                mount_position: Vec3::new(0.0, -0.4, 0.8),
+                wheel_radius: 0.3,
+                wheel_width: 0.12,
+                max_steer_angle: 35.0f32.to_radians(),
+                max_hand_brake_torque: 0.0,
+                ..VehicleWheel::default()
+            },
+            VehicleWheel {
+                mount_position: Vec3::new(0.0, -0.4, -0.8),
+                wheel_radius: 0.3,
+                wheel_width: 0.15,
+                ..VehicleWheel::default()
+            },
+        ];
+        Self {
+            object_layer,
+            half_extents: Vec3::new(0.25, 0.5, 1.1),
+            center_of_mass_offset: Vec3::new(0.0, -0.3, 0.0),
+            mass_kg: 300.0,
+            max_pitch_roll_angle: VEHICLE_NO_FLIP_LIMIT,
+            tester_radius: 0.075,
+            wheels,
+            engine: VehicleEngine::default(),
+            transmission: VehicleTransmission::default(),
+            kind: VehicleKind::Motorcycle {
+                differentials: vec![VehicleDifferential {
+                    left_wheel: 0,
+                    right_wheel: 1,
+                    ..VehicleDifferential::default()
+                }],
+                lean: VehicleLean::default(),
+            },
         }
     }
 }

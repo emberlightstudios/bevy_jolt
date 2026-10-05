@@ -80,7 +80,7 @@ fn spawn_scene(
         .id();
     let joint = commands
         .spawn((
-            JoltJoint::path_cart(anchor, cart, TRACK_FROM, TRACK_TO, JointSpace::World),
+            JoltJoint::path_shuttle(anchor, cart, TRACK_FROM, TRACK_TO, JointSpace::World),
             JoltMotorDrive {
                 target_velocity: 1.0,
             },

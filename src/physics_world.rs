@@ -891,28 +891,40 @@ impl JoltWorld {
         }
     }
 
-    /// Glues a body to a straight track so it shuttles between two stops.
+    /// Cart on a Hermite spline track: knot list plus a looping flag.
     /// Needs a static anchor body plus the cart body. The motor spring
     /// engages on the first drive call. Returns 0 on failure.
     pub fn create_path_cart(
         &mut self,
         static_body_raw: u32,
         cart_body_raw: u32,
-        track_from: Vec3,
-        track_to: Vec3,
+        track_knots: &[crate::joint_sync::PathKnot],
+        looping: bool,
         motor: crate::joint_sync::JointMotor,
     ) -> u32 {
+        use jolt_sys::{PathPointFfi, MAX_PATH_POINTS};
+        let points: Vec<PathPointFfi> = track_knots
+            .iter()
+            .map(|knot| PathPointFfi {
+                pos_x: knot.knot_position.x,
+                pos_y: knot.knot_position.y,
+                pos_z: knot.knot_position.z,
+                tan_x: knot.knot_tangent.x,
+                tan_y: knot.knot_tangent.y,
+                tan_z: knot.knot_tangent.z,
+                nrm_x: knot.knot_normal.x,
+                nrm_y: knot.knot_normal.y,
+                nrm_z: knot.knot_normal.z,
+            })
+            .collect();
         unsafe {
             bjolt_create_path_cart(
                 self.world_ptr,
                 static_body_raw,
                 cart_body_raw,
-                track_from.x,
-                track_from.y,
-                track_from.z,
-                track_to.x,
-                track_to.y,
-                track_to.z,
+                points.as_ptr(),
+                points.len().min(MAX_PATH_POINTS) as u8,
+                u8::from(looping),
                 motor.frequency_hz,
                 motor.damping,
                 motor.force_limit,

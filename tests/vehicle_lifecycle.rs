@@ -112,6 +112,36 @@ fn tracked_vehicle_builds_two_tracks() {
 }
 
 #[test]
+fn motorcycle_preset_builds() {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, JoltPlugin::new()));
+    let bike = app
+        .world_mut()
+        .spawn((
+            VehicleSpec::motorcycle(CollisionLayers::MOVING),
+            JoltVehicleDrive {
+                forward: 0.3,
+                steer: 0.0,
+                brake: 0.0,
+                hand_brake: 0.0,
+            },
+            Transform::from_xyz(0.0, 1.0, 0.0),
+        ))
+        .id();
+    for _ in 0..10 {
+        tick(&mut app);
+    }
+    let vehicle_id = app
+        .world()
+        .get::<JoltVehicleId>(bike)
+        .expect("bike should own a Jolt body + constraint id");
+    assert_ne!(vehicle_id.constraint_id_raw, 0, "Jolt rejected the bike");
+    for _ in 0..10 {
+        tick(&mut app);
+    }
+}
+
+#[test]
 fn vehicle_despawn_destroys_chassis() {
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, JoltPlugin::new()));
