@@ -143,6 +143,7 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::body_sync::spawn_jolt_body);
         app.add_observer(crate::character::bake_jolt_character);
         app.add_observer(crate::ragdoll::bake_jolt_ragdoll);
+        app.add_observer(crate::soft_body::bake_jolt_soft_body);
         app.add_observer(crate::body_forces::apply_jolt_impulse);
         app.add_observer(crate::body_forces::apply_jolt_set_velocity);
         app.add_observer(crate::body_forces::apply_jolt_teleport);
@@ -154,6 +155,7 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::body_sync::despawn_jolt_body);
         app.add_observer(crate::character::despawn_jolt_character);
         app.add_observer(crate::vehicle::despawn_jolt_vehicle);
+        app.add_observer(crate::soft_body::despawn_jolt_soft_body);
         app.add_systems(
             FixedUpdate,
             (
@@ -185,6 +187,7 @@ impl Plugin for JoltPlugin {
             (
                 crate::body_sync::sync_body_transforms,
                 crate::character::sync_character_transforms,
+                crate::soft_body::sync_soft_body_meshes,
                 crate::contact_events::drain_contact_events,
             )
                 .after(step_physics_world),

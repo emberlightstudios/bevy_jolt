@@ -14,6 +14,7 @@ mod joint_sync;
 mod physics_world;
 mod plugin;
 mod ragdoll;
+mod soft_body;
 mod spatial_queries;
 mod vehicle;
 pub use crate::body_forces::{
@@ -40,6 +41,7 @@ pub use crate::physics_world::{
 };
 pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStepConfig, step_physics_world};
 pub use crate::ragdoll::{JoltRagdoll, JoltRagdollParts, RagdollPart};
+pub use crate::soft_body::{JoltSoftBody, JoltSoftBodyId};
 pub use crate::spatial_queries::{MAX_QUERY_HITS, OverlapHit, QueryProbe, RayHit};
 pub use crate::vehicle::{
     CurveKnot, JoltTrackedDrive, JoltVehicleDrive, JoltVehicleId, JoltVehicleShift,
@@ -47,4 +49,3 @@ pub use crate::vehicle::{
     VehicleTrack, VehicleTransmission, VehicleWheel, STOCK_ENGINE_TORQUE, STOCK_TIRE_LATERAL, STOCK_TIRE_LONGITUDINAL,
 };
 pub use jolt_sys::MAX_OBJECT_LAYERS;
-

@@ -14,20 +14,21 @@ use jolt_sys::{
     bjolt_body_state, bjolt_body_transform, bjolt_character_create, bjolt_character_destroy,
     bjolt_character_move, bjolt_character_stance, bjolt_character_teleport, bjolt_constraint_drive_at,
     bjolt_constraint_path_fraction, bjolt_constraint_path_looping, bjolt_create_box,
-    bjolt_create_capsule, bjolt_create_compound, bjolt_create_cone_constraint, bjolt_create_cylinder,
-    bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
-    bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_motorcycle,
-    bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
-    bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_six_dof,
-    bjolt_create_sphere, bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
-    bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_create_tracked_vehicle,
-    bjolt_create_wheeled_vehicle, bjolt_gravity_factor, bjolt_init, bjolt_move_kinematic,
-    bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_ccd, bjolt_set_friction,
-    bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_position,
-    bjolt_set_position_rotation, bjolt_set_restitution, bjolt_set_rotation, bjolt_set_velocity,
-    bjolt_tracked_drive, bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_world_create_with_layers,
-    bjolt_world_destroy, bjolt_world_gravity, bjolt_world_update, bjolt_drain_contact_added,
-    bjolt_drain_contact_removed,
+    bjolt_create_capsule, bjolt_create_cloth, bjolt_create_compound, bjolt_create_cone_constraint,
+    bjolt_create_cylinder, bjolt_create_distance_constraint, bjolt_create_fixed_constraint,
+    bjolt_create_floor, bjolt_create_gear_constraint, bjolt_create_hinge_constraint,
+    bjolt_create_motorcycle, bjolt_create_path_cart, bjolt_create_plane,
+    bjolt_create_point_constraint, bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint,
+    bjolt_create_six_dof, bjolt_create_sphere, bjolt_create_slider_constraint,
+    bjolt_create_swing_twist_constraint, bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder,
+    bjolt_create_tracked_vehicle, bjolt_create_wheeled_vehicle, bjolt_gravity_factor,
+    bjolt_init, bjolt_move_kinematic, bjolt_remove_constraint, bjolt_set_angular_velocity,
+    bjolt_set_ccd, bjolt_set_friction, bjolt_set_gravity, bjolt_set_gravity_factor,
+    bjolt_set_linear_velocity, bjolt_set_position, bjolt_set_position_rotation, bjolt_set_restitution,
+    bjolt_set_rotation, bjolt_set_velocity, bjolt_tracked_drive, bjolt_vehicle_drive,
+    bjolt_vehicle_shift, bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_gravity,
+    bjolt_world_update, bjolt_drain_contact_added, bjolt_drain_contact_removed,
+    bjolt_soft_vertex_count, bjolt_soft_vertices, bjolt_soft_destroy,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -1357,6 +1358,55 @@ impl JoltWorld {
     }
 
     /// Moves a live body (spawn fix-up, respawns, resets). Wakes the body;
+    /// Creates a soft cloth banner: grid in the XZ plane at the position,
+    /// top row pinned so it hangs. Returns the soft body id (0 on failure).
+    pub fn create_cloth(
+        &mut self,
+        grid_nx: u32,
+        grid_nz: u32,
+        spacing: f32,
+        cloth_position: Vec3,
+        object_layer: u16,
+    ) -> u32 {
+        unsafe {
+            bjolt_create_cloth(
+                self.world_ptr,
+                grid_nx,
+                grid_nz,
+                spacing,
+                cloth_position.x,
+                cloth_position.y,
+                cloth_position.z,
+                object_layer,
+            )
+        }
+    }
+
+    /// Vertex count for mesh sizing. 0 on bad ids or non-soft bodies.
+    pub fn soft_vertex_count(&self, body_id_raw: u32) -> u32 {
+        unsafe { bjolt_soft_vertex_count(self.world_ptr, body_id_raw) }
+    }
+
+    /// World-space vertex positions for mesh rebuild. Truncates at the
+    /// buffer length; returns vertices written.
+    pub fn soft_vertices(&self, body_id_raw: u32, out_positions: &mut [Vec3]) -> u32 {
+        unsafe {
+            bjolt_soft_vertices(
+                self.world_ptr,
+                body_id_raw,
+                out_positions.as_mut_ptr() as *mut f32,
+                out_positions.len() as u32,
+            )
+        }
+    }
+
+    /// Destroys a soft body. Never touches rigid bodies.
+    pub fn soft_destroy(&mut self, body_id_raw: u32) {
+        unsafe { bjolt_soft_destroy(self.world_ptr, body_id_raw) }
+    }
+
+    /// Moves a live body (spawn fix-up, respawns, resets). Wakes the body;
+    /// the sync carries the pose out to Bevy on the next tick.
     pub fn move_body(&mut self, body_id_raw: u32, body_position: Vec3) {
         unsafe {
             bjolt_set_position(
