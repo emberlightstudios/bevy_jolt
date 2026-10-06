@@ -2,9 +2,7 @@
 //! collides, and settles. Matching outlines prove each shape matches Jolt.
 
 use bevy::prelude::*;
-use bevy_jolt::{
-    JoltBody, JoltDebugPlugin, JoltImpulse, JoltPlugin, JoltShape,
-};
+use bevy_jolt::prelude::*;
 
 const SETTLE_TICKS: u32 = 900;
 

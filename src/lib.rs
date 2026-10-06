@@ -54,3 +54,29 @@ pub use crate::vehicle::{
     VehicleTrack, VehicleTransmission, VehicleWheel, STOCK_ENGINE_TORQUE, STOCK_TIRE_LATERAL, STOCK_TIRE_LONGITUDINAL,
 };
 pub use jolt_sys::MAX_OBJECT_LAYERS;
+
+/// Everyday types: spawning, driving, and stepping. One import covers the
+/// common case; reach past it for vehicles, ragdolls, soft bodies, and
+/// spatial queries.
+pub mod prelude {
+    pub use crate::body_forces::{
+        JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltKinematicTarget,
+        JoltLinearForce, JoltLinearVelocity, JoltSetMotion, JoltSleep, JoltSleeping,
+        JoltTeleport, JoltWake,
+    };
+    pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape};
+    pub use crate::buoyancy::{JoltBuoyant, JoltWater};
+    pub use crate::character::{
+        JoltCharacter, JoltCharacterGround, JoltCharacterTeleport, JoltCharacterVelocity,
+        JoltRigidCharacter, JoltRigidCharacterTeleport, JoltRigidCharacterVelocity,
+    };
+    pub use crate::contact_events::{JoltContactAdded, JoltContactRemoved, JoltSensor};
+    pub use crate::debug_draw::JoltDebugPlugin;
+    pub use crate::joint_sync::{JointKind, JointMotor, JoltJoint, JoltMotorDrive};
+    pub use crate::physics_world::{BodySnapshot, CollisionLayers};
+    pub use crate::plugin::{JoltPhysicsWorld, JoltPlugin, JoltStep};
+    pub use crate::ragdoll::{JoltRagdoll, JoltRagdollParts};
+    pub use crate::soft_body::JoltSoftBodyConfig;
+    pub use crate::spatial_queries::{QueryProbe, RayHit};
+    pub use crate::vehicle::{JoltTrackedDrive, JoltVehicleDrive};
+}
