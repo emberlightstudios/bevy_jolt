@@ -14,9 +14,6 @@ const GRID_NZ: u32 = 12;
 const PIN_HEIGHT: f32 = 6.0;
 /// Slide period: the cube glides fully out to fully in over this many ticks.
 const SLIDE_TICKS: u32 = 300;
-/// Cube z when clear of the sheet vs pressed into it.
-const SLIDE_OUT_Z: f32 = -2.5;
-const SLIDE_IN_Z: f32 = 0.35;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -118,7 +115,10 @@ fn watch_cloth_scene(
     let vertex_total = (GRID_NX * GRID_NZ) as usize;
     let mut cloth_positions = vec![Vec3::ZERO; vertex_total];
     let written = physics_world.soft_vertices(soft_id.body_id_raw, &mut cloth_positions);
-    assert_eq!(written as usize, vertex_total, "cloth should report every vertex");
+    assert_eq!(
+        written as usize, vertex_total,
+        "cloth should report every vertex"
+    );
     let slider_position = slider_pose.translation;
     for vertex_position in &cloth_positions {
         let inside_slider = (vertex_position.x - slider_position.x).abs() < 0.75
