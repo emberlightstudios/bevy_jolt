@@ -1,7 +1,7 @@
 //! Materials: a superball bounces, a dead ball thuds. Outlines show both
 //! drops; the console prints peak rebound heights, then it exits.
 use bevy::prelude::*;
-use bevy_jolt::{JoltBody, JoltPlugin, JoltShape};
+use bevy_jolt::{JoltBody, JoltPlugin, JoltRestitution, JoltShape};
 
 const SETTLE_TICKS: u32 = 400;
 
@@ -42,7 +42,8 @@ fn spawn_bounce_scene(mut commands: Commands, mut demo: ResMut<BounceDemo>) {
     let superball = commands
         .spawn((
             Transform::from_xyz(-2.0, 5.0, 0.0),
-            JoltBody::dynamic(0).with_restitution(0.9),
+            JoltBody::dynamic(0),
+            JoltRestitution::new(0.9),
             JoltShape::sphere(0.5),
         ))
         .id();

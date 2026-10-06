@@ -122,6 +122,130 @@ pub fn sync_jolt_damping(
     }
 }
 
+/// Mass density in kg/m³ (water ≈ 1000). Bake reads it for the spawn mass;
+/// later writes rescale mass + inertia live (density × shape volume) before
+/// the next step. Must be positive and finite.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct JoltDensity {
+    pub density_kg_per_m3: f32,
+}
+
+impl JoltDensity {
+    pub const fn new(density_kg_per_m3: f32) -> Self {
+        Self { density_kg_per_m3 }
+    }
+}
+
+/// Pushes `Changed` [`JoltDensity`] values to Jolt. Same pre-step pattern
+/// as [`sync_jolt_damping`].
+pub fn sync_jolt_density(
+    density_query: Query<(&JoltBodyId, Ref<JoltDensity>), Changed<JoltDensity>>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (body_id, density) in &density_query {
+        physics_world.set_body_density(body_id.body_id_raw, density.density_kg_per_m3);
+    }
+}
+
+/// Gravity multiplier: 0 floats, 1 is normal, 2 pulls twice as hard. Bake
+/// reads it for the spawn body; later writes land before the next step.
+/// Must be finite and non-negative.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct JoltGravity {
+    pub gravity_factor: f32,
+}
+
+impl JoltGravity {
+    pub const fn new(gravity_factor: f32) -> Self {
+        Self { gravity_factor }
+    }
+}
+
+/// Pushes `Changed` [`JoltGravity`] values to Jolt. Same pre-step pattern
+/// as [`sync_jolt_damping`].
+pub fn sync_jolt_gravity(
+    gravity_query: Query<(&JoltBodyId, Ref<JoltGravity>), Changed<JoltGravity>>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (body_id, gravity) in &gravity_query {
+        physics_world.set_body_gravity_factor(body_id.body_id_raw, gravity.gravity_factor);
+    }
+}
+
+/// Surface grip 0 (ice) to 1+ (rubber). Bake reads it for the spawn body;
+/// later writes land before the next step. Must be finite, non-negative.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct JoltFriction {
+    pub friction: f32,
+}
+
+impl JoltFriction {
+    pub const fn new(friction: f32) -> Self {
+        Self { friction }
+    }
+}
+
+/// Pushes `Changed` [`JoltFriction`] values to Jolt. Same pre-step pattern
+/// as [`sync_jolt_damping`].
+pub fn sync_jolt_friction(
+    friction_query: Query<(&JoltBodyId, Ref<JoltFriction>), Changed<JoltFriction>>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (body_id, friction) in &friction_query {
+        physics_world.set_body_friction(body_id.body_id_raw, friction.friction);
+    }
+}
+
+/// Bounciness 0 (dead) to 1 (superball). Bake reads it for the spawn body;
+/// later writes land before the next step. Must be finite, 0..=1.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct JoltRestitution {
+    pub restitution: f32,
+}
+
+impl JoltRestitution {
+    pub const fn new(restitution: f32) -> Self {
+        Self { restitution }
+    }
+}
+
+/// Pushes `Changed` [`JoltRestitution`] values to Jolt. Same pre-step
+/// pattern as [`sync_jolt_damping`].
+pub fn sync_jolt_restitution(
+    restitution_query: Query<(&JoltBodyId, Ref<JoltRestitution>), Changed<JoltRestitution>>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (body_id, restitution) in &restitution_query {
+        physics_world.set_body_restitution(body_id.body_id_raw, restitution.restitution);
+    }
+}
+
+/// Sweep the shape between steps (LinearCast) so a fast body stops at the
+/// first hit instead of tunneling. Costs more per tick; reserve for bodies
+/// that outrun their own size in one step. Bake reads it; later writes
+/// flip the motion quality live.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct JoltCcd {
+    pub use_ccd: bool,
+}
+
+impl JoltCcd {
+    pub const fn enabled() -> Self {
+        Self { use_ccd: true }
+    }
+}
+
+/// Pushes `Changed` [`JoltCcd`] values to Jolt. Same pre-step pattern as
+/// [`sync_jolt_damping`].
+pub fn sync_jolt_ccd(
+    ccd_query: Query<(&JoltBodyId, Ref<JoltCcd>), Changed<JoltCcd>>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (body_id, ccd) in &ccd_query {
+        physics_world.set_body_ccd(body_id.body_id_raw, ccd.use_ccd);
+    }
+}
+
 /// Linear velocity, read and written as one: game code writes a drive
 /// request, the crate pushes `Changed` values to Jolt before the step, and
 /// the post-step sync writes the measured result back into the same

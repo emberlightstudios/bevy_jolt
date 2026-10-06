@@ -10,13 +10,14 @@ use jolt_sys::{
     BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
     VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
     bjolt_apply_buoyancy, bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide,
-    bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_set_damping, bjolt_body_set_sensor,
-    bjolt_body_state, bjolt_body_transform, bjolt_character_can_walk_stairs, bjolt_character_create,
-    bjolt_character_destroy, bjolt_character_ground, bjolt_character_move, bjolt_character_refresh_contacts,
-    bjolt_character_rotation, bjolt_character_set_mass, bjolt_character_set_padding,
-    bjolt_character_set_rotation, bjolt_character_set_shape_offset, bjolt_character_set_up,
-    bjolt_character_set_user_data, bjolt_character_stance, bjolt_character_stick_to_floor,
-    bjolt_character_teleport, bjolt_character_update, bjolt_character_walk_stairs,
+    bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_set_damping, bjolt_body_set_density,
+    bjolt_body_set_sensor, bjolt_body_state, bjolt_body_transform, bjolt_character_can_walk_stairs,
+    bjolt_character_create, bjolt_character_destroy, bjolt_character_ground, bjolt_character_move,
+    bjolt_character_refresh_contacts, bjolt_character_rotation, bjolt_character_set_mass,
+    bjolt_character_set_padding, bjolt_character_set_rotation, bjolt_character_set_shape_offset,
+    bjolt_character_set_up, bjolt_character_set_user_data, bjolt_character_stance,
+    bjolt_character_stick_to_floor, bjolt_character_teleport, bjolt_character_update,
+    bjolt_character_walk_stairs,
     bjolt_constraint_drive_at, bjolt_constraint_path_fraction, bjolt_constraint_path_looping,
     bjolt_create_box, bjolt_create_capsule, bjolt_create_cloth_settings, bjolt_create_compound,
     bjolt_create_cone_constraint, bjolt_create_cube_settings, bjolt_create_cylinder,
@@ -1963,6 +1964,14 @@ impl JoltWorld {
     pub fn set_body_damping(&mut self, body_id_raw: u32, linear_damping: f32, angular_damping: f32) {
         unsafe {
             bjolt_body_set_damping(self.world_ptr, body_id_raw, linear_damping, angular_damping)
+        }
+    }
+
+    /// Live density in kg/m³: rescales mass + inertia to density × shape
+    /// volume. Takes effect on the next step, no re-bake needed.
+    pub fn set_body_density(&mut self, body_id_raw: u32, density_kg_per_m3: f32) {
+        unsafe {
+            bjolt_body_set_density(self.world_ptr, body_id_raw, density_kg_per_m3)
         }
     }
 

@@ -177,8 +177,8 @@ pub fn bake_jolt_ragdoll(
         let part_entity = commands
             .spawn((
                 Transform::from_translation(ragdoll_origin + ragdoll_part.part_offset),
-                JoltBody::dynamic(ragdoll.object_layer)
-                    .with_density(ragdoll.density_kg_per_m3),
+                JoltBody::dynamic(ragdoll.object_layer),
+                crate::body_forces::JoltDensity::new(ragdoll.density_kg_per_m3),
                 JoltShape::capsule(
                     ragdoll_part.capsule_half_height,
                     ragdoll_part.capsule_radius,

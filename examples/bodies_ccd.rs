@@ -2,7 +2,7 @@
 //! tunnels through. Prints both fates and exits.
 
 use bevy::prelude::*;
-use bevy_jolt::{JoltBody, JoltLinearVelocity, JoltPlugin, JoltShape};
+use bevy_jolt::{JoltBody, JoltCcd, JoltGravity, JoltLinearVelocity, JoltPlugin, JoltShape};
 
 const SETTLE_TICKS: u32 = 200;
 const BULLET_SPEED: f32 = 400.0;
@@ -34,14 +34,17 @@ fn spawn_ccd_scene(mut commands: Commands, mut demo: ResMut<CcdDemo>) {
     let plain_bullet = commands
         .spawn((
             Transform::from_xyz(-10.0, 1.0, -1.0),
-            JoltBody::dynamic(0).with_gravity(0.0),
+            JoltBody::dynamic(0),
+            JoltGravity::new(0.0),
             JoltShape::sphere(0.15),
         ))
         .id();
     let ccd_bullet = commands
         .spawn((
             Transform::from_xyz(-10.0, 1.0, 1.0),
-            JoltBody::dynamic(0).with_gravity(0.0).with_ccd(true),
+            JoltBody::dynamic(0),
+            JoltGravity::new(0.0),
+            JoltCcd::enabled(),
             JoltShape::sphere(0.15),
         ))
         .id();

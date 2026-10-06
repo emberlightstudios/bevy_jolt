@@ -36,10 +36,11 @@ commands.spawn((
 ```
 
 - `JoltBody::dynamic(0)` / `::fixed(0)` / `::kinematic(0)` — motion type +
-  collision layer. Builder methods: `with_density`, `with_gravity` (per-body
-  gravity multiplier: 0 floats, 2 double-pulls), `with_friction` (0 ice –
-  1+ rubber), `with_restitution` (0 dead – 1 superball), `with_ccd` (fast
-  bullets/swords).
+  collision layer only. Tuning rides sibling components, each read at bake
+  and pushed live on `Changed` writes: `JoltDensity::new(10.0)`,
+  `JoltGravity::new(0.0)` (0 floats, 2 double-pulls), `JoltFriction::new(0.0)`
+  (0 ice – 1+ rubber), `JoltRestitution::new(0.9)` (0 dead – 1 superball),
+  `JoltCcd::enabled()` (fast bullets/swords), `JoltDamping::new(0.1, 0.1)`.
 - Bake inserts `JoltBodyId` (read it, never write it) plus
   `PreviousBodyTransform` (render interpolation state).
 - Post-step, the sync copies pose into `Transform` and writes measured
@@ -189,7 +190,7 @@ the world, and keep it there).
   friction by **geometric mean** (either side 0 kills grip).
 - World gravity flows one way: `JoltPlugin` builder → `JoltStartupGravity`
   resource → world at creation, then `JoltPhysicsWorld::set_gravity` for
-  runtime changes. Per-body `with_gravity(factor)` scales it (0 ignores
+  runtime changes. Per-body `JoltGravity::new(factor)` scales it (0 ignores
   gravity, 1 normal, 2 double pull).
 
 ## Debug outlines (`JoltDebugPlugin`)

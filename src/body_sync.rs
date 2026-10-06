@@ -3,26 +3,21 @@ use bevy::prelude::*;
 use crate::physics_world::{CompoundPart, PhysicsShape};
 use crate::plugin::JoltPhysicsWorld;
 
-/// Rigid-body descriptor: motion type + collision layer + density. Add
-/// alongside a [`JoltShape`] and a `Transform`; the plugin creates the Jolt
-/// body and keeps them in sync. Mirrors Jolt's `Body`: motion, layer, and
-/// density live on the body, geometry lives on the (shareable) shape.
-/// Density is kg/m³ (water ≈ 1000); mass = density × shape volume, baked
-/// at creation.
+/// Rigid-body descriptor: motion type + collision layer. Add alongside a
+/// [`JoltShape`] and a `Transform`; the plugin creates the Jolt body and
+/// keeps them in sync. Tuning lives on sibling components
+/// ([`JoltDensity`](crate::body_forces::JoltDensity),
+/// [`JoltGravity`](crate::body_forces::JoltGravity),
+/// [`JoltFriction`](crate::body_forces::JoltFriction),
+/// [`JoltRestitution`](crate::body_forces::JoltRestitution),
+/// [`JoltCcd`](crate::body_forces::JoltCcd),
+/// [`JoltDamping`](crate::body_forces::JoltDamping)): each is read at bake
+/// when present and pushed live on `Changed` writes. Geometry lives on the
+/// (shareable) shape.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct JoltBody {
     pub motion: JoltMotion,
     pub object_layer: u16,
-    pub density_kg_per_m3: f32,
-    pub gravity_factor: f32,
-    /// Surface grip 0 (ice) to 1+ (rubber). Jolt default 0.2.
-    pub friction: f32,
-    /// Bounciness 0 (dead) to 1 (superball). Jolt default 0.
-    pub restitution: f32,
-    /// Sweep the shape between steps (LinearCast) so fast bodies stop at
-    /// the first hit instead of tunneling. Costs more; leave off unless
-    /// the body outruns its own size in one tick (bullets, swung swords).
-    pub use_ccd: bool,
 }
 
 /// Jolt motion type: static never moves, kinematic moves by velocity and
@@ -35,27 +30,10 @@ pub enum JoltMotion {
 }
 
 impl JoltBody {
-    /// Default density: water-like, matches Jolt's own default.
-    pub const DEFAULT_DENSITY: f32 = 1000.0;
-
-    /// Default gravity pull: full world gravity, matches Jolt's own default.
-    pub const DEFAULT_GRAVITY: f32 = 1.0;
-
-    /// Default surface grip, matches Jolt's own default.
-    pub const DEFAULT_FRICTION: f32 = 0.2;
-
-    /// Default bounciness (dead), matches Jolt's own default.
-    pub const DEFAULT_RESTITUTION: f32 = 0.0;
-
     pub fn dynamic(object_layer: u16) -> Self {
         Self {
             motion: JoltMotion::Dynamic,
             object_layer,
-            density_kg_per_m3: Self::DEFAULT_DENSITY,
-            gravity_factor: Self::DEFAULT_GRAVITY,
-            friction: Self::DEFAULT_FRICTION,
-            restitution: Self::DEFAULT_RESTITUTION,
-            use_ccd: false,
         }
     }
 
@@ -63,11 +41,6 @@ impl JoltBody {
         Self {
             motion: JoltMotion::Static,
             object_layer,
-            density_kg_per_m3: Self::DEFAULT_DENSITY,
-            gravity_factor: Self::DEFAULT_GRAVITY,
-            friction: Self::DEFAULT_FRICTION,
-            restitution: Self::DEFAULT_RESTITUTION,
-            use_ccd: false,
         }
     }
 
@@ -75,65 +48,7 @@ impl JoltBody {
         Self {
             motion: JoltMotion::Kinematic,
             object_layer,
-            density_kg_per_m3: Self::DEFAULT_DENSITY,
-            gravity_factor: Self::DEFAULT_GRAVITY,
-            friction: Self::DEFAULT_FRICTION,
-            restitution: Self::DEFAULT_RESTITUTION,
-            use_ccd: false,
         }
-    }
-
-    /// Override density in kg/m³. Must be positive and finite.
-    pub fn with_density(mut self, density_kg_per_m3: f32) -> Self {
-        assert!(
-            density_kg_per_m3.is_finite() && density_kg_per_m3 > 0.0,
-            "density must be positive, got {}",
-            density_kg_per_m3
-        );
-        self.density_kg_per_m3 = density_kg_per_m3;
-        self
-    }
-
-    /// Scale world gravity for this body: 0 floats, 1 is normal, 2 pulls
-    /// twice as hard. Must be finite and non-negative.
-    pub fn with_gravity(mut self, gravity_factor: f32) -> Self {
-        assert!(
-            gravity_factor.is_finite() && gravity_factor >= 0.0,
-            "gravity factor must be non-negative, got {}",
-            gravity_factor
-        );
-        self.gravity_factor = gravity_factor;
-        self
-    }
-
-    /// Surface grip 0 (ice) to 1+ (rubber). Must be finite, non-negative.
-    pub fn with_friction(mut self, friction: f32) -> Self {
-        assert!(
-            friction.is_finite() && friction >= 0.0,
-            "friction must be non-negative, got {}",
-            friction
-        );
-        self.friction = friction;
-        self
-    }
-
-    /// Bounciness 0 (dead) to 1 (superball). Must be finite, 0..=1.
-    pub fn with_restitution(mut self, restitution: f32) -> Self {
-        assert!(
-            restitution.is_finite() && (0.0..=1.0).contains(&restitution),
-            "restitution must be 0..=1, got {}",
-            restitution
-        );
-        self.restitution = restitution;
-        self
-    }
-
-    /// Sweep the shape between steps so this body cannot tunnel at speed.
-    /// Costs more per tick; reserve for bodies that outrun their own size
-    /// in one step.
-    pub fn with_ccd(mut self, use_ccd: bool) -> Self {
-        self.use_ccd = use_ccd;
-        self
     }
 }
 
@@ -252,6 +167,15 @@ pub struct PreviousBodyTransform {
 }
 /// Creates the Jolt body when [`JoltBody`] is added: reads the entity's
 /// `Transform` as the spawn pose and stores the resulting [`JoltBodyId`].
+/// Tuning components present at spawn
+/// ([`JoltDensity`](crate::body_forces::JoltDensity),
+/// [`JoltGravity`](crate::body_forces::JoltGravity),
+/// [`JoltFriction`](crate::body_forces::JoltFriction),
+/// [`JoltRestitution`](crate::body_forces::JoltRestitution),
+/// [`JoltCcd`](crate::body_forces::JoltCcd),
+/// [`JoltDamping`](crate::body_forces::JoltDamping)) land on the body the
+/// same tick: density + gravity ride the creation call, the rest apply right
+/// after. Later writes flow through the pre-step `Changed` pushes.
 pub fn spawn_jolt_body(
     trigger: On<Add, JoltBody>,
     mut commands: Commands,
@@ -259,17 +183,71 @@ pub fn spawn_jolt_body(
         &JoltBody,
         &JoltShape,
         &Transform,
+        Option<&crate::body_forces::JoltDensity>,
+        Option<&crate::body_forces::JoltGravity>,
+        Option<&crate::body_forces::JoltFriction>,
+        Option<&crate::body_forces::JoltRestitution>,
+        Option<&crate::body_forces::JoltCcd>,
         Option<&crate::body_forces::JoltDamping>,
     )>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
+    /// Jolt's own creation defaults: creation takes no friction-style args,
+    /// so these only apply when the matching component is absent.
+    const DEFAULT_DENSITY: f32 = 1000.0;
+    const DEFAULT_GRAVITY: f32 = 1.0;
+    const DEFAULT_FRICTION: f32 = 0.2;
+    const DEFAULT_RESTITUTION: f32 = 0.0;
+
     let trigger_entity = trigger.event().entity;
-    let Ok((body, shape, spawn_transform, spawn_damping)) = body_query.get(trigger_entity) else {
+    let Ok((
+        body,
+        shape,
+        spawn_transform,
+        spawn_density,
+        spawn_gravity,
+        spawn_friction,
+        spawn_restitution,
+        spawn_ccd,
+        spawn_damping,
+    )) = body_query.get(trigger_entity) else {
         panic!(
             "JoltBody added without a JoltShape + Transform on {:?}: shape and spawn pose are required",
             trigger_entity
         );
     };
+    let spawn_density = spawn_density.map_or(DEFAULT_DENSITY, |density| {
+        assert!(
+            density.density_kg_per_m3.is_finite() && density.density_kg_per_m3 > 0.0,
+            "density must be positive, got {}",
+            density.density_kg_per_m3
+        );
+        density.density_kg_per_m3
+    });
+    let spawn_gravity = spawn_gravity.map_or(DEFAULT_GRAVITY, |gravity| {
+        assert!(
+            gravity.gravity_factor.is_finite() && gravity.gravity_factor >= 0.0,
+            "gravity factor must be non-negative, got {}",
+            gravity.gravity_factor
+        );
+        gravity.gravity_factor
+    });
+    let spawn_friction = spawn_friction.map_or(DEFAULT_FRICTION, |friction| {
+        assert!(
+            friction.friction.is_finite() && friction.friction >= 0.0,
+            "friction must be non-negative, got {}",
+            friction.friction
+        );
+        friction.friction
+    });
+    let spawn_restitution = spawn_restitution.map_or(DEFAULT_RESTITUTION, |restitution| {
+        assert!(
+            restitution.restitution.is_finite() && (0.0..=1.0).contains(&restitution.restitution),
+            "restitution must be 0..=1, got {}",
+            restitution.restitution
+        );
+        restitution.restitution
+    });
 
     let spawn_position = spawn_transform.translation;
     let body_id_raw = match shape.0.as_ref() {
@@ -278,15 +256,15 @@ pub fn spawn_jolt_body(
             spawn_position,
             body.object_layer,
             body.motion,
-            body.density_kg_per_m3,
-            body.gravity_factor,
+            spawn_density,
+            spawn_gravity,
         ),
         PhysicsShape::Sphere { sphere_radius } => physics_world.create_sphere(
             *sphere_radius,
             spawn_position,
             body.object_layer,
-            body.density_kg_per_m3,
-            body.gravity_factor,
+            spawn_density,
+            spawn_gravity,
         ),
         PhysicsShape::Capsule {
             capsule_half_height,
@@ -296,8 +274,8 @@ pub fn spawn_jolt_body(
             *capsule_radius,
             spawn_position,
             body.object_layer,
-            body.density_kg_per_m3,
-            body.gravity_factor,
+            spawn_density,
+            spawn_gravity,
         ),
         PhysicsShape::Cylinder {
             cylinder_half_height,
@@ -307,8 +285,8 @@ pub fn spawn_jolt_body(
             *cylinder_radius,
             spawn_position,
             body.object_layer,
-            body.density_kg_per_m3,
-            body.gravity_factor,
+            spawn_density,
+            spawn_gravity,
         ),
         PhysicsShape::TaperedCylinder {
             tapered_half_height,
@@ -320,8 +298,8 @@ pub fn spawn_jolt_body(
             *bottom_radius,
             spawn_position,
             body.object_layer,
-            body.density_kg_per_m3,
-            body.gravity_factor,
+            spawn_density,
+            spawn_gravity,
         ),
         PhysicsShape::TaperedCapsule {
             tapered_half_height,
@@ -333,8 +311,8 @@ pub fn spawn_jolt_body(
             *bottom_radius,
             spawn_position,
             body.object_layer,
-            body.density_kg_per_m3,
-            body.gravity_factor,
+            spawn_density,
+            spawn_gravity,
         ),
         PhysicsShape::Plane {
             surface_normal,
@@ -350,16 +328,16 @@ pub fn spawn_jolt_body(
             spawn_position,
             body.object_layer,
             body.motion,
-            body.density_kg_per_m3,
-            body.gravity_factor,
+            spawn_density,
+            spawn_gravity,
         ),
         PhysicsShape::Hull { hull_points } => physics_world.create_hull(
             hull_points,
             spawn_position,
             body.object_layer,
             body.motion,
-            body.density_kg_per_m3,
-            body.gravity_factor,
+            spawn_density,
+            spawn_gravity,
         ),
         PhysicsShape::Mesh {
             mesh_vertices,
@@ -405,15 +383,16 @@ pub fn spawn_jolt_body(
     if spawn_transform.rotation != Quat::IDENTITY {
         physics_world.set_body_rotation(body_id_raw, spawn_transform.rotation);
     }
-    // Materials ride the same path: creation takes no friction args, so
-    // apply non-default values here. Defaults skip the FFI round-trip.
-    if body.friction != JoltBody::DEFAULT_FRICTION {
-        physics_world.set_body_friction(body_id_raw, body.friction);
+    // Creation takes no friction-style args, so apply present components
+    // here. Absent components keep Jolt's own defaults, skipping the FFI
+    // round-trip. Later writes flow through the pre-step `Changed` pushes.
+    if spawn_friction != DEFAULT_FRICTION {
+        physics_world.set_body_friction(body_id_raw, spawn_friction);
     }
-    if body.restitution != JoltBody::DEFAULT_RESTITUTION {
-        physics_world.set_body_restitution(body_id_raw, body.restitution);
+    if spawn_restitution != DEFAULT_RESTITUTION {
+        physics_world.set_body_restitution(body_id_raw, spawn_restitution);
     }
-    if body.use_ccd {
+    if spawn_ccd.map_or(false, |ccd| ccd.use_ccd) {
         physics_world.set_body_ccd(body_id_raw, true);
     }
     // Damping rides the same path: creation takes no damping args, so apply
