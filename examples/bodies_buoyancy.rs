@@ -1,15 +1,16 @@
 //! Buoyancy: a buoyant box floats at the surface, a plain box sinks to
-//! the floor. Prints both fates and exits.
+//! the floor. Waterline sheet plus outlines show both fates; the console
+//! prints resting heights, then it exits.
 
 use bevy::prelude::*;
 use bevy_jolt::{JoltBody, JoltBuoyant, JoltPlugin, JoltShape, JoltWater};
-
 const SETTLE_TICKS: u32 = 600;
 
 fn main() {
     App::new()
-        .add_plugins(MinimalPlugins)
+        .add_plugins(DefaultPlugins)
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
+        .add_plugins(bevy_jolt::JoltDebugPlugin)
         .insert_resource(JoltWater {
             surface_height: 0.0,
             buoyancy: 1.0,
@@ -29,7 +30,32 @@ struct FloatDemo {
     sinker: Option<Entity>,
 }
 
-fn spawn_float_scene(mut commands: Commands, mut demo: ResMut<FloatDemo>) {
+fn spawn_float_scene(
+    mut commands: Commands,
+    mut demo: ResMut<FloatDemo>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 3.0, 12.0).looking_at(Vec3::new(0.0, -1.0, 0.0), Vec3::Y),
+    ));
+    commands.spawn((
+        DirectionalLight::default(),
+        Transform::from_xyz(4.0, 8.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+    // Translucent surface sheet so the waterline reads on screen.
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(40.0, 40.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgba(0.2, 0.5, 0.9, 0.35),
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            cull_mode: None,
+            ..default()
+        })),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
     commands.spawn((
         Transform::from_xyz(0.0, -6.0, 0.0),
         JoltBody::fixed(0),
@@ -37,7 +63,8 @@ fn spawn_float_scene(mut commands: Commands, mut demo: ResMut<FloatDemo>) {
     ));
     let floater = commands
         .spawn((
-            Transform::from_xyz(-2.0, -3.0, 0.0),
+            Transform::from_xyz(-2.0, -3.0, 0.0)
+                .with_rotation(Quat::from_euler(EulerRot::XYZ, 0.3, 0.0, 0.2)),
             JoltBody::dynamic(0),
             JoltShape::box_shape(Vec3::new(0.5, 0.5, 0.5)),
             JoltBuoyant { buoyancy_scale: 1.2 },

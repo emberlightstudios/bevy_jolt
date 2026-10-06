@@ -15,7 +15,6 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(Update, ball_twist)
         .add_systems(PostUpdate, draw_link)
         .run();
 }
@@ -98,17 +97,6 @@ fn spawn_scene(
         anchor,
         ball,
     });
-}
-
-fn ball_twist(
-    demo: Res<Demo>,
-    mut body_query: Query<(&Transform, &mut JoltAngularVelocity)>,
-) {
-    let Ok((ball_transform, mut spin)) = body_query.get_mut(demo.ball) else {
-        return;
-    };
-    let twist_rate = 2.5;
-    spin.angular_velocity = ball_transform.up() * twist_rate;
 }
 
 fn draw_link(

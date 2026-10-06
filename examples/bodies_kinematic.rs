@@ -1,10 +1,11 @@
 //! Kinematic bodies: move by velocity, push dynamics, ignore forces.
-//! A kinematic platform shuttles on a sine wave via MoveKinematic while a
-//! dynamic ball rides on top. Watch the platform carry the ball side to side.
+//! A kinematic platform shuttles on a sine wave while a dynamic ball rides
+//! on top. The demo writes a target pose component; the crate drives it.
+//! Watch the platform carry the ball side to side.
 
 use bevy::prelude::*;
 use bevy_jolt::{
-JoltBody, JoltBodyId, JoltDebugPlugin, JoltPhysicsWorld, JoltPlugin, JoltShape,
+    JoltBody, JoltDebugPlugin, JoltKinematicTarget, JoltPlugin, JoltShape,
 };
 
 fn main() {
@@ -13,9 +14,8 @@ fn main() {
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
-        .add_systems(FixedUpdate, drive_platform.before(bevy_jolt::step_physics_world))
-        .add_systems(FixedPostUpdate, report)
-        .run();
+        .add_systems(FixedUpdate, drive_platform)
+        .add_systems(FixedPostUpdate, report);
 }
 
 #[derive(Resource)]
@@ -65,6 +65,10 @@ fn spawn_scene(
             Transform::from_xyz(0.0, 1.5, 0.0),
             JoltBody::kinematic(0),
             JoltShape::box_shape(Vec3::new(3.0, 0.2, 1.5)),
+            JoltKinematicTarget {
+                target_position: Vec3::new(0.0, 1.5, 0.0),
+                target_rotation: Quat::IDENTITY,
+            },
         ))
         .id();
     let ball = commands
@@ -84,15 +88,16 @@ fn spawn_scene(
     });
 }
 
-/// Sine-wave drive: the platform glides ±2.5 on X with a 10s period.
-/// `MoveKinematic` derives velocity from the delta, so the ball rides along.
+/// Sine-wave drive: the platform glides ±2.5 on X with a 10s period. Just
+/// writes the target pose; the crate's pre-step system moves it with
+/// `MoveKinematic`, which derives velocity from the delta so the ball rides
+/// along.
 fn drive_platform(
     mut demo: ResMut<Demo>,
-    body_query: Query<&JoltBodyId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
+    mut target_query: Query<&mut JoltKinematicTarget>,
     fixed_time: Res<Time<Fixed>>,
 ) {
-    let Ok(platform_id) = body_query.get(demo.platform) else {
+    let Ok(mut kinematic_target) = target_query.get_mut(demo.platform) else {
         return;
     };
     demo.ready = true;
@@ -100,13 +105,7 @@ fn drive_platform(
     // Fixed-time elapsed quirks under load.
     demo.drive_ticks += 1;
     let elapsed = demo.drive_ticks as f32 * fixed_time.delta().as_secs_f32();
-    let target = Vec3::new(2.0 * (0.314 * elapsed).sin(), 1.5, 0.0);
-    physics_world.move_kinematic(
-        platform_id.body_id_raw,
-        target,
-        Quat::IDENTITY,
-        fixed_time.delta().as_secs_f32(),
-    );
+    kinematic_target.target_position = Vec3::new(2.0 * (0.314 * elapsed).sin(), 1.5, 0.0);
 }
 
 fn report(mut tick: Local<u32>, demo: Res<Demo>, transform_query: Query<&Transform>) {

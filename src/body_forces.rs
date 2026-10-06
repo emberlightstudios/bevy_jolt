@@ -128,6 +128,15 @@ pub struct JoltAngularVelocity {
     pub angular_velocity: Vec3,
 }
 
+/// Target pose for a kinematic body, driven every tick while present.
+/// `MoveKinematic` derives velocity from the delta, so the body shoves
+/// dynamics aside instead of teleporting through them. Set the fields each
+/// frame (sine wave, elevator, patrol) and remove the component to stop.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct JoltKinematicTarget {
+    pub target_position: Vec3,
+    pub target_rotation: Quat,
+}
 /// Applies a triggered [`JoltImpulse`] to the target entity's Jolt body.
 pub fn apply_jolt_impulse(
     trigger: On<JoltImpulse>,
@@ -232,3 +241,21 @@ pub fn apply_jolt_driven_velocities(
     }
 }
 
+/// Drives every [`JoltKinematicTarget`] toward its pose before the physics
+/// step. The query needs `JoltBodyId`, so not-yet-baked bodies simply don't
+/// match. Game code just writes the target fields; never touches the world.
+pub fn apply_jolt_kinematic_targets(
+    target_query: Query<(&JoltBodyId, &JoltKinematicTarget)>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+    fixed_time: Res<Time<Fixed>>,
+) {
+    let tick_delta = fixed_time.delta().as_secs_f32();
+    for (body_id, kinematic_target) in &target_query {
+        physics_world.move_kinematic(
+            body_id.body_id_raw,
+            kinematic_target.target_position,
+            kinematic_target.target_rotation,
+            tick_delta,
+        );
+    }
+}

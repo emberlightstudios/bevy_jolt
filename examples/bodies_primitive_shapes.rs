@@ -3,8 +3,7 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-    CompoundGeometry, CompoundPart, JoltBody, JoltDebugPlugin, JoltImpulse, JoltPlugin,
-    JoltShape,
+    JoltBody, JoltDebugPlugin, JoltImpulse, JoltPlugin, JoltShape,
 };
 
 const SETTLE_TICKS: u32 = 900;
@@ -29,11 +28,11 @@ struct ShapeDemo {
 fn spawn_shape_scene(mut commands: Commands, mut demo: ResMut<ShapeDemo>) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 8.0, 22.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
+        Transform::from_xyz(11.0, 6.0, -12.0).looking_at(Vec3::new(11.0, 1.0, 0.0), Vec3::Y),
     ));
     commands.spawn((
         DirectionalLight::default(),
-        Transform::from_xyz(4.0, 10.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(-4.0, 10.0, -6.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
     // Floor plus a low ramp wedge the tumblers roll off.
     commands.spawn((
@@ -43,7 +42,7 @@ fn spawn_shape_scene(mut commands: Commands, mut demo: ResMut<ShapeDemo>) {
     ));
     let ramp_body = commands
         .spawn((
-            Transform::from_xyz(-12.0, 0.5, 0.0).with_rotation(Quat::from_rotation_z(0.25)),
+            Transform::from_xyz(12.0, 0.5, 0.0).with_rotation(Quat::from_rotation_z(-0.25)),
             JoltBody::fixed(0),
             JoltShape::box_shape(Vec3::new(4.0, 0.25, 3.0)),
         ))
@@ -61,28 +60,17 @@ fn spawn_shape_scene(mut commands: Commands, mut demo: ResMut<ShapeDemo>) {
             "tapered_capsule",
             JoltShape::tapered_capsule(0.4, 0.3, 0.5),
         ),
-        (
-            "compound",
-            JoltShape::compound(vec![
-                CompoundPart {
-                    part_geometry: CompoundGeometry::Box {
-                        part_half_extents: Vec3::new(0.5, 0.1, 0.3),
-                    },
-                    part_offset: Vec3::ZERO,
-                    part_rotation: Quat::IDENTITY,
-                },
-                CompoundPart {
-                    part_geometry: CompoundGeometry::Sphere { part_radius: 0.25 },
-                    part_offset: Vec3::new(0.0, 0.3, 0.0),
-                    part_rotation: Quat::IDENTITY,
-                },
-            ]),
-        ),
     ];
     for (tumbler_index, (_, tumbler_shape)) in tumbler_specs.into_iter().enumerate() {
+        // Mirrored with the ramp (spans x 8 to 16 at y ~0.5): every
+        // tumbler lands on the slope. Half-turn start shows every
+        // primitive mid-rotation, not axis-aligned.
+        let lane_x = 14.0 - (tumbler_index % 4) as f32 * 1.8;
+        let lane_z = if tumbler_index < 4 { 1.2 } else { -1.2 };
         let tumbler = commands
             .spawn((
-                Transform::from_xyz(-14.0 + tumbler_index as f32 * 2.2, 4.0, 0.0),
+                Transform::from_xyz(lane_x, 4.0, lane_z)
+                    .with_rotation(Quat::from_rotation_x(std::f32::consts::PI)),
                 JoltBody::dynamic(0),
                 tumbler_shape,
             ))
@@ -105,7 +93,7 @@ fn watch_shape_scene(
         for tumbler_entity in &demo.tumbler_entities {
             commands.trigger(JoltImpulse::linear(
                 *tumbler_entity,
-                Vec3::new(30.0, 0.0, 5.0),
+                Vec3::new(-30.0, 0.0, -5.0),
             ));
         }
         demo.kicked_tick = *tick_count;

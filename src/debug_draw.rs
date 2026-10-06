@@ -253,8 +253,6 @@ fn draw_capsule_outline(
     // One pill, not two balls: two silhouette rails per side plane plus
     // half-ring caps that continue the rails over each pole. Full rings
     // would read as separate spheres; arcs keep the single-capsule read.
-    // 8 segments per half ring balances smoothness against line count.
-    const CAP_SEGMENTS: u32 = 8;
     let up_direction = capsule_rotation * Vec3::Y;
     let top_cap_center = capsule_center + up_direction * capsule_half_height;
     let bottom_cap_center = capsule_center - up_direction * capsule_half_height;

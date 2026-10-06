@@ -1,5 +1,5 @@
-//! Materials: a superball bounces, a dead ball thuds. Prints peak
-//! rebound heights and exits. Restitution differs; friction is default.
+//! Materials: a superball bounces, a dead ball thuds. Outlines show both
+//! drops; the console prints peak rebound heights, then it exits.
 use bevy::prelude::*;
 use bevy_jolt::{JoltBody, JoltPlugin, JoltShape};
 
@@ -7,8 +7,9 @@ const SETTLE_TICKS: u32 = 400;
 
 fn main() {
     App::new()
-        .add_plugins(MinimalPlugins)
+        .add_plugins(DefaultPlugins)
         .add_plugins(JoltPlugin::new().with_physics_hz(60.0))
+        .add_plugins(bevy_jolt::JoltDebugPlugin)
         .insert_resource(BounceDemo::default())
         .add_systems(Startup, spawn_bounce_scene)
         .add_systems(FixedUpdate, watch_bounce_scene)
@@ -25,6 +26,14 @@ struct BounceDemo {
 }
 
 fn spawn_bounce_scene(mut commands: Commands, mut demo: ResMut<BounceDemo>) {
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 3.0, 12.0).looking_at(Vec3::new(0.0, 2.0, 0.0), Vec3::Y),
+    ));
+    commands.spawn((
+        DirectionalLight::default(),
+        Transform::from_xyz(4.0, 8.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
     commands.spawn((
         Transform::from_xyz(0.0, -1.0, 0.0),
         JoltBody::fixed(0),

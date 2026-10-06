@@ -18,8 +18,8 @@ mod soft_body;
 mod spatial_queries;
 mod vehicle;
 pub use crate::body_forces::{
-    JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltLinearForce, JoltLinearVelocity,
-    JoltSetVelocity, JoltTeleport,
+    JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltKinematicTarget, JoltLinearForce,
+    JoltLinearVelocity, JoltSetVelocity, JoltTeleport,
 };
 pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, PreviousBodyTransform};
 pub use crate::buoyancy::{JoltBuoyant, JoltWater};
