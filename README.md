@@ -10,9 +10,9 @@ The crate guarantees this ordering every tick:
 
 1. Your `FixedUpdate` systems are guaranteed to finish before the simulation steps. Nothing physics-side runs
    yet.
-2. `JoltStep` runs next: change-detection pushes first (motion, driven
+2. `JoltStep` runs next: change-detection pushes first (motion, sleep, driven
    velocities), then the sim steps, then all readbacks (poses, measured
-   velocities, contacts, sleep markers).
+   velocities, contacts, sleep states).
 3. Your `PostFixedUpdate` systems run last. The step and every readback are already
    done, so what you read is this tick's result.
 
