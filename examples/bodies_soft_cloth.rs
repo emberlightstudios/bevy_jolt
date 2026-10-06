@@ -24,10 +24,7 @@ fn main() {
         .add_plugins(JoltDebugPlugin)
         .insert_resource(ClothDemo::default())
         .add_systems(Startup, spawn_cloth_scene)
-        .add_systems(
-            FixedUpdate,
-            drive_slider.before(bevy_jolt::step_physics_world),
-        )
+        .add_systems(FixedUpdate, drive_slider)
         .add_systems(FixedUpdate, watch_cloth_scene)
         .run();
 }

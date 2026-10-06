@@ -19,7 +19,8 @@ mod spatial_queries;
 mod vehicle;
 pub use crate::body_forces::{
     JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltKinematicTarget, JoltLinearForce,
-    JoltLinearVelocity, JoltSetVelocity, JoltTeleport,
+    JoltLinearVelocity, JoltMeasuredAngularVelocity, JoltMeasuredLinearVelocity, JoltSetVelocity,
+    JoltTeleport,
 };
 pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, PreviousBodyTransform};
 pub use crate::buoyancy::{JoltBuoyant, JoltWater};
@@ -39,10 +40,10 @@ pub use crate::joint_sync::{
     path_knots_from_waypoints,
 };
 pub use crate::physics_world::{
-    BodySnapshot, CharacterDofs, CollisionLayers, CompoundGeometry, CompoundPart, JointSpace,
-    JoltWorld, PhysicsShape, SoftBendType, SoftBodyConfig,
+    BodyMotion, BodySnapshot, CharacterDofs, CollisionLayers, CompoundGeometry, CompoundPart,
+    JointSpace, JoltWorld, PhysicsShape, SoftBendType, SoftBodyConfig,
 };
-pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStepConfig, step_physics_world};
+pub use crate::plugin::{JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStep, JoltStepConfig, step_physics_world};
 pub use crate::ragdoll::{JoltRagdoll, JoltRagdollParts, RagdollPart};
 pub use crate::soft_body::{
     JoltSoftBodyConfig, JoltSoftBodyId, JoltSoftBodyMesh, JoltSoftSharedSettings,

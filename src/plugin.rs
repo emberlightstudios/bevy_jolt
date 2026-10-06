@@ -1,8 +1,23 @@
 //! Bevy schedule wiring for the Jolt physics world.
+//!
+//! Two fixed schedules, one rule: everything in [`FixedUpdate`] runs before
+//! the sim steps, everything in [`JoltStep`] runs after. Game code writes
+//! drives in `FixedUpdate` and reads results in `FixedPostUpdate` (or later)
+//! without ever wondering whether the sim has run: the schedules themselves
+//! run in that order, so no per-system ordering can get it wrong.
 
+use bevy::app::FixedMainScheduleOrder;
+use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
-
 use crate::physics_world::{CollisionLayers, JoltWorld};
+
+/// Step schedule: runs once per fixed tick, right after [`FixedUpdate`] and
+/// before [`FixedPostUpdate`]. Owns the sim step plus every readback (pose
+/// sync, measured velocities, contact drain). The plugin inserts it into the
+/// fixed loop; game code never schedules here, it only relies on the rule
+/// that by `FixedPostUpdate` the sim has stepped.
+#[derive(ScheduleLabel, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct JoltStep;
 
 /// Collision layer table applied when the physics world is created.
 /// Inserted by [`JoltPlugin`]; read it to inspect the active teams.
@@ -11,8 +26,7 @@ pub struct JoltCollisionLayers {
     pub collision_layers: CollisionLayers,
 }
 
-/// Startup gravity carried from the [`JoltPlugin`] builder to world
-/// creation. Inserted by the plugin; read it to inspect the configured pull.
+ /// Startup gravity carried from the [`JoltPlugin`] builder to world
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct JoltStartupGravity {
     pub world_gravity: Vec3,
@@ -162,18 +176,21 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::character::despawn_jolt_rigid_character);
         app.add_observer(crate::vehicle::despawn_jolt_vehicle);
         app.add_observer(crate::soft_body::despawn_jolt_soft_body);
+        // Pre-step bakes: joints/vehicles/ragdoll links resolve before any
+        // drive writes. Everything in FixedUpdate precedes the JoltStep
+        // schedule by construction, so no .before() needed.
         app.add_systems(
             FixedUpdate,
             (
                 crate::ragdoll::bake_ragdoll_links,
                 crate::joint_sync::create_jolt_joints,
                 crate::vehicle::create_jolt_vehicles,
-            )
-                .before(step_physics_world),
+            ),
         );
-        // velocities overwrite before the step for the same reason. One-shot
-        // impulses and velocity sets need no scheduling: their observers fire
-        // the moment the event triggers.
+        // Pre-step drives: forces, driven velocities, kinematic targets,
+        // buoyancy, characters, sensors. One-shot impulses and velocity sets
+        // need no scheduling: their observers fire the moment the trigger
+        // fires.
         app.add_systems(
             FixedUpdate,
             (
@@ -183,12 +200,18 @@ impl Plugin for JoltPlugin {
                 crate::buoyancy::apply_buoyancy,
                 crate::character::step_jolt_rigid_characters,
                 crate::contact_events::apply_pending_sensors,
-            )
-                .before(step_physics_world),
+            ),
         );
-        app.add_systems(FixedUpdate, step_physics_world);
+        // The step runs in its own schedule after FixedUpdate: by the time
+        // FixedPostUpdate runs, the sim has always stepped.
+        app.init_schedule(JoltStep);
+        app.world_mut()
+            .resource_mut::<FixedMainScheduleOrder>()
+            .insert_after(FixedUpdate, JoltStep);
+        app.add_systems(JoltStep, step_physics_world);
+        // Post-step readbacks share the schedule, ordered after the step.
         app.add_systems(
-            FixedUpdate,
+            JoltStep,
             (
                 crate::body_sync::sync_body_transforms,
                 crate::character::sync_character_transforms,

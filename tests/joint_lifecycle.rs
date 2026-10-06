@@ -36,12 +36,13 @@ fn spawn_pair(app: &mut App) -> (Entity, Entity, Entity) {
 
 fn tick(app: &mut App) {
     // `app.update()` alone may not accumulate enough `Time<Real>` to trip
-    // the fixed accumulator, so drive `FixedUpdate` explicitly. This runs
-    // joint creation + the physics step regardless of wall-clock delta.
+    // the fixed accumulator, so drive the fixed schedules explicitly. The
+    // step lives in JoltStep now: tests run it by hand since the fixed-loop
+    // order only applies inside a real App run.
     app.update();
     app.world_mut().run_schedule(FixedUpdate);
+    app.world_mut().run_schedule(bevy_jolt::JoltStep);
 }
-
 #[test]
 fn joint_gains_id_once_bodies_bake() {
     let mut app = App::new();

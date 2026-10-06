@@ -335,29 +335,62 @@ pub fn spawn_jolt_body(
     if body.use_ccd {
         physics_world.set_body_ccd(body_id_raw, true);
     }
-    commands.entity(trigger_entity).insert((
+    let mut baked_entity = commands.entity(trigger_entity);
+    baked_entity.insert((
         JoltBodyId { body_id_raw },
         PreviousBodyTransform {
             previous_position: spawn_transform.translation,
             previous_rotation: spawn_transform.rotation,
         },
     ));
+    // Non-static bodies report measured velocity every tick: statics never
+    // move, so they skip the component and the per-tick write.
+    if body.motion != JoltMotion::Static {
+        baked_entity.insert((
+            crate::body_forces::JoltMeasuredLinearVelocity {
+                measured_linear_velocity: Vec3::ZERO,
+            },
+            crate::body_forces::JoltMeasuredAngularVelocity {
+                measured_angular_velocity: Vec3::ZERO,
+            },
+        ));
+    }
 }
 
 /// Copies each body's physics transform into its entity's `Transform` and
-/// remembers the previous tick's pose. Runs after the physics step in the
-/// same Fixed tick; the render interpolation blends between the two.
+/// remembers the previous tick's pose. Same pass writes the measured
+/// velocities (pose + motion come from one FFI call, so readback costs no
+/// extra round-trip). Runs after the physics step in the same Fixed tick;
+/// the render interpolation blends between the two stored poses.
 pub fn sync_body_transforms(
-    mut body_query: Query<(&JoltBodyId, &mut Transform, &mut PreviousBodyTransform)>,
+    mut body_query: Query<(
+        &JoltBodyId,
+        &mut Transform,
+        &mut PreviousBodyTransform,
+        Option<&mut crate::body_forces::JoltMeasuredLinearVelocity>,
+        Option<&mut crate::body_forces::JoltMeasuredAngularVelocity>,
+    )>,
     physics_world: Res<JoltPhysicsWorld>,
 ) {
-    for (body_id, mut entity_transform, mut previous_transform) in body_query.iter_mut() {
+    for (
+        body_id,
+        mut entity_transform,
+        mut previous_transform,
+        measured_linear,
+        measured_angular,
+    ) in body_query.iter_mut()
+    {
         previous_transform.previous_position = entity_transform.translation;
         previous_transform.previous_rotation = entity_transform.rotation;
-        let (body_position, body_rotation) =
-            physics_world.body_full_transform(body_id.body_id_raw);
-        entity_transform.translation = body_position;
-        entity_transform.rotation = body_rotation;
+        let body_motion = physics_world.body_full_motion(body_id.body_id_raw);
+        entity_transform.translation = body_motion.body_position;
+        entity_transform.rotation = body_motion.body_rotation;
+        if let Some(mut measured_linear) = measured_linear {
+            measured_linear.measured_linear_velocity = body_motion.body_velocity;
+        }
+        if let Some(mut measured_angular) = measured_angular {
+            measured_angular.measured_angular_velocity = body_motion.body_spin;
+        }
     }
 }
 

@@ -128,6 +128,22 @@ pub struct JoltAngularVelocity {
     pub angular_velocity: Vec3,
 }
 
+/// Measured linear velocity, written by the crate every tick after the
+/// physics step. Read-only for game code: never write it, and never drive
+/// from it (the pre-step systems ignore it). Tells what the body is
+/// actually doing, unlike [`JoltLinearVelocity`] which says what you asked
+/// for. Inserted at bake for every non-static body.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct JoltMeasuredLinearVelocity {
+    pub measured_linear_velocity: Vec3,
+}
+
+/// Measured spin, same read-only rule as [`JoltMeasuredLinearVelocity`].
+#[derive(Component, Clone, Copy, Debug)]
+pub struct JoltMeasuredAngularVelocity {
+    pub measured_angular_velocity: Vec3,
+}
+
 /// Target pose for a kinematic body, driven every tick while present.
 /// `MoveKinematic` derives velocity from the delta, so the body shoves
 /// dynamics aside instead of teleporting through them. Set the fields each
@@ -137,6 +153,7 @@ pub struct JoltKinematicTarget {
     pub target_position: Vec3,
     pub target_rotation: Quat,
 }
+
 /// Applies a triggered [`JoltImpulse`] to the target entity's Jolt body.
 pub fn apply_jolt_impulse(
     trigger: On<JoltImpulse>,

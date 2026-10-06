@@ -155,10 +155,20 @@ impl CharacterDofs {
     }
 }
 
-/// Position and linear velocity of one body at the current step.
+/// Position plus linear and angular velocity of one body at the current step.
 pub struct BodySnapshot {
     pub body_position: Vec3,
     pub body_velocity: Vec3,
+    pub body_spin: Vec3,
+}
+
+/// Everything the per-tick sync reads from one body in a single FFI call:
+/// pose for the entity transform, velocities for the measured components.
+pub struct BodyMotion {
+    pub body_position: Vec3,
+    pub body_rotation: Quat,
+    pub body_velocity: Vec3,
+    pub body_spin: Vec3,
 }
 
 /// What a body looks like, remembered at creation so the debug visualizer
@@ -659,21 +669,34 @@ impl JoltWorld {
         body_id_raw
     }
 
-    pub fn body_full_transform(&self, body_id_raw: u32) -> (Vec3, Quat) {
+    /// Pose plus linear and angular velocity in one FFI round-trip: the
+    /// per-tick sync reads everything here so bodies cost one call, not two.
+    pub fn body_full_motion(&self, body_id_raw: u32) -> BodyMotion {
         let mut body_position = [0.0f32; 3];
         let mut body_rotation = [0.0f32; 4];
+        let mut body_velocity = [0.0f32; 3];
+        let mut body_spin = [0.0f32; 3];
         unsafe {
             bjolt_body_transform(
                 self.world_ptr,
                 body_id_raw,
                 body_position.as_mut_ptr(),
                 body_rotation.as_mut_ptr(),
+                body_velocity.as_mut_ptr(),
+                body_spin.as_mut_ptr(),
             );
         }
-        (
-            Vec3::from_array(body_position),
-            Quat::from_array(body_rotation),
-        )
+        BodyMotion {
+            body_position: Vec3::from_array(body_position),
+            body_rotation: Quat::from_array(body_rotation),
+            body_velocity: Vec3::from_array(body_velocity),
+            body_spin: Vec3::from_array(body_spin),
+        }
+    }
+
+    pub fn body_full_transform(&self, body_id_raw: u32) -> (Vec3, Quat) {
+        let body_motion = self.body_full_motion(body_id_raw);
+        (body_motion.body_position, body_motion.body_rotation)
     }
 
     /// Closest body a ray hits, if any. `ray_direction` sets both direction
@@ -1868,17 +1891,20 @@ impl JoltWorld {
     pub fn body_snapshot(&self, body_id_raw: u32) -> BodySnapshot {
         let mut body_position = [0.0f32; 3];
         let mut body_velocity = [0.0f32; 3];
+        let mut body_spin = [0.0f32; 3];
         unsafe {
             bjolt_body_state(
                 self.world_ptr,
                 body_id_raw,
                 body_position.as_mut_ptr(),
                 body_velocity.as_mut_ptr(),
+                body_spin.as_mut_ptr(),
             );
         }
         BodySnapshot {
             body_position: Vec3::from_array(body_position),
             body_velocity: Vec3::from_array(body_velocity),
+            body_spin: Vec3::from_array(body_spin),
         }
     }
 

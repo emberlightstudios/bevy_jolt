@@ -32,10 +32,7 @@ fn main() {
         .add_plugins(JoltDebugPlugin)
         .insert_resource(SkinDemo::default())
         .add_systems(Startup, spawn_skin_scene)
-        .add_systems(
-            FixedUpdate,
-            drive_slider.before(bevy_jolt::step_physics_world),
-        )
+        .add_systems(FixedUpdate, drive_slider)
         .add_systems(FixedUpdate, drive_joints)
         .add_systems(FixedUpdate, watch_skin_scene)
         .run();
