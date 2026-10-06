@@ -419,25 +419,27 @@ pub fn spawn_jolt_body(
             previous_rotation: spawn_transform.rotation,
         },
     ));
-    // Non-static bodies report measured velocity every tick: statics never
-    // move, so they skip the component and the per-tick write.
+    // Non-static bodies carry unified velocity from bake: game code drives
+    // by writing, the sync writes the measured result back (change
+    // detection bypassed). Statics never move, so they skip both.
     if body.motion != JoltMotion::Static {
         baked_entity.insert((
-            crate::body_forces::JoltMeasuredLinearVelocity {
-                measured_linear_velocity: Vec3::ZERO,
+            crate::body_forces::JoltLinearVelocity {
+                linear_velocity: Vec3::ZERO,
             },
-            crate::body_forces::JoltMeasuredAngularVelocity {
-                measured_angular_velocity: Vec3::ZERO,
+            crate::body_forces::JoltAngularVelocity {
+                angular_velocity: Vec3::ZERO,
             },
         ));
     }
 }
-
 /// Copies each body's physics transform into its entity's `Transform` and
 /// remembers the previous tick's pose. Same pass writes the measured
-/// velocities (pose + motion come from one FFI call, so readback costs no
-/// extra round-trip). Sleeping bodies are filtered out: frozen means frozen,
-/// no FFI for values that cannot change. Runs after the physics step in the
+/// velocities back into the unified components (pose + motion come from one
+/// FFI call, so readback costs no extra round-trip). The writeback bypasses
+/// change detection: it updates what you read without looking like a new
+/// drive request. Sleeping bodies are filtered out: frozen means frozen, no
+/// FFI for values that cannot change. Runs after the physics step in the
 /// same Fixed tick; the render interpolation blends between the two poses.
 pub fn sync_body_transforms(
     mut body_query: Query<
@@ -445,8 +447,8 @@ pub fn sync_body_transforms(
             &JoltBodyId,
             &mut Transform,
             &mut PreviousBodyTransform,
-            Option<&mut crate::body_forces::JoltMeasuredLinearVelocity>,
-            Option<&mut crate::body_forces::JoltMeasuredAngularVelocity>,
+            Option<&mut crate::body_forces::JoltLinearVelocity>,
+            Option<&mut crate::body_forces::JoltAngularVelocity>,
         ),
         Without<crate::body_forces::JoltSleeping>,
     >,
@@ -456,8 +458,8 @@ pub fn sync_body_transforms(
         body_id,
         mut entity_transform,
         mut previous_transform,
-        measured_linear,
-        measured_angular,
+        unified_linear,
+        unified_angular,
     ) in body_query.iter_mut()
     {
         previous_transform.previous_position = entity_transform.translation;
@@ -465,11 +467,15 @@ pub fn sync_body_transforms(
         let body_motion = physics_world.body_full_motion(body_id.body_id_raw);
         entity_transform.translation = body_motion.body_position;
         entity_transform.rotation = body_motion.body_rotation;
-        if let Some(mut measured_linear) = measured_linear {
-            measured_linear.measured_linear_velocity = body_motion.body_velocity;
+        if let Some(mut unified_linear) = unified_linear {
+            unified_linear
+                .bypass_change_detection()
+                .linear_velocity = body_motion.body_velocity;
         }
-        if let Some(mut measured_angular) = measured_angular {
-            measured_angular.measured_angular_velocity = body_motion.body_spin;
+        if let Some(mut unified_angular) = unified_angular {
+            unified_angular
+                .bypass_change_detection()
+                .angular_velocity = body_motion.body_spin;
         }
     }
 }

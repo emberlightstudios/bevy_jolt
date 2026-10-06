@@ -160,7 +160,6 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::soft_body::bake_jolt_soft_body);
         app.add_observer(crate::ragdoll::bake_jolt_ragdoll);
         app.add_observer(crate::body_forces::apply_jolt_impulse);
-        app.add_observer(crate::body_forces::apply_jolt_set_velocity);
         app.add_observer(crate::body_forces::apply_jolt_teleport);
         app.add_observer(crate::body_forces::apply_jolt_sleep);
         app.add_observer(crate::body_forces::apply_jolt_wake);

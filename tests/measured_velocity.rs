@@ -1,10 +1,10 @@
-// Measured velocity readback: a dropped ball reports falling speed, a
-// static floor reports nothing. Run single-threaded (`--test-threads=1`):
-// parallel `JoltWorld`s crash on the shared job plumbing (see
-// joint_lifecycle.rs).
+// Unified velocity: a dropped ball reports falling speed in the same
+// component game code writes to, a static floor carries nothing. Run
+// single-threaded (`--test-threads=1`): parallel `JoltWorld`s crash on the
+// shared job plumbing (see joint_lifecycle.rs).
 use bevy::prelude::*;
 use bevy_jolt::{
-    JoltBody, JoltMeasuredAngularVelocity, JoltMeasuredLinearVelocity, JoltPlugin, JoltShape,
+    JoltAngularVelocity, JoltBody, JoltLinearVelocity, JoltPlugin, JoltShape,
 };
 
 fn tick(app: &mut App) {
@@ -37,28 +37,28 @@ fn falling_body_reports_velocity() {
     for _ in 0..30 {
         tick(&mut app);
     }
-    let measured_linear = app
+    let unified_linear = app
         .world()
-        .get::<JoltMeasuredLinearVelocity>(ball)
-        .expect("dynamic body should carry measured linear velocity");
+        .get::<JoltLinearVelocity>(ball)
+        .expect("dynamic body should carry unified linear velocity");
     assert!(
-        measured_linear.measured_linear_velocity.y < -2.0,
+        unified_linear.linear_velocity.y < -2.0,
         "falling ball should report downward speed, got {:?}",
-        measured_linear.measured_linear_velocity
+        unified_linear.linear_velocity
     );
-    let measured_angular = app
+    let unified_angular = app
         .world()
-        .get::<JoltMeasuredAngularVelocity>(ball)
-        .expect("dynamic body should carry measured angular velocity");
+        .get::<JoltAngularVelocity>(ball)
+        .expect("dynamic body should carry unified angular velocity");
     assert!(
-        measured_angular.measured_angular_velocity.length() < 0.5,
+        unified_angular.angular_velocity.length() < 0.5,
         "straight drop should barely spin, got {:?}",
-        measured_angular.measured_angular_velocity
+        unified_angular.angular_velocity
     );
 }
 
 #[test]
-fn static_body_carries_no_measured_velocity() {
+fn static_body_carries_no_velocity() {
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, JoltPlugin::new()));
     let floor = app
@@ -73,9 +73,55 @@ fn static_body_carries_no_measured_velocity() {
         tick(&mut app);
     }
     assert!(
-        app.world()
-            .get::<JoltMeasuredLinearVelocity>(floor)
-            .is_none(),
-        "static floor should skip the measured component"
+        app.world().get::<JoltLinearVelocity>(floor).is_none(),
+        "static floor should skip the velocity component"
+    );
+}
+
+#[test]
+fn drive_write_lands_once_and_writeback_does_not_redrive() {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, JoltPlugin::new()));
+    let ball = app
+        .world_mut()
+        .spawn((
+            Transform::from_xyz(0.0, 10.0, 0.0),
+            JoltBody::dynamic(0),
+            JoltShape::sphere(0.5),
+        ))
+        .id();
+    // Bake so the unified components exist.
+    for _ in 0..5 {
+        tick(&mut app);
+    }
+    // One drive write: the body should move at roughly the requested speed
+    // on the next tick...
+    app.world_mut()
+        .get_mut::<JoltLinearVelocity>(ball)
+        .expect("baked body should carry velocity")
+        .linear_velocity = Vec3::new(3.0, 0.0, 0.0);
+    tick(&mut app);
+    let after_drive = app
+        .world()
+        .get::<JoltLinearVelocity>(ball)
+        .expect("body should still carry velocity")
+        .linear_velocity;
+    assert!(
+        (after_drive.x - 3.0).abs() < 0.6,
+        "drive write should land near 3 m/s, got {after_drive:?}"
+    );
+    // ...and the writeback must not count as a new drive: clearing change
+    // detection state means the next tick integrates naturally instead of
+    // re-applying the readback as a request. Gravity pulls y down while x
+    // coasts (no drag), so x holds and y falls.
+    tick(&mut app);
+    let coasted = app
+        .world()
+        .get::<JoltLinearVelocity>(ball)
+        .expect("body should still carry velocity")
+        .linear_velocity;
+    assert!(
+        (coasted.x - 3.0).abs() < 0.6 && coasted.y < -0.1,
+        "writeback should coast, not re-drive: got {coasted:?}"
     );
 }

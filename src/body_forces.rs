@@ -2,8 +2,10 @@
 //!
 //! One-shots are [`EntityEvent`]s so firing them never moves the target
 //! entity between archetypes (see code-quality rule 18): trigger
-//! `JoltImpulse`/`JoltSetVelocity` on the body entity and the observer
-//! applies it to the Jolt body immediately. Held drives live as components
+//! [`JoltImpulse`] on the body entity and the observer applies it to the
+//! Jolt body immediately. Velocity needs no trigger: write
+//! [`JoltLinearVelocity`] / [`JoltAngularVelocity`] and change detection
+//! pushes it before the next step. Held drives live as components
 //! on the entity itself: the two archetype moves happen once at
 //! attach/detach, steady-state reads are free, and despawn cleans up
 //! with no extra work.
@@ -58,38 +60,10 @@ impl JoltImpulse {
     }
 }
 
-/// One-shot velocity overwrite (not a kick): zero halves stop that axis
-/// instead of leaving it alone. Same fire-and-forget rule as impulses.
-#[derive(EntityEvent, Clone, Copy, Debug)]
-pub struct JoltSetVelocity {
-    #[event_target]
-    pub body_entity: Entity,
-    pub linear_velocity: Vec3,
-    pub angular_velocity: Vec3,
-}
-
-impl JoltSetVelocity {
-    pub fn linear(body_entity: Entity, linear_velocity: Vec3) -> Self {
-        Self {
-            body_entity,
-            linear_velocity,
-            angular_velocity: Vec3::ZERO,
-        }
-    }
-
-    pub fn stop(body_entity: Entity) -> Self {
-        Self {
-            body_entity,
-            linear_velocity: Vec3::ZERO,
-            angular_velocity: Vec3::ZERO,
-        }
-    }
-}
-
 /// One-shot pose teleport: moves the body inside Jolt (position + rotation
-/// atomically), wakes it, and the sync carries the pose out to Bevy. Zero
-/// velocities on arrival unless told otherwise: a teleported body keeps its
-/// old momentum by default, pass `JoltSetVelocity::stop` after for a dead
+/// atomically), wakes it, and the sync carries the pose out to Bevy. A
+/// teleported body keeps its old momentum by default: write
+/// [`JoltLinearVelocity`] / [`JoltAngularVelocity`] zero after for a dead
 /// stop. Missing bodies are skipped, same as impulses.
 #[derive(EntityEvent, Clone, Copy, Debug)]
 pub struct JoltTeleport {
@@ -112,42 +86,36 @@ pub struct JoltAngularForce {
     pub angular_torque: Vec3,
 }
 
-/// Persistent linear velocity, overwritten every tick while present.
-/// Overrules gravity/friction/drag on this axis while attached: for
-/// directly driven bodies (player, platform, hover), not for bodies that
-/// should react naturally. Remove the component to release the body.
+/// Linear velocity, read and written as one: game code writes a drive
+/// request, the crate pushes `Changed` values to Jolt before the step, and
+/// the post-step sync writes the measured result back into the same
+/// component (bypassing change detection, so the writeback never re-drives
+/// itself). The value you read is always the truth: what the sim says the
+/// body is doing right now. A blocked request is forgotten, not retried:
+/// write again (or hold with `set_if_neq`) to keep pushing. Present on
+/// every non-static body from bake, zeroed.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct JoltLinearVelocity {
     pub linear_velocity: Vec3,
 }
 
-/// Persistent angular velocity, overwritten every tick while present.
-/// Same overrule warning as [`JoltLinearVelocity`].
+/// Angular velocity, same unified read/write rule as [`JoltLinearVelocity`].
+/// Kept separate so driving movement never wipes out spin (and vice versa):
+/// each half is added/removed on its own. Present on every non-static body
+/// from bake, zeroed.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct JoltAngularVelocity {
     pub angular_velocity: Vec3,
 }
 
-/// Measured linear velocity, written by the crate every tick after the
-/// physics step. Read-only for game code: never write it, and never drive
-/// from it (the pre-step systems ignore it). Tells what the body is
-/// actually doing, unlike [`JoltLinearVelocity`] which says what you asked
-/// for. Inserted at bake for every non-static body.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct JoltMeasuredLinearVelocity {
-    pub measured_linear_velocity: Vec3,
-}
-
-/// Measured spin, same read-only rule as [`JoltMeasuredLinearVelocity`].
-#[derive(Component, Clone, Copy, Debug)]
-pub struct JoltMeasuredAngularVelocity {
-    pub measured_angular_velocity: Vec3,
-}
-
-/// Target pose for a kinematic body, driven every tick while present.
-/// `MoveKinematic` derives velocity from the delta, so the body shoves
-/// dynamics aside instead of teleporting through them. Set the fields each
-/// frame (sine wave, elevator, patrol) and remove the component to stop.
+/// Per-tick destination for a kinematic body (elevator, moving platform,
+/// sliding door, patrol): any entity with `JoltBody::kinematic`, not just
+/// characters. Write where the body should be this tick and the crate moves
+/// it there with `MoveKinematic`, which derives the velocity from the delta
+/// — so the platform shoves dynamic bodies aside instead of teleporting
+/// through them. Not for teleports (`JoltTeleport` does that) and not for
+/// dynamics (write [`JoltLinearVelocity`] there). Set the fields each frame
+/// while the platform runs; remove the component to stop driving it.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct JoltKinematicTarget {
     pub target_position: Vec3,
@@ -171,22 +139,6 @@ pub fn apply_jolt_impulse(
     );
 }
 
-/// Applies a triggered [`JoltSetVelocity`] to the target entity's Jolt body.
-pub fn apply_jolt_set_velocity(
-    trigger: On<JoltSetVelocity>,
-    body_ids: Query<&JoltBodyId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    let velocity = trigger.event();
-    let Ok(body_id) = body_ids.get(velocity.body_entity) else {
-        return;
-    };
-    physics_world.set_body_velocity(
-        body_id.body_id_raw,
-        velocity.linear_velocity,
-        velocity.angular_velocity,
-    );
-}
 /// Applies a triggered [`JoltTeleport`] to the target entity's Jolt body.
 pub fn apply_jolt_teleport(
     trigger: On<JoltTeleport>,
@@ -338,18 +290,23 @@ pub fn apply_jolt_forces(
 }
 
 
-/// Overwrites velocity every tick for entities carrying
-/// [`JoltLinearVelocity`] and/or [`JoltAngularVelocity`]. Each half only
-/// touches its own axis, so a driven move never wipes out spin. Runs
-/// before the physics step, same as forces.
+/// Pushes `Changed` [`JoltLinearVelocity`] / [`JoltAngularVelocity`] values
+/// to Jolt before the physics step. Change detection is the on-switch:
+/// untouched bodies are never written, so sleep survives and natural motion
+/// stays natural. Drive with `set_if_neq` (or write only when the target
+/// changes): a plain write every frame re-drives every frame, which is the
+/// correct pattern for a motor and the wrong one for a nudge.
 pub fn apply_jolt_driven_velocities(
     velocity_query: Query<
         (
             &JoltBodyId,
-            Option<&JoltLinearVelocity>,
-            Option<&JoltAngularVelocity>,
+            Option<Ref<JoltLinearVelocity>>,
+            Option<Ref<JoltAngularVelocity>>,
         ),
-        Or<(With<JoltLinearVelocity>, With<JoltAngularVelocity>)>,
+        Or<(
+            Changed<JoltLinearVelocity>,
+            Changed<JoltAngularVelocity>,
+        )>,
     >,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {

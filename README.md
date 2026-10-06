@@ -25,7 +25,7 @@ in sync:
 ```rust
 commands.spawn((
     Transform::from_xyz(0.0, 5.0, 0.0), // spawn pose
-    JoltBody::dynamic(0),                // motion + layer + material
+    JoltBody::dynamic(0),                // motion type + collision layer
     JoltShape::sphere(0.5),              // geometry (shared via Arc)
 ));
 ```
@@ -66,36 +66,58 @@ Terrain-sized geometry lives once, not twice.
 | Trigger | Effect |
 |---|---|
 | `JoltImpulse::linear(e, v)` / `.angular(e, v)` | Instant kick, framerate-independent (`impulse / mass = Δv`) |
-| `JoltSetVelocity::linear(e, v)` / `.stop(e)` | Velocity overwrite (zero stops that axis; unlike impulse, zeroes are written, not skipped) |
 | `JoltTeleport { body_entity, target_position, target_rotation }` | Pose move that wakes the body; momentum is preserved unless you overwrite velocity afterwards |
 | `JoltSleep { body_entity }` | Freeze in place. Still solid, wakes on contact |
 | `JoltWake { body_entity }` | Rejoin next step, velocities intact |
 | `JoltSetMotion { body_entity, motion }` | Live static/kinematic/dynamic flip. Static is unwakeable; flips `JoltBody.motion` too, never half-synced |
 
-**Held components** (attach once, write fields per frame, remove to stop):
+There is deliberately no velocity trigger: write `JoltLinearVelocity` /
+`JoltAngularVelocity` and change detection pushes it before the next step
+(see below). Triggers are for things a component can't say — kicks,
+teleports, sleep — not for values you own already.
+
+**Held components** (attach once, remove to stop):
 
 | Component | Effect |
 |---|---|
-| `JoltLinearForce` / `JoltAngularForce` | Continuous push, scaled by dt internally. Use for held shoves |
-| `JoltLinearVelocity` / `JoltAngularVelocity` | Overwrite every tick. Overrules gravity/friction — for driven bodies only, never for natural motion |
-| `JoltKinematicTarget { position, rotation }` | Kinematic pose drive via `MoveKinematic`: Jolt derives velocity so it shoves dynamics aside |
+| `JoltLinearForce` / `JoltAngularForce` | Continuous push, scaled by dt internally. Re-applied every tick while present — use for held shoves |
+| `JoltKinematicTarget { target_position, target_rotation }` | Per-tick destination for a kinematic body — elevator, moving platform, sliding door, patrol. Any entity with `JoltBody::kinematic`, not just characters: write where it should be this tick and the crate moves it there with `MoveKinematic`, deriving velocity from the delta so the platform shoves dynamics aside instead of teleporting through them. Not for teleports (`JoltTeleport` does that), not for dynamics (write velocity there). Set the fields each frame while it runs; remove to stop |
 
-Linear and angular halves are separate components so driving movement never
-wipes out spin. Impulse ≠ one-frame force: forces scale with dt, impulses
-don't.
+Velocity (`JoltLinearVelocity` / `JoltAngularVelocity`) is not in this table
+on purpose: it lives on every non-static body already, and writes are
+one-shot requests gated by change detection — see the next section.
+Impulse ≠ one-frame force: forces scale with dt, impulses don't.
 
-## Reading bodies
+## Velocity: one component, read and write
 
-- `JoltMeasuredLinearVelocity` / `JoltMeasuredAngularVelocity` — written by
-  the crate every tick, **read-only for game code**. Tells what the body is
-  actually doing (vs drive components, which say what you asked for).
-  Inserted at bake for non-static bodies.
+- `JoltLinearVelocity` / `JoltAngularVelocity` — a single component per axis
+  that is both the drive and the readout. Present on every non-static body
+  from bake, zeroed. What you read is always the truth: what the sim says
+  the body is doing right now.
+- **Writing drives, once.** The pre-step system pushes only `Changed`
+  values to Jolt. Untouched bodies are never written, so sleep survives and
+  natural motion stays natural. A blocked request is forgotten, not retried:
+  write again (or hold with `set_if_neq`) to keep pushing.
+- **The writeback doesn't re-drive.** After the step the sync writes the
+  measured result back into the same component, bypassing change detection —
+  so the update never looks like a new drive request. Game code watching
+  `Changed<JoltLinearVelocity>` sees only real writes, never the crate's
+  own readback.
+- Drive with `set_if_neq` (or write only when the target changes). A plain
+  write every frame re-drives every frame: the correct pattern for a motor,
+  the wrong one for a nudge.
+- Never drive from the readback into a fresh write: the stale value fights
+  the sim (set 5 m/s, hit a wall, read 1, drive 1 forever).
+- `body_snapshot(id)` — one-off position + linear + angular read for code
+  that doesn't want the component at all.
+- Linear and angular stay separate components so driving movement never
+  wipes out spin (and vice versa).
+
+## Sleep and observation
+
 - `JoltSleeping` — marker the activation drain maintains. Sync filters it
   out; debug greys it. React with `Added<JoltSleeping>` /
   `Removed<JoltSleeping>` — no polling, no callbacks in the API.
-- `body_snapshot(id)` — one-off position + linear + angular read.
-- Never drive from a measured value back into a drive component: the stale
-  write fights the sim (set 5 m/s, hit a wall, read 1, drive 1 forever).
 
 ## Characters (two kinds, different components)
 

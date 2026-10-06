@@ -2,7 +2,7 @@
 //! tunnels through. Prints both fates and exits.
 
 use bevy::prelude::*;
-use bevy_jolt::{JoltBody, JoltPlugin, JoltSetVelocity, JoltShape};
+use bevy_jolt::{JoltBody, JoltLinearVelocity, JoltPlugin, JoltShape};
 
 const SETTLE_TICKS: u32 = 200;
 const BULLET_SPEED: f32 = 400.0;
@@ -60,17 +60,21 @@ fn watch_ccd_scene(
     let (Some(plain_bullet), Some(ccd_bullet)) = (demo.plain_bullet, demo.ccd_bullet) else {
         return;
     };
-    // Bodies bake a tick after spawn: wait for both ids before firing or
-    // the one-shot velocity is silently skipped.
+    // Bodies bake a tick after spawn: wait for both ids so the drive write
+    // lands after bake (bake zeroes the component, an earlier write would
+    // be overwritten).
     if body_ids.get(plain_bullet).is_err() || body_ids.get(ccd_bullet).is_err() {
         return;
     }
     if !demo.fired {
-        commands.trigger(JoltSetVelocity::linear(
-            plain_bullet,
-            Vec3::X * BULLET_SPEED,
-        ));
-        commands.trigger(JoltSetVelocity::linear(ccd_bullet, Vec3::X * BULLET_SPEED));
+        // One-shot drive through the unified component: the write lands
+        // before the next step, then the body coasts (change detection only
+        // pushes fresh writes, so nothing re-drives it).
+        for bullet in [plain_bullet, ccd_bullet] {
+            commands.entity(bullet).insert(JoltLinearVelocity {
+                linear_velocity: Vec3::X * BULLET_SPEED,
+            });
+        }
         demo.fired = true;
         return;
     }
