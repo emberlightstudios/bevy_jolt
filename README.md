@@ -69,7 +69,7 @@ Terrain-sized geometry lives once, not twice.
 | `JoltTeleport { body_entity, target_position, target_rotation }` | Pose move that wakes the body; momentum is preserved unless you overwrite velocity afterwards |
 | `JoltSleep { body_entity }` | Freeze in place. Still solid, wakes on contact |
 | `JoltWake { body_entity }` | Rejoin next step, velocities intact |
-| `JoltSetMotion { body_entity, motion }` | Live static/kinematic/dynamic flip. Static is unwakeable; flips `JoltBody.motion` too, never half-synced |
+| `JoltSetMotion { body_entity, motion }` | Sets how a body moves while the game runs: static (solid ground, sleeps forever), kinematic (you drive it via `JoltKinematicTarget`), dynamic (physics moves it). Updates `JoltBody.motion` in the same call so both sides agree. Only setting back to kinematic/dynamic wakes a staticked body — `JoltWake` alone won't |
 
 There is deliberately no velocity trigger: write `JoltLinearVelocity` /
 `JoltAngularVelocity` and change detection pushes it before the next step

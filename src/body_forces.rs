@@ -172,9 +172,12 @@ pub struct JoltWake {
     pub body_entity: Entity,
 }
 
-/// One-shot motion-type flip: static is solid and unwakeable (settled props),
-/// back to dynamic/kinematic rejoins awake. Flips the entity's [`JoltBody`]
-/// too, so Bevy-side reads never disagree with Jolt.
+/// One-shot motion-type setter: changes how a body moves while the game runs
+/// (frozen statue to falling rock, platform to solid ground) without
+/// despawning it. Setting static also sleeps the body permanently: only
+/// setting back to kinematic/dynamic rejoins the sim, `JoltWake` alone won't
+/// do it. Updates the entity's [`JoltBody`] in the same call, so Bevy-side
+/// reads never disagree with Jolt.
 #[derive(EntityEvent, Clone, Copy, Debug)]
 pub struct JoltSetMotion {
     #[event_target]
