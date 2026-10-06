@@ -1,10 +1,10 @@
-// Sleep/wake + motion-type triggers: a falling ball freezes on sleep,
-// resumes on wake, goes unwakeable on a static flip, and rejoins on flip
-// back. Run single-threaded (`--test-threads=1`): parallel `JoltWorld`s
-// crash on the shared job plumbing (see joint_lifecycle.rs).
+// Sleep/wake triggers + motion component: a falling ball freezes on sleep,
+// resumes on wake, goes unwakeable on a static motion write, and rejoins on
+// writing back. Run single-threaded (`--test-threads=1`): parallel
+// `JoltWorld`s crash on the shared job plumbing (see joint_lifecycle.rs).
 use bevy::prelude::*;
 use bevy_jolt::{
-    JoltBody, JoltMotion, JoltPhysicsWorld, JoltPlugin, JoltSetMotion, JoltShape, JoltSleep,
+    JoltBody, JoltMotion, JoltPhysicsWorld, JoltPlugin, JoltShape, JoltSleep,
     JoltSleeping, JoltStep, JoltWake,
 };
 
@@ -87,10 +87,10 @@ fn static_flip_sticks_and_flips_back() {
     for _ in 0..10 {
         tick(&mut app);
     }
-    app.world_mut().trigger(JoltSetMotion {
-        body_entity: ball,
-        motion: JoltMotion::Static,
-    });
+    app.world_mut()
+        .get_mut::<JoltBody>(ball)
+        .expect("ball exists")
+        .motion = JoltMotion::Static;
     for _ in 0..10 {
         tick(&mut app);
     }
@@ -107,10 +107,10 @@ fn static_flip_sticks_and_flips_back() {
         JoltMotion::Static,
         "entity motion should agree with Jolt after the flip"
     );
-    app.world_mut().trigger(JoltSetMotion {
-        body_entity: ball,
-        motion: JoltMotion::Dynamic,
-    });
+    app.world_mut()
+        .get_mut::<JoltBody>(ball)
+        .expect("ball exists")
+        .motion = JoltMotion::Dynamic;
     for _ in 0..10 {
         tick(&mut app);
     }

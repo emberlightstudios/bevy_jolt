@@ -3,7 +3,7 @@
 //! The solver itself runs in C++ on Jolt's ThreadPool job system (SIMD stays
 //! on via the `jolt_sys` build). This type only owns the world pointer.
 
-use crate::body_sync::{JoltBody, JoltMotion};
+use crate::body_sync::JoltMotion;
 use crate::spatial_queries::RayHit;
 use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
@@ -1926,8 +1926,8 @@ impl JoltWorld {
     }
 
     /// Freezes a body where it stands: still solid, still in the broadphase,
-    /// wakes on contact. For dormant crowds, not forever-settled props (use
-    /// [`Self::set_body_motion`] to static for those).
+    /// wakes on contact. For dormant crowds, not forever-settled props (set
+    /// `JoltBody.motion` to static for those).
     pub fn sleep_body(&mut self, body_id_raw: u32) {
         unsafe { bjolt_sleep_body(self.world_ptr, body_id_raw) }
     }
@@ -1939,23 +1939,16 @@ impl JoltWorld {
     }
 
     /// Live motion-type flip: static is solid and unwakeable, kinematic and
-    /// dynamic rejoin awake with velocities intact. Also updates the
-    /// entity's [`JoltBody`] motion so Bevy-side reads agree with Jolt.
-    /// Takes `&mut JoltBody` directly: one trigger call flips both sides,
-    /// never half-synced.
-    pub fn set_body_motion(
-        &mut self,
-        body_id_raw: u32,
-        body_motion: &mut JoltBody,
-        motion: JoltMotion,
-    ) {
+    /// dynamic rejoin awake with velocities intact. Reads `JoltBody.motion`,
+    /// which is the source of truth — the sync pushes `Changed` values here
+    /// before the step.
+    pub fn set_body_motion(&mut self, body_id_raw: u32, motion: JoltMotion) {
         let motion_code = match motion {
             JoltMotion::Static => 0,
             JoltMotion::Kinematic => 1,
             JoltMotion::Dynamic => 2,
         };
         unsafe { bjolt_set_motion_type(self.world_ptr, body_id_raw, motion_code) }
-        body_motion.motion = motion;
     }
 
     /// Live gravity multiplier for one body (1 = normal). Reads the motion

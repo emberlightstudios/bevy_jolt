@@ -63,18 +63,21 @@ Terrain-sized geometry lives once, not twice.
 
 **Fire-and-forget triggers** (no archetype churn, missing bodies skipped):
 
-| Trigger | Effect |
-|---|---|
-| `JoltImpulse::linear(e, v)` / `.angular(e, v)` | Instant kick, framerate-independent (`impulse / mass = Δv`) |
-| `JoltTeleport { body_entity, target_position, target_rotation }` | Pose move that wakes the body; momentum is preserved unless you overwrite velocity afterwards |
 | `JoltSleep { body_entity }` | Freeze in place. Still solid, wakes on contact |
 | `JoltWake { body_entity }` | Rejoin next step, velocities intact |
-| `JoltSetMotion { body_entity, motion }` | Sets how a body moves while the game runs: static (solid ground, sleeps forever), kinematic (you drive it via `JoltKinematicTarget`), dynamic (physics moves it). Updates `JoltBody.motion` in the same call so both sides agree. Only setting back to kinematic/dynamic wakes a staticked body — `JoltWake` alone won't |
+
+Motion type (`JoltBody.motion`) is a plain component write — no trigger.
+Static is solid ground that sleeps forever, kinematic is driven by you via
+`JoltKinematicTarget`, dynamic is moved by physics. Write it in `FixedUpdate`
+and the sync at the start of the next `JoltStep` pushes it to Jolt before the
+sim steps. Only writing back to kinematic/dynamic wakes a staticked body —
+`JoltWake` alone won't.
 
 There is deliberately no velocity trigger: write `JoltLinearVelocity` /
-`JoltAngularVelocity` and change detection pushes it before the next step
-(see below). Triggers are for things a component can't say — kicks,
-teleports, sleep — not for values you own already.
+`JoltAngularVelocity` and change detection pushes it at the start of the next
+`JoltStep`, before the sim steps (see below). Triggers are for things a
+component can't say — kicks, teleports, sleep — not for values you own
+already.
 
 **Held components** (attach once, remove to stop):
 
@@ -94,10 +97,11 @@ Impulse ≠ one-frame force: forces scale with dt, impulses don't.
   that is both the drive and the readout. Present on every non-static body
   from bake, zeroed. What you read is always the truth: what the sim says
   the body is doing right now.
-- **Writing drives, once.** The pre-step system pushes only `Changed`
-  values to Jolt. Untouched bodies are never written, so sleep survives and
-  natural motion stays natural. A blocked request is forgotten, not retried:
-  write again (or hold with `set_if_neq`) to keep pushing.
+- **Writing drives, once.** At the start of the next `JoltStep`, before the
+  sim steps, the pre-step system pushes only `Changed` values to Jolt.
+  Untouched bodies are never written, so sleep survives and natural motion
+  stays natural. A blocked request is forgotten, not retried: write again (or
+  hold with `set_if_neq`) to keep pushing.
 - **The writeback doesn't re-drive.** After the step the sync writes the
   measured result back into the same component, bypassing change detection —
   so the update never looks like a new drive request. Game code watching

@@ -163,7 +163,6 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::body_forces::apply_jolt_teleport);
         app.add_observer(crate::body_forces::apply_jolt_sleep);
         app.add_observer(crate::body_forces::apply_jolt_wake);
-        app.add_observer(crate::body_forces::apply_jolt_set_motion);
         app.add_observer(crate::character::apply_jolt_character_teleport);
         app.add_observer(crate::character::apply_jolt_rigid_character_impulse);
         app.add_observer(crate::character::apply_jolt_rigid_character_push);
@@ -189,15 +188,13 @@ impl Plugin for JoltPlugin {
                 crate::vehicle::create_jolt_vehicles,
             ),
         );
-        // Pre-step drives: forces, driven velocities, kinematic targets,
-        // buoyancy, characters, sensors. One-shot impulses and velocity sets
-        // need no scheduling: their observers fire the moment the trigger
-        // fires.
+        // Pre-step drives: forces, kinematic targets, buoyancy, characters,
+        // sensors. One-shot impulses and teleports need no scheduling: their
+        // observers fire the moment the trigger fires.
         app.add_systems(
             FixedUpdate,
             (
                 crate::body_forces::apply_jolt_forces,
-                crate::body_forces::apply_jolt_driven_velocities,
                 crate::body_forces::apply_jolt_kinematic_targets,
                 crate::buoyancy::apply_buoyancy,
                 crate::character::step_jolt_characters,
@@ -214,6 +211,17 @@ impl Plugin for JoltPlugin {
             .resource_mut::<FixedMainScheduleOrder>()
             .insert_after(FixedUpdate, JoltStep);
         app.add_systems(JoltStep, step_physics_world);
+        // Pre-step pushes read `Changed` components, so they run first in
+        // `JoltStep`: every `FixedUpdate` write has landed by then, no matter
+        // what order game code ran in.
+        app.add_systems(
+            JoltStep,
+            (
+                crate::body_forces::sync_jolt_motion,
+                crate::body_forces::apply_jolt_driven_velocities,
+            )
+                .before(step_physics_world),
+        );
         // Post-step readbacks share the schedule, ordered after the step.
         app.add_systems(
             JoltStep,

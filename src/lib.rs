@@ -19,7 +19,7 @@ mod spatial_queries;
 mod vehicle;
 pub use crate::body_forces::{
     JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltKinematicTarget, JoltLinearForce,
-    JoltLinearVelocity, JoltSetMotion, JoltSleep, JoltSleeping, JoltTeleport, JoltWake,
+    JoltLinearVelocity, JoltSleep, JoltSleeping, JoltTeleport, JoltWake,
 };
 pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, PreviousBodyTransform};
 pub use crate::buoyancy::{JoltBuoyant, JoltWater};
@@ -61,7 +61,7 @@ pub use jolt_sys::MAX_OBJECT_LAYERS;
 pub mod prelude {
     pub use crate::body_forces::{
         JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltKinematicTarget,
-        JoltLinearForce, JoltLinearVelocity, JoltSetMotion, JoltSleep, JoltSleeping,
+        JoltLinearForce, JoltLinearVelocity, JoltSleep, JoltSleeping,
         JoltTeleport, JoltWake,
     };
     pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape};

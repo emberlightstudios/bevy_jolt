@@ -16,7 +16,7 @@
 
 use bevy::prelude::*;
 
-use crate::body_sync::JoltBodyId;
+use crate::body_sync::{JoltBody, JoltBodyId};
 use crate::plugin::JoltPhysicsWorld;
 
 /// One-shot linear + angular impulse at center of mass. Zero halves are
@@ -172,19 +172,6 @@ pub struct JoltWake {
     pub body_entity: Entity,
 }
 
-/// One-shot motion-type setter: changes how a body moves while the game runs
-/// (frozen statue to falling rock, platform to solid ground) without
-/// despawning it. Setting static also sleeps the body permanently: only
-/// setting back to kinematic/dynamic rejoins the sim, `JoltWake` alone won't
-/// do it. Updates the entity's [`JoltBody`] in the same call, so Bevy-side
-/// reads never disagree with Jolt.
-#[derive(EntityEvent, Clone, Copy, Debug)]
-pub struct JoltSetMotion {
-    #[event_target]
-    pub body_entity: Entity,
-    pub motion: crate::body_sync::JoltMotion,
-}
-
 /// Applies a triggered [`JoltSleep`] to the target entity's Jolt body.
 pub fn apply_jolt_sleep(
     trigger: On<JoltSleep>,
@@ -211,18 +198,19 @@ pub fn apply_jolt_wake(
     physics_world.wake_body(body_id.body_id_raw);
 }
 
-/// Applies a triggered [`JoltSetMotion`] to the target entity's Jolt body
-/// and its [`JoltBody`]: one call, never half-synced.
-pub fn apply_jolt_set_motion(
-    trigger: On<JoltSetMotion>,
-    mut body_query: Query<(&JoltBodyId, &mut crate::body_sync::JoltBody)>,
+/// Pushes `Changed` [`JoltBody`] motion values to Jolt. Runs first in
+/// `JoltStep`, before the sim steps: every `FixedUpdate` write has landed by
+/// then, so a direct `body.motion` write takes effect the same tick — no
+/// frame delay, no trigger, no ordering needed. Setting static also sleeps
+/// the body permanently: only setting back to kinematic/dynamic rejoins the
+/// sim, `JoltWake` alone won't do it.
+pub fn sync_jolt_motion(
+    motion_query: Query<(&JoltBodyId, Ref<JoltBody>), Changed<JoltBody>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    let set_motion = trigger.event();
-    let Ok((body_id, mut body)) = body_query.get_mut(set_motion.body_entity) else {
-        return;
-    };
-    physics_world.set_body_motion(body_id.body_id_raw, &mut body, set_motion.motion);
+    for (body_id, body) in &motion_query {
+        physics_world.set_body_motion(body_id.body_id_raw, body.motion);
+    }
 }
 
 /// Marker on sleeping bodies, added/removed by the activation drain. The
@@ -294,11 +282,13 @@ pub fn apply_jolt_forces(
 
 
 /// Pushes `Changed` [`JoltLinearVelocity`] / [`JoltAngularVelocity`] values
-/// to Jolt before the physics step. Change detection is the on-switch:
-/// untouched bodies are never written, so sleep survives and natural motion
-/// stays natural. Drive with `set_if_neq` (or write only when the target
-/// changes): a plain write every frame re-drives every frame, which is the
-/// correct pattern for a motor and the wrong one for a nudge.
+/// to Jolt. Runs first in `JoltStep`, before the sim steps, so every
+/// `FixedUpdate` write has landed no matter what order game code ran in.
+/// Change detection is the on-switch: untouched bodies are never written, so
+/// sleep survives and natural motion stays natural. Drive with `set_if_neq`
+/// (or write only when the target changes): a plain write every frame
+/// re-drives every frame, which is the correct pattern for a motor and the
+/// wrong one for a nudge.
 pub fn apply_jolt_driven_velocities(
     velocity_query: Query<
         (
