@@ -8,13 +8,13 @@ crate owns world lifetime, the safe body API, and the Bevy schedule wiring.
 Put game logic in `PreFixedUpdate`, `FixedUpdate`, and/or `PostFixedUpdate`.
 The crate guarantees this ordering every tick:
 
-1. Your `FixedUpdate` systems all finish first. Nothing physics-side runs
-   yet — no change detection, no sim step, no readback.
+1. Your `FixedUpdate` systems are guaranteed to finish before the simulation steps. Nothing physics-side runs
+   yet.
 2. `JoltStep` runs next: change-detection pushes first (motion, driven
    velocities), then the sim steps, then all readbacks (poses, measured
    velocities, contacts, sleep markers).
-3. Your `PostFixedUpdate` systems run last. The step and every readback are
-   done — what you read is this tick's result.
+3. Your `PostFixedUpdate` systems run last. The step and every readback are already
+   done, so what you read is this tick's result.
 
 So: write drives in `FixedUpdate`, read results in `PostFixedUpdate` (or
 later). No manual ordering needed — the schedules already run in that
