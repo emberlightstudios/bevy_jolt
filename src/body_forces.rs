@@ -86,6 +86,42 @@ pub struct JoltAngularForce {
     pub angular_torque: Vec3,
 }
 
+/// Linear + angular velocity bleed, read by the pre-step push like sleep and
+/// motion: add or rewrite the component and `Changed` detection carries it
+/// into Jolt before the next step. 0 is Jolt's default glide; small values
+/// (0.1) calm jitter, large ones (3+) still joint crawl in seconds. Ragdolls
+/// hold still this way instead of micro-sliding on joint motion.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub struct JoltDamping {
+    pub linear_damping: f32,
+    pub angular_damping: f32,
+}
+
+impl JoltDamping {
+    pub const fn new(linear_damping: f32, angular_damping: f32) -> Self {
+        Self {
+            linear_damping,
+            angular_damping,
+        }
+    }
+}
+
+/// Pushes `Changed` [`JoltDamping`] values to Jolt. Write the fields (or add
+/// the component to a live body) and the pre-step push applies them before
+/// the next step — same `Changed` pattern as [`sync_jolt_sleep`].
+pub fn sync_jolt_damping(
+    damping_query: Query<(&JoltBodyId, Ref<JoltDamping>), Changed<JoltDamping>>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (body_id, damping) in &damping_query {
+        physics_world.set_body_damping(
+            body_id.body_id_raw,
+            damping.linear_damping,
+            damping.angular_damping,
+        );
+    }
+}
+
 /// Linear velocity, read and written as one: game code writes a drive
 /// request, the crate pushes `Changed` values to Jolt before the step, and
 /// the post-step sync writes the measured result back into the same

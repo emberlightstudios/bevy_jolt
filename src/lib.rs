@@ -18,8 +18,8 @@ mod soft_body;
 mod spatial_queries;
 mod vehicle;
 pub use crate::body_forces::{
-    JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltKinematicTarget, JoltLinearForce,
-    JoltLinearVelocity, JoltSleeping, JoltTeleport,
+    JoltAngularForce, JoltAngularVelocity, JoltDamping, JoltImpulse, JoltKinematicTarget,
+    JoltLinearForce, JoltLinearVelocity, JoltSleeping, JoltTeleport,
 };
 pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, PreviousBodyTransform};
 pub use crate::buoyancy::{JoltBuoyant, JoltWater};
@@ -60,7 +60,7 @@ pub use jolt_sys::MAX_OBJECT_LAYERS;
 /// spatial queries.
 pub mod prelude {
     pub use crate::body_forces::{
-        JoltAngularForce, JoltAngularVelocity, JoltImpulse, JoltKinematicTarget,
+        JoltAngularForce, JoltAngularVelocity, JoltDamping, JoltImpulse, JoltKinematicTarget,
         JoltLinearForce, JoltLinearVelocity, JoltSleeping,
         JoltTeleport,
     };

@@ -255,11 +255,16 @@ pub struct PreviousBodyTransform {
 pub fn spawn_jolt_body(
     trigger: On<Add, JoltBody>,
     mut commands: Commands,
-    body_query: Query<(&JoltBody, &JoltShape, &Transform)>,
+    body_query: Query<(
+        &JoltBody,
+        &JoltShape,
+        &Transform,
+        Option<&crate::body_forces::JoltDamping>,
+    )>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     let trigger_entity = trigger.event().entity;
-    let Ok((body, shape, spawn_transform)) = body_query.get(trigger_entity) else {
+    let Ok((body, shape, spawn_transform, spawn_damping)) = body_query.get(trigger_entity) else {
         panic!(
             "JoltBody added without a JoltShape + Transform on {:?}: shape and spawn pose are required",
             trigger_entity
@@ -410,6 +415,16 @@ pub fn spawn_jolt_body(
     }
     if body.use_ccd {
         physics_world.set_body_ccd(body_id_raw, true);
+    }
+    // Damping rides the same path: creation takes no damping args, so apply
+    // the spawn component here when present. Later writes flow through the
+    // `Changed` push in `sync_jolt_damping`.
+    if let Some(spawn_damping) = spawn_damping {
+        physics_world.set_body_damping(
+            body_id_raw,
+            spawn_damping.linear_damping,
+            spawn_damping.angular_damping,
+        );
     }
     let mut baked_entity = commands.entity(trigger_entity);
     baked_entity.insert((

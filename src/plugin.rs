@@ -217,6 +217,7 @@ impl Plugin for JoltPlugin {
             (
                 crate::body_forces::sync_jolt_motion,
                 crate::body_forces::sync_jolt_sleep,
+                crate::body_forces::sync_jolt_damping,
                 crate::body_forces::apply_jolt_driven_velocities,
             )
                 .before(step_physics_world),
