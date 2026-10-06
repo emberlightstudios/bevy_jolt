@@ -280,6 +280,7 @@ pub struct JoltWorld {
     body_shapes: std::collections::HashMap<u32, PhysicsShape>,
     character_positions: std::collections::HashMap<u32, (Vec3, crate::character::JoltCharacterGround)>,
     character_shapes: std::collections::HashMap<u32, (f32, f32)>,
+    rigid_character_shapes: std::collections::HashMap<u32, (f32, f32)>,
 }
 
 impl JoltWorld {
@@ -301,12 +302,19 @@ impl JoltWorld {
             body_shapes: std::collections::HashMap::new(),
             character_positions: std::collections::HashMap::new(),
             character_shapes: std::collections::HashMap::new(),
+            rigid_character_shapes: std::collections::HashMap::new(),
         }
     }
 
     /// Every known body and its outline recipe, for the debug visualizer.
     pub fn body_shapes(&self) -> &std::collections::HashMap<u32, PhysicsShape> {
         &self.body_shapes
+    }
+
+    /// Rigid character capsules for the debug visualizer: Jolt owns the
+    /// real body; this is just the outline recipe filed at creation.
+    pub fn rigid_character_shapes(&self) -> &std::collections::HashMap<u32, (f32, f32)> {
+        &self.rigid_character_shapes
     }
 
     /// Registers an outline recipe for a body created outside the shape
@@ -2273,7 +2281,7 @@ impl JoltWorld {
         allowed_dofs: CharacterDofs,
         user_data: u64,
     ) -> u32 {
-        unsafe {
+        let character_id_raw = unsafe {
             bjolt_rigid_character_create(
                 self.world_ptr,
                 character_position.x,
@@ -2292,12 +2300,16 @@ impl JoltWorld {
                 allowed_dofs.ffi_dofs(),
                 user_data,
             )
-        }
+        };
+        self.rigid_character_shapes
+            .insert(character_id_raw, (capsule_half_height, capsule_radius));
+        character_id_raw
     }
 
     /// Destroys a rigid character (removes its body first).
     pub fn rigid_character_destroy(&mut self, character_id_raw: u32) {
         unsafe { bjolt_rigid_character_destroy(self.world_ptr, character_id_raw) }
+        self.rigid_character_shapes.remove(&character_id_raw);
     }
 
     /// Refreshes ground state after the physics step. Call every tick

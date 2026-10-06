@@ -32,6 +32,7 @@ impl Plugin for JoltDebugPlugin {
 fn draw_physics_shapes(
     physics_world: Res<JoltPhysicsWorld>,
     character_query: Query<(&crate::character::JoltCharacter, &Transform)>,
+    rigid_query: Query<(&crate::character::JoltRigidCharacterId, &Transform)>,
     mut gizmos: Gizmos,
 ) {
 
@@ -143,18 +144,36 @@ fn draw_physics_shapes(
         }
     }
     // Characters are not rigid bodies, so they never appear in the body
-    // table. Jolt positions the capsule base at the entity origin: center
-    // the outline half-height + radius above it. Same outline style as a
-    // dynamic body capsule.
+    // table. The pose already carries the capsule center (center-of-mass
+    // position): draw here with no lift, same as the rigid side.
     for (character, character_pose) in &character_query {
-        let capsule_center = character_pose.translation
-            + character_pose.rotation * Vec3::Y * (character.capsule_half_height + character.capsule_radius);
         draw_capsule_outline(
             &mut gizmos,
-            capsule_center,
+            character_pose.translation,
             character_pose.rotation,
             character.capsule_half_height,
             character.capsule_radius,
+            DYNAMIC_BODY_COLOR,
+        );
+    }
+    // Rigid characters own a real simulated body, but it never enters the
+    // body table — draw their filed capsule at the live entity pose.
+    for (rigid_id, rigid_pose) in &rigid_query {
+        let Some((capsule_half_height, capsule_radius)) = physics_world
+            .rigid_character_shapes()
+            .get(&rigid_id.character_id_raw)
+        else {
+            continue;
+        };
+        // Rigid GetPosition returns the body origin (capsule center), not
+        // the feet like the virtual side: draw here with no lift.
+        let capsule_center = rigid_pose.translation;
+        draw_capsule_outline(
+            &mut gizmos,
+            capsule_center,
+            rigid_pose.rotation,
+            *capsule_half_height,
+            *capsule_radius,
             DYNAMIC_BODY_COLOR,
         );
     }
@@ -231,35 +250,67 @@ fn draw_capsule_outline(
     capsule_radius: f32,
     debug_color: Color,
 ) {
-    // Gizmos has no capsule primitive, so build one from lines: two end-cap
-    // spheres (cheap: three rings each) plus four side rails.
+    // One pill, not two balls: two silhouette rails per side plane plus
+    // half-ring caps that continue the rails over each pole. Full rings
+    // would read as separate spheres; arcs keep the single-capsule read.
+    // 8 segments per half ring balances smoothness against line count.
+    const CAP_SEGMENTS: u32 = 8;
     let up_direction = capsule_rotation * Vec3::Y;
-    let side_x = capsule_rotation * Vec3::X;
-    let side_z = capsule_rotation * Vec3::Z;
     let top_cap_center = capsule_center + up_direction * capsule_half_height;
     let bottom_cap_center = capsule_center - up_direction * capsule_half_height;
 
-    for ring_rotation in [
-        capsule_rotation,
-        capsule_rotation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
-        capsule_rotation * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
-    ] {
-        gizmos.circle(
-            Isometry3d::new(top_cap_center, ring_rotation),
-            capsule_radius,
-            debug_color,
-        );
-        gizmos.circle(
-            Isometry3d::new(bottom_cap_center, ring_rotation),
-            capsule_radius,
-            debug_color,
-        );
+    for side_plane in [0.0, std::f32::consts::FRAC_PI_2] {
+        let plane_rotation = capsule_rotation * Quat::from_rotation_y(side_plane);
+        let rail_direction = plane_rotation * Vec3::X;
+        for rail_sign in [1.0, -1.0] {
+            let rail_offset = rail_direction * (rail_sign * capsule_radius);
+            gizmos.line(
+                bottom_cap_center + rail_offset,
+                top_cap_center + rail_offset,
+                debug_color,
+            );
+            draw_cap_arc(
+                gizmos,
+                top_cap_center,
+                up_direction,
+                rail_offset,
+                capsule_radius,
+                debug_color,
+            );
+            draw_cap_arc(
+                gizmos,
+                bottom_cap_center,
+                -up_direction,
+                rail_offset,
+                capsule_radius,
+                debug_color,
+            );
+        }
     }
+}
 
-    for side_offset in [side_x, -side_x, side_z, -side_z] {
-        let rail_bottom = bottom_cap_center + side_offset * capsule_radius;
-        let rail_top = top_cap_center + side_offset * capsule_radius;
-        gizmos.line(rail_bottom, rail_top, debug_color);
+/// One quarter-to-half arc over a capsule pole: walks from a rail end
+/// around to the pole tip so the cap continues the rail instead of
+/// closing a separate ring.
+fn draw_cap_arc(
+    gizmos: &mut Gizmos,
+    cap_center: Vec3,
+    pole_direction: Vec3,
+    rail_offset: Vec3,
+    capsule_radius: f32,
+    debug_color: Color,
+) {
+    const CAP_SEGMENTS: u32 = 8;
+    let rail_direction = rail_offset.normalize_or_zero();
+    let mut arc_previous = cap_center + rail_offset;
+    for cap_step in 1..=CAP_SEGMENTS {
+        let arc_angle =
+            cap_step as f32 / CAP_SEGMENTS as f32 * std::f32::consts::FRAC_PI_2;
+        let arc_point = cap_center
+            + rail_direction * (arc_angle.cos() * capsule_radius)
+            + pole_direction * (arc_angle.sin() * capsule_radius);
+        gizmos.line(arc_previous, arc_point, debug_color);
+        arc_previous = arc_point;
     }
 }
 
@@ -374,32 +425,35 @@ fn draw_tapered_capsule_outline(
     bottom_radius: f32,
     debug_color: Color,
 ) {
-    // Two different end-cap spheres (same 3-ring style as capsules) with
-    // rails that slope between the two radii.
+    // Same pill read as the plain capsule: sloped rails plus cap arcs in
+    // each end's own radius.
     let up_direction = tapered_rotation * Vec3::Y;
-    let side_x = tapered_rotation * Vec3::X;
-    let side_z = tapered_rotation * Vec3::Z;
     let top_cap_center = tapered_center + up_direction * tapered_half_height;
     let bottom_cap_center = tapered_center - up_direction * tapered_half_height;
-    for ring_rotation in [
-        tapered_rotation,
-        tapered_rotation * Quat::from_rotation_x(core::f32::consts::FRAC_PI_2),
-        tapered_rotation * Quat::from_rotation_z(core::f32::consts::FRAC_PI_2),
-    ] {
-        gizmos.circle(
-            Isometry3d::new(top_cap_center, ring_rotation),
-            top_radius,
-            debug_color,
-        );
-        gizmos.circle(
-            Isometry3d::new(bottom_cap_center, ring_rotation),
-            bottom_radius,
-            debug_color,
-        );
-    }
-    for side_offset in [side_x, -side_x, side_z, -side_z] {
-        let rail_bottom = bottom_cap_center + side_offset * bottom_radius;
-        let rail_top = top_cap_center + side_offset * top_radius;
-        gizmos.line(rail_bottom, rail_top, debug_color);
+
+    for side_plane in [0.0, std::f32::consts::FRAC_PI_2] {
+        let plane_rotation = tapered_rotation * Quat::from_rotation_y(side_plane);
+        let rail_direction = plane_rotation * Vec3::X;
+        for rail_sign in [1.0, -1.0] {
+            let top_offset = rail_direction * (rail_sign * top_radius);
+            let bottom_offset = rail_direction * (rail_sign * bottom_radius);
+            gizmos.line(bottom_cap_center + bottom_offset, top_cap_center + top_offset, debug_color);
+            draw_cap_arc(
+                gizmos,
+                top_cap_center,
+                up_direction,
+                top_offset,
+                top_radius,
+                debug_color,
+            );
+            draw_cap_arc(
+                gizmos,
+                bottom_cap_center,
+                -up_direction,
+                bottom_offset,
+                bottom_radius,
+                debug_color,
+            );
+        }
     }
 }

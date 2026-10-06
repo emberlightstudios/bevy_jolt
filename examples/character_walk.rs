@@ -31,11 +31,10 @@ struct CharacterDemo {
 fn spawn_character_scene(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(-6.0, 3.0, 9.0).looking_at(Vec3::new(-6.0, 1.0, 0.0), Vec3::Y),
+        Transform::from_xyz(-6.0, 3.0, 12.0).looking_at(Vec3::new(-6.0, 1.5, 1.5), Vec3::Y),
     ));
     commands.spawn((
         DirectionalLight::default(),
-        Transform::from_xyz(3.0, 8.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
     // Floor plus a two-step staircase (0.2 m rises) the walker climbs.
     commands.spawn((
@@ -48,10 +47,10 @@ fn spawn_character_scene(mut commands: Commands) {
             Transform::from_xyz(
                 3.0 + stair_index as f32 * 1.0,
                 stair_top - 0.5,
-                0.0,
+                1.5,
             ),
             JoltBody::fixed(0),
-            JoltShape::box_shape(Vec3::new(0.5, 0.5, 2.0)),
+            JoltShape::box_shape(Vec3::new(0.5, 0.5, 4.0)),
         ));
     }
     let start_height = 1.0;
@@ -117,10 +116,13 @@ fn drive_character(
     rigid_velocity.linear_velocity = Vec3::new(WALK_SPEED, -2.0, 0.0);
     rigid_velocity.angular_velocity = Vec3::ZERO;
     // Side-on tracking shot: the camera rides along with the walker.
+    // Pulled back and aimed between the lanes so both walkers stay framed.
     for mut camera_pose in &mut camera_query {
         *camera_pose =
-            Transform::from_xyz(walker_pose.translation.x, 3.0, 9.0)
-                .looking_at(walker_pose.translation + Vec3::new(0.0, 0.5, 0.0), Vec3::Y);
+            Transform::from_xyz(walker_pose.translation.x, 3.0, 12.0).looking_at(
+                Vec3::new(walker_pose.translation.x, walker_pose.translation.y + 0.5, 1.5),
+                Vec3::Y,
+            );
     }
     if *tick_count % 60 == 0 {
         println!(
