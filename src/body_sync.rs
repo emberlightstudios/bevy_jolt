@@ -139,31 +139,34 @@ impl JoltBody {
 
 /// Pure collision geometry for one physics body. Add alongside [`JoltBody`].
 /// Mirrors Jolt's `Shape`: immutable geometry with no motion of its own.
-/// `Clone` (not `Copy`): compounds own a heap part list.
+/// Shared ownership: the component files the same allocation the debug
+/// table reads, so terrain-sized geometry lives once, not twice.
 #[derive(Component, Clone, Debug)]
-pub struct JoltShape(pub PhysicsShape);
+pub struct JoltShape(pub std::sync::Arc<PhysicsShape>);
 
 impl JoltShape {
     pub fn box_shape(half_extents: Vec3) -> Self {
-        Self(PhysicsShape::Box { half_extents })
+        Self(std::sync::Arc::new(PhysicsShape::Box { half_extents }))
     }
 
     pub fn sphere(sphere_radius: f32) -> Self {
-        Self(PhysicsShape::Sphere { sphere_radius })
+        Self(std::sync::Arc::new(PhysicsShape::Sphere {
+            sphere_radius,
+        }))
     }
 
     pub fn capsule(capsule_half_height: f32, capsule_radius: f32) -> Self {
-        Self(PhysicsShape::Capsule {
+        Self(std::sync::Arc::new(PhysicsShape::Capsule {
             capsule_half_height,
             capsule_radius,
-        })
+        }))
     }
 
     pub fn cylinder(cylinder_half_height: f32, cylinder_radius: f32) -> Self {
-        Self(PhysicsShape::Cylinder {
+        Self(std::sync::Arc::new(PhysicsShape::Cylinder {
             cylinder_half_height,
             cylinder_radius,
-        })
+        }))
     }
 
     pub fn tapered_cylinder(
@@ -171,11 +174,11 @@ impl JoltShape {
         top_radius: f32,
         bottom_radius: f32,
     ) -> Self {
-        Self(PhysicsShape::TaperedCylinder {
+        Self(std::sync::Arc::new(PhysicsShape::TaperedCylinder {
             tapered_half_height,
             top_radius,
             bottom_radius,
-        })
+        }))
     }
 
     pub fn tapered_capsule(
@@ -183,24 +186,52 @@ impl JoltShape {
         top_radius: f32,
         bottom_radius: f32,
     ) -> Self {
-        Self(PhysicsShape::TaperedCapsule {
+        Self(std::sync::Arc::new(PhysicsShape::TaperedCapsule {
             tapered_half_height,
             top_radius,
             bottom_radius,
-        })
+        }))
     }
 
     pub fn plane(surface_normal: Vec3, plane_constant: f32) -> Self {
-        Self(PhysicsShape::Plane {
+        Self(std::sync::Arc::new(PhysicsShape::Plane {
             surface_normal,
             plane_constant,
-        })
+        }))
     }
 
     /// One body from box/sphere/capsule parts (a table = top + legs, a
     /// hammer = head + handle). At most 16 parts; empty rejects at bake.
     pub fn compound(compound_parts: Vec<CompoundPart>) -> Self {
-        Self(PhysicsShape::Compound { compound_parts })
+        Self(std::sync::Arc::new(PhysicsShape::Compound {
+            compound_parts,
+        }))
+    }
+
+    /// Shrink-wrapped convex lump from a point soup. Any motion: dynamics
+    /// tumble it. Rocks, crates, wreckage.
+    pub fn hull(hull_points: Vec<Vec3>) -> Self {
+        Self(std::sync::Arc::new(PhysicsShape::Hull { hull_points }))
+    }
+
+    /// Exact-triangle static scenery. Static only: bake panics otherwise.
+    /// Archways, stairs meshes, rubble.
+    pub fn mesh(mesh_vertices: Vec<Vec3>, mesh_triangles: Vec<[u32; 3]>) -> Self {
+        Self(std::sync::Arc::new(PhysicsShape::Mesh {
+            mesh_vertices,
+            mesh_triangles,
+        }))
+    }
+
+    /// Terrain grid: `grid_width * grid_width` heights, `cell_size` meters
+    /// apart, centered on the spawn. Static only: bake panics otherwise.
+    /// Cheaper than the equivalent mesh at scale.
+    pub fn heightfield(field_heights: Vec<f32>, field_width: u32, field_cell: f32) -> Self {
+        Self(std::sync::Arc::new(PhysicsShape::Heightfield {
+            field_heights,
+            field_width,
+            field_cell,
+        }))
     }
 }
 
@@ -236,7 +267,7 @@ pub fn spawn_jolt_body(
     };
 
     let spawn_position = spawn_transform.translation;
-    let body_id_raw = match &shape.0 {
+    let body_id_raw = match shape.0.as_ref() {
         PhysicsShape::Box { half_extents } => physics_world.create_box(
             *half_extents,
             spawn_position,
@@ -317,7 +348,52 @@ pub fn spawn_jolt_body(
             body.density_kg_per_m3,
             body.gravity_factor,
         ),
+        PhysicsShape::Hull { hull_points } => physics_world.create_hull(
+            hull_points,
+            spawn_position,
+            body.object_layer,
+            body.motion,
+            body.density_kg_per_m3,
+            body.gravity_factor,
+        ),
+        PhysicsShape::Mesh {
+            mesh_vertices,
+            mesh_triangles,
+        } => {
+            assert!(
+                body.motion == JoltMotion::Static,
+                "mesh shapes are static-only, got {:?}",
+                body.motion
+            );
+            physics_world.create_mesh(
+                mesh_vertices,
+                mesh_triangles,
+                spawn_position,
+                body.object_layer,
+            )
+        }
+        PhysicsShape::Heightfield {
+            field_heights,
+            field_width,
+            field_cell,
+        } => {
+            assert!(
+                body.motion == JoltMotion::Static,
+                "heightfields are static-only, got {:?}",
+                body.motion
+            );
+            physics_world.create_heightfield(
+                field_heights,
+                *field_width,
+                *field_cell,
+                spawn_position,
+                body.object_layer,
+            )
+        }
     };
+    // One allocation for component + debug table: the entity keeps its
+    // descriptor, the table shares it.
+    physics_world.file_shape(body_id_raw, std::sync::Arc::clone(&shape.0));
     // Creation bakes identity rotation, so rotate the live body into the
     // spawn pose before the first step. Non-identity only: saves an FFI
     // round-trip for the common unrotated case.
@@ -360,16 +436,20 @@ pub fn spawn_jolt_body(
 /// Copies each body's physics transform into its entity's `Transform` and
 /// remembers the previous tick's pose. Same pass writes the measured
 /// velocities (pose + motion come from one FFI call, so readback costs no
-/// extra round-trip). Runs after the physics step in the same Fixed tick;
-/// the render interpolation blends between the two stored poses.
+/// extra round-trip). Sleeping bodies are filtered out: frozen means frozen,
+/// no FFI for values that cannot change. Runs after the physics step in the
+/// same Fixed tick; the render interpolation blends between the two poses.
 pub fn sync_body_transforms(
-    mut body_query: Query<(
-        &JoltBodyId,
-        &mut Transform,
-        &mut PreviousBodyTransform,
-        Option<&mut crate::body_forces::JoltMeasuredLinearVelocity>,
-        Option<&mut crate::body_forces::JoltMeasuredAngularVelocity>,
-    )>,
+    mut body_query: Query<
+        (
+            &JoltBodyId,
+            &mut Transform,
+            &mut PreviousBodyTransform,
+            Option<&mut crate::body_forces::JoltMeasuredLinearVelocity>,
+            Option<&mut crate::body_forces::JoltMeasuredAngularVelocity>,
+        ),
+        Without<crate::body_forces::JoltSleeping>,
+    >,
     physics_world: Res<JoltPhysicsWorld>,
 ) {
     for (

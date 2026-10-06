@@ -162,6 +162,9 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::body_forces::apply_jolt_impulse);
         app.add_observer(crate::body_forces::apply_jolt_set_velocity);
         app.add_observer(crate::body_forces::apply_jolt_teleport);
+        app.add_observer(crate::body_forces::apply_jolt_sleep);
+        app.add_observer(crate::body_forces::apply_jolt_wake);
+        app.add_observer(crate::body_forces::apply_jolt_set_motion);
         app.add_observer(crate::character::apply_jolt_character_teleport);
         app.add_observer(crate::character::apply_jolt_rigid_character_impulse);
         app.add_observer(crate::character::apply_jolt_rigid_character_push);
@@ -198,8 +201,11 @@ impl Plugin for JoltPlugin {
                 crate::body_forces::apply_jolt_driven_velocities,
                 crate::body_forces::apply_jolt_kinematic_targets,
                 crate::buoyancy::apply_buoyancy,
+                crate::character::step_jolt_characters,
                 crate::character::step_jolt_rigid_characters,
                 crate::contact_events::apply_pending_sensors,
+                crate::joint_sync::apply_jolt_motor_drives,
+                crate::vehicle::apply_jolt_vehicle_drives,
             ),
         );
         // The step runs in its own schedule after FixedUpdate: by the time
@@ -218,6 +224,7 @@ impl Plugin for JoltPlugin {
                 crate::character::sync_rigid_character_transforms,
                 crate::soft_body::sync_soft_body_meshes,
                 crate::contact_events::drain_contact_events,
+                crate::body_forces::sync_sleep_markers,
             )
                 .after(step_physics_world),
         );

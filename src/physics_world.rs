@@ -3,7 +3,7 @@
 //! The solver itself runs in C++ on Jolt's ThreadPool job system (SIMD stays
 //! on via the `jolt_sys` build). This type only owns the world pointer.
 
-use crate::body_sync::JoltMotion;
+use crate::body_sync::{JoltBody, JoltMotion};
 use crate::spatial_queries::RayHit;
 use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
@@ -27,12 +27,15 @@ use jolt_sys::{
     bjolt_create_six_dof, bjolt_create_soft_body, bjolt_create_sphere, bjolt_create_sphere_settings,
     bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
     bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_create_tracked_vehicle,
-    bjolt_create_wheeled_vehicle, bjolt_destroy_shared_settings, bjolt_drain_contact_added,
-    bjolt_drain_contact_removed, bjolt_gravity_factor, bjolt_init, bjolt_move_kinematic,
-    bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_ccd, bjolt_set_friction,
-    bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity, bjolt_set_position,
-    bjolt_set_position_rotation, bjolt_set_restitution, bjolt_set_rotation, bjolt_set_velocity,
+    bjolt_create_wheeled_vehicle, bjolt_create_hull, bjolt_create_mesh, bjolt_create_heightfield,
+    bjolt_destroy_shared_settings, bjolt_drain_contact_added, bjolt_drain_contact_removed,
+    bjolt_drain_slept, bjolt_drain_woke, bjolt_gravity_factor, bjolt_init,
+    bjolt_move_kinematic, bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_ccd,
+    bjolt_set_friction, bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity,
+    bjolt_set_motion_type, bjolt_set_position, bjolt_set_position_rotation, bjolt_set_restitution,
+    bjolt_set_rotation, bjolt_set_velocity,
     bjolt_shared_face_count, bjolt_shared_faces, bjolt_shared_vertex_count,
+    bjolt_sleep_body, bjolt_wake_body,
     bjolt_rigid_character_add_impulse, bjolt_rigid_character_add_velocity, bjolt_rigid_character_body,
     bjolt_rigid_character_create, bjolt_rigid_character_destroy, bjolt_rigid_character_ground,
     bjolt_rigid_character_pose, bjolt_rigid_character_post, bjolt_rigid_character_set_layer,
@@ -193,6 +196,23 @@ pub enum PhysicsShape {
     },
     Plane { surface_normal: Vec3, plane_constant: f32 },
     Compound { compound_parts: Vec<CompoundPart> },
+    /// Shrink-wrapped lump from a point soup: dents filled, convex only, so
+    /// dynamics can tumble it. Rocks, crates, wreckage.
+    Hull { hull_points: Vec<Vec3> },
+    /// Exact-triangle static scenery: keeps every dent and hole. Static
+    /// only (bake rejects motion): archways, stairs meshes, rubble.
+    Mesh {
+        mesh_vertices: Vec<Vec3>,
+        mesh_triangles: Vec<[u32; 3]>,
+    },
+    /// Terrain grid: one height per cell, grid lookup instead of a tree
+    /// walk. Static only. Cheaper than the equivalent mesh at scale;
+    /// no overhangs by construction.
+    Heightfield {
+        field_heights: Vec<f32>,
+        field_width: u32,
+        field_cell: f32,
+    },
 }
 
 /// One chunk of a compound body: a box, sphere, or capsule posed relative to
@@ -287,7 +307,7 @@ impl Default for CollisionLayers {
 /// A Jolt physics world: floor + dynamic bodies, stepped on the ThreadPool job system.
 pub struct JoltWorld {
     world_ptr: *mut BJoltWorld,
-    body_shapes: std::collections::HashMap<u32, PhysicsShape>,
+    body_shapes: std::collections::HashMap<u32, std::sync::Arc<PhysicsShape>>,
     character_positions: std::collections::HashMap<u32, (Vec3, crate::character::JoltCharacterGround)>,
     character_shapes: std::collections::HashMap<u32, (f32, f32)>,
     rigid_character_shapes: std::collections::HashMap<u32, (f32, f32)>,
@@ -317,7 +337,8 @@ impl JoltWorld {
     }
 
     /// Every known body and its outline recipe, for the debug visualizer.
-    pub fn body_shapes(&self) -> &std::collections::HashMap<u32, PhysicsShape> {
+    /// Shared ownership: bake files one copy, debug clones the pointer.
+    pub fn body_shapes(&self) -> &std::collections::HashMap<u32, std::sync::Arc<PhysicsShape>> {
         &self.body_shapes
     }
 
@@ -327,9 +348,10 @@ impl JoltWorld {
         &self.rigid_character_shapes
     }
 
-    /// Registers an outline recipe for a body created outside the shape
-    /// builders (vehicles). Debug draw only; physics owns the real shape.
-    pub fn register_shape(&mut self, body_id_raw: u32, outline: PhysicsShape) {
+    /// Files one shared outline recipe for a body: bake and vehicles call
+    /// this with the component's own allocation, so geometry lives once.
+    /// Debug draw only; physics owns the real shape.
+    pub fn file_shape(&mut self, body_id_raw: u32, outline: std::sync::Arc<PhysicsShape>) {
         self.body_shapes.insert(body_id_raw, outline);
     }
 
@@ -343,10 +365,6 @@ impl JoltWorld {
                 floor_position_height,
             )
         };
-        self.body_shapes.insert(
-            body_id_raw,
-            PhysicsShape::Box { half_extents },
-        );
         body_id_raw
     }
 
@@ -370,8 +388,6 @@ impl JoltWorld {
                 gravity_factor,
             )
         };
-        self.body_shapes
-            .insert(body_id_raw, PhysicsShape::Sphere { sphere_radius });
         body_id_raw
     }
 
@@ -395,13 +411,6 @@ impl JoltWorld {
                 object_layer,
             )
         };
-        self.body_shapes.insert(
-            body_id_raw,
-            PhysicsShape::Plane {
-                surface_normal,
-                plane_constant,
-            },
-        );
         body_id_raw
     }
 
@@ -468,12 +477,6 @@ impl JoltWorld {
             )
         };
         assert_ne!(body_id_raw, 0, "Jolt rejected the compound shape");
-        self.body_shapes.insert(
-            body_id_raw,
-            PhysicsShape::Compound {
-                compound_parts: compound_parts.to_vec(),
-            },
-        );
         body_id_raw
     }
 
@@ -501,10 +504,116 @@ impl JoltWorld {
                 gravity_factor,
             )
         };
-        self.body_shapes.insert(
-            body_id_raw,
-            PhysicsShape::Box { half_extents },
+        body_id_raw
+    }
+
+    /// Shrink-wrapped convex lump from a point soup. Convex, so any motion
+    /// works: dynamics tumble it. Rejects empty input and cook failures.
+    pub fn create_hull(
+        &mut self,
+        hull_points: &[Vec3],
+        spawn_position: Vec3,
+        object_layer: u16,
+        motion: JoltMotion,
+        density_kg_per_m3: f32,
+        gravity_factor: f32,
+    ) -> u32 {
+        assert!(!hull_points.is_empty(), "hull needs at least one point");
+        let flat_points: Vec<f32> = hull_points
+            .iter()
+            .flat_map(|hull_point| [hull_point.x, hull_point.y, hull_point.z])
+            .collect();
+        let body_id_raw = unsafe {
+            bjolt_create_hull(
+                self.world_ptr,
+                flat_points.as_ptr(),
+                flat_points.len() as u32 / 3,
+                spawn_position.x,
+                spawn_position.y,
+                spawn_position.z,
+                object_layer,
+                motion as u8,
+                density_kg_per_m3,
+                gravity_factor,
+            )
+        };
+        assert_ne!(body_id_raw, 0, "Jolt rejected the hull shape");
+        body_id_raw
+    }
+
+    /// Exact-triangle static scenery. Static only: Jolt cannot simulate mesh
+    /// shapes, so any other motion panics at bake. Rejects empty input and
+    /// out-of-range indices alongside Jolt's own cook check.
+    pub fn create_mesh(
+        &mut self,
+        mesh_vertices: &[Vec3],
+        mesh_triangles: &[[u32; 3]],
+        spawn_position: Vec3,
+        object_layer: u16,
+    ) -> u32 {
+        assert!(!mesh_vertices.is_empty(), "mesh needs vertices");
+        assert!(!mesh_triangles.is_empty(), "mesh needs triangles");
+        assert!(
+            mesh_triangles
+                .iter()
+                .flatten()
+                .all(|vertex_index| (*vertex_index as usize) < mesh_vertices.len()),
+            "mesh triangle index out of range"
         );
+        let flat_vertices: Vec<f32> = mesh_vertices
+            .iter()
+            .flat_map(|mesh_vertex| [mesh_vertex.x, mesh_vertex.y, mesh_vertex.z])
+            .collect();
+        let flat_triangles: Vec<u32> = mesh_triangles.iter().flatten().copied().collect();
+        let body_id_raw = unsafe {
+            bjolt_create_mesh(
+                self.world_ptr,
+                flat_vertices.as_ptr(),
+                flat_vertices.len() as u32 / 3,
+                flat_triangles.as_ptr(),
+                flat_triangles.len() as u32 / 3,
+                spawn_position.x,
+                spawn_position.y,
+                spawn_position.z,
+                object_layer,
+            )
+        };
+        assert_ne!(body_id_raw, 0, "Jolt rejected the mesh shape");
+        body_id_raw
+    }
+
+    /// Terrain grid: `field_width * field_width` heights, one ground level
+    /// per cell, `field_cell` meters apart, centered on the spawn. Static
+    /// only: Jolt cannot simulate heightfields. Rejects non-square counts
+    /// and cook failures.
+    pub fn create_heightfield(
+        &mut self,
+        field_heights: &[f32],
+        field_width: u32,
+        field_cell: f32,
+        spawn_position: Vec3,
+        object_layer: u16,
+    ) -> u32 {
+        assert!(
+            field_heights.len() as u32 == field_width * field_width,
+            "heightfield needs width^2 heights, got {} for width {}",
+            field_heights.len(),
+            field_width
+        );
+        let body_id_raw = unsafe {
+            bjolt_create_heightfield(
+                self.world_ptr,
+                field_heights.as_ptr(),
+                field_heights.len() as u32,
+                field_width,
+                field_cell,
+                spawn_position.x,
+                spawn_position.y,
+                spawn_position.z,
+                object_layer,
+            )
+        };
+        assert_ne!(body_id_raw, 0, "Jolt rejected the heightfield shape");
         body_id_raw
     }
 
@@ -557,13 +666,6 @@ impl JoltWorld {
                 gravity_factor,
             )
         };
-        self.body_shapes.insert(
-            body_id_raw,
-            PhysicsShape::Capsule {
-                capsule_half_height,
-                capsule_radius,
-            },
-        );
         body_id_raw
     }
 
@@ -589,13 +691,6 @@ impl JoltWorld {
                 gravity_factor,
             )
         };
-        self.body_shapes.insert(
-            body_id_raw,
-            PhysicsShape::Cylinder {
-                cylinder_half_height,
-                cylinder_radius,
-            },
-        );
         body_id_raw
     }
 
@@ -623,14 +718,6 @@ impl JoltWorld {
                 gravity_factor,
             )
         };
-        self.body_shapes.insert(
-            body_id_raw,
-            PhysicsShape::TaperedCylinder {
-                tapered_half_height,
-                top_radius,
-                bottom_radius,
-            },
-        );
         body_id_raw
     }
 
@@ -658,14 +745,6 @@ impl JoltWorld {
                 gravity_factor,
             )
         };
-        self.body_shapes.insert(
-            body_id_raw,
-            PhysicsShape::TaperedCapsule {
-                tapered_half_height,
-                top_radius,
-                bottom_radius,
-            },
-        );
         body_id_raw
     }
 
@@ -1846,6 +1925,39 @@ impl JoltWorld {
         unsafe { bjolt_body_is_active(self.world_ptr, body_id_raw) }
     }
 
+    /// Freezes a body where it stands: still solid, still in the broadphase,
+    /// wakes on contact. For dormant crowds, not forever-settled props (use
+    /// [`Self::set_body_motion`] to static for those).
+    pub fn sleep_body(&mut self, body_id_raw: u32) {
+        unsafe { bjolt_sleep_body(self.world_ptr, body_id_raw) }
+    }
+
+    /// Rejoins a sleeping body next step with velocities intact. Firing at
+    /// an already-awake body is a harmless no-op.
+    pub fn wake_body(&mut self, body_id_raw: u32) {
+        unsafe { bjolt_wake_body(self.world_ptr, body_id_raw) }
+    }
+
+    /// Live motion-type flip: static is solid and unwakeable, kinematic and
+    /// dynamic rejoin awake with velocities intact. Also updates the
+    /// entity's [`JoltBody`] motion so Bevy-side reads agree with Jolt.
+    /// Takes `&mut JoltBody` directly: one trigger call flips both sides,
+    /// never half-synced.
+    pub fn set_body_motion(
+        &mut self,
+        body_id_raw: u32,
+        body_motion: &mut JoltBody,
+        motion: JoltMotion,
+    ) {
+        let motion_code = match motion {
+            JoltMotion::Static => 0,
+            JoltMotion::Kinematic => 1,
+            JoltMotion::Dynamic => 2,
+        };
+        unsafe { bjolt_set_motion_type(self.world_ptr, body_id_raw, motion_code) }
+        body_motion.motion = motion;
+    }
+
     /// Live gravity multiplier for one body (1 = normal). Reads the motion
     /// properties, so it reflects both the spawn value and later sets.
     pub fn body_gravity_factor(&self, body_id_raw: u32) -> f32 {
@@ -1940,6 +2052,32 @@ impl JoltWorld {
                 pair_a.as_mut_ptr(),
                 pair_b.as_mut_ptr(),
                 pair_a.len() as u32,
+            )
+        }
+    }
+
+    /// Max sleep/wake transitions drained per step. Activations are rare;
+    /// 64 never fills in practice, overflow drops the newest.
+    pub const MAX_ACTIVATION_EVENTS: usize = 64;
+
+    /// Drains slept body ids into the buffer. Returns ids kept.
+    pub fn drain_slept(&mut self, slept_ids: &mut [u32]) -> u32 {
+        unsafe {
+            bjolt_drain_slept(
+                self.world_ptr,
+                slept_ids.as_mut_ptr(),
+                slept_ids.len() as u32,
+            )
+        }
+    }
+
+    /// Drains woken body ids into the buffer. Returns ids kept.
+    pub fn drain_woke(&mut self, woke_ids: &mut [u32]) -> u32 {
+        unsafe {
+            bjolt_drain_woke(
+                self.world_ptr,
+                woke_ids.as_mut_ptr(),
+                woke_ids.len() as u32,
             )
         }
     }

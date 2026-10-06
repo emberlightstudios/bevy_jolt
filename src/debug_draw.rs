@@ -33,13 +33,21 @@ fn draw_physics_shapes(
     physics_world: Res<JoltPhysicsWorld>,
     character_query: Query<(&crate::character::JoltCharacter, &Transform)>,
     rigid_query: Query<(&crate::character::JoltRigidCharacterId, &Transform)>,
+    body_sleeping: Query<&crate::body_forces::JoltSleeping>,
+    body_entities: Query<(Entity, &crate::body_sync::JoltBodyId)>,
     mut gizmos: Gizmos,
 ) {
 
     for (body_id_raw, body_shape) in physics_world.body_shapes().iter() {
         let (body_position, body_rotation) = physics_world.body_full_transform(*body_id_raw);
-        let body_active = physics_world.body_is_active(*body_id_raw);
-        match body_shape {
+        // Sleep color from the marker the activation drain maintains: no
+        // per-body FFI poll for a debug tint.
+        let body_active = body_entities
+            .iter()
+            .find(|(_, body_id)| body_id.body_id_raw == *body_id_raw)
+            .map(|(body_entity, _)| body_sleeping.get(body_entity).is_err())
+            .unwrap_or(true);
+        match body_shape.as_ref() {
             PhysicsShape::Box { half_extents } => {
                 let debug_color = body_debug_color(body_active);
                 let box_transform = Transform {
@@ -141,6 +149,76 @@ fn draw_physics_shapes(
                     draw_compound_part(&mut gizmos, part_pose, compound_part.part_geometry, debug_color);
                 }
             }
+            PhysicsShape::Hull { hull_points } => {
+                let debug_color = body_debug_color(body_active);
+                draw_hull_faces(
+                    &mut gizmos,
+                    body_position,
+                    body_rotation,
+                    hull_points,
+                    debug_color,
+                );
+            }
+            PhysicsShape::Mesh {
+                mesh_vertices,
+                mesh_triangles,
+            } => {
+                let debug_color = body_debug_color(body_active);
+                for mesh_triangle in mesh_triangles {
+                    let corner_positions = [
+                        mesh_vertices[mesh_triangle[0] as usize],
+                        mesh_vertices[mesh_triangle[1] as usize],
+                        mesh_vertices[mesh_triangle[2] as usize],
+                    ];
+                    for edge_index in 0..3 {
+                        gizmos.line(
+                            body_position + body_rotation * corner_positions[edge_index],
+                            body_position + body_rotation * corner_positions[(edge_index + 1) % 3],
+                            debug_color,
+                        );
+                    }
+                }
+            }
+            PhysicsShape::Heightfield {
+                field_heights,
+                field_width,
+                field_cell,
+            } => {
+                // Grid wireframe: lines along each row and column at sampled
+                // heights. Centered like the FFI offset, so the outline sits
+                // on the simulated ground.
+                let debug_color = body_debug_color(body_active);
+                let grid_width = *field_width as usize;
+                let grid_extent = (grid_width - 1) as f32 * *field_cell;
+                let field_point = |grid_x: usize, grid_z: usize| {
+                    let sample_height = field_heights[grid_z * grid_width + grid_x];
+                    body_position
+                        + body_rotation
+                            * Vec3::new(
+                                grid_x as f32 * *field_cell - grid_extent * 0.5,
+                                sample_height,
+                                grid_z as f32 * *field_cell - grid_extent * 0.5,
+                            )
+                };
+                for grid_z in 0..grid_width {
+                    for grid_x in 0..grid_width {
+                        if grid_x + 1 < grid_width {
+                            gizmos.line(
+                                field_point(grid_x, grid_z),
+                                field_point(grid_x + 1, grid_z),
+                                debug_color,
+                            );
+                        }
+                        if grid_z + 1 < grid_width {
+                            gizmos.line(
+                                field_point(grid_x, grid_z),
+                                field_point(grid_x, grid_z + 1),
+                                debug_color,
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
     // Characters are not rigid bodies, so they never appear in the body
@@ -183,6 +261,53 @@ fn body_debug_color(body_active: bool) -> Color {
         DYNAMIC_BODY_COLOR
     } else {
         STATIC_BODY_COLOR
+    }
+}
+
+/// Wireframe of the shrink-wrap: every point triple with all other points on
+/// one side is a hull face. Brute force (O(n^4)) is fine for debug point
+/// counts; degenerate (coplanar) triples are skipped.
+fn draw_hull_faces(
+    gizmos: &mut Gizmos,
+    body_position: Vec3,
+    body_rotation: Quat,
+    hull_points: &[Vec3],
+    debug_color: Color,
+) {
+    let world_point = |hull_point: &Vec3| body_position + body_rotation * *hull_point;
+    for face_a in 0..hull_points.len() {
+        for face_b in (face_a + 1)..hull_points.len() {
+            for face_c in (face_b + 1)..hull_points.len() {
+                let edge_ab = hull_points[face_b] - hull_points[face_a];
+                let edge_ac = hull_points[face_c] - hull_points[face_a];
+                let face_normal = edge_ab.cross(edge_ac);
+                if face_normal.length_squared() < 1e-10 {
+                    continue;
+                }
+                let mut all_below = true;
+                let mut all_above = true;
+                for (point_index, hull_point) in hull_points.iter().enumerate() {
+                    if point_index == face_a || point_index == face_b || point_index == face_c {
+                        continue;
+                    }
+                    let point_side = face_normal.dot(*hull_point - hull_points[face_a]);
+                    if point_side > 1e-6 {
+                        all_below = false;
+                    }
+                    if point_side < -1e-6 {
+                        all_above = false;
+                    }
+                }
+                if all_below || all_above {
+                    let corner_a = world_point(&hull_points[face_a]);
+                    let corner_b = world_point(&hull_points[face_b]);
+                    let corner_c = world_point(&hull_points[face_c]);
+                    gizmos.line(corner_a, corner_b, debug_color);
+                    gizmos.line(corner_b, corner_c, debug_color);
+                    gizmos.line(corner_c, corner_a, debug_color);
+                }
+            }
+        }
     }
 }
 

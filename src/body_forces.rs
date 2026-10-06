@@ -204,7 +204,112 @@ pub fn apply_jolt_teleport(
     );
 }
 
-/// Re-adds every [`JoltLinearForce`] and [`JoltAngularForce`] before the
+/// One-shot sleep: freezes the body where it stands. Still solid, wakes on
+/// contact. For dormant crowds. Missing bodies skipped, same as impulses.
+#[derive(EntityEvent, Clone, Copy, Debug)]
+pub struct JoltSleep {
+    #[event_target]
+    pub body_entity: Entity,
+}
+
+/// One-shot wake: sleeping body rejoins next step, velocities intact.
+/// Harmless on awake bodies. Missing bodies skipped, same as impulses.
+#[derive(EntityEvent, Clone, Copy, Debug)]
+pub struct JoltWake {
+    #[event_target]
+    pub body_entity: Entity,
+}
+
+/// One-shot motion-type flip: static is solid and unwakeable (settled props),
+/// back to dynamic/kinematic rejoins awake. Flips the entity's [`JoltBody`]
+/// too, so Bevy-side reads never disagree with Jolt.
+#[derive(EntityEvent, Clone, Copy, Debug)]
+pub struct JoltSetMotion {
+    #[event_target]
+    pub body_entity: Entity,
+    pub motion: crate::body_sync::JoltMotion,
+}
+
+/// Applies a triggered [`JoltSleep`] to the target entity's Jolt body.
+pub fn apply_jolt_sleep(
+    trigger: On<JoltSleep>,
+    body_ids: Query<&JoltBodyId>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    let sleep = trigger.event();
+    let Ok(body_id) = body_ids.get(sleep.body_entity) else {
+        return;
+    };
+    physics_world.sleep_body(body_id.body_id_raw);
+}
+
+/// Applies a triggered [`JoltWake`] to the target entity's Jolt body.
+pub fn apply_jolt_wake(
+    trigger: On<JoltWake>,
+    body_ids: Query<&JoltBodyId>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    let wake = trigger.event();
+    let Ok(body_id) = body_ids.get(wake.body_entity) else {
+        return;
+    };
+    physics_world.wake_body(body_id.body_id_raw);
+}
+
+/// Applies a triggered [`JoltSetMotion`] to the target entity's Jolt body
+/// and its [`JoltBody`]: one call, never half-synced.
+pub fn apply_jolt_set_motion(
+    trigger: On<JoltSetMotion>,
+    mut body_query: Query<(&JoltBodyId, &mut crate::body_sync::JoltBody)>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    let set_motion = trigger.event();
+    let Ok((body_id, mut body)) = body_query.get_mut(set_motion.body_entity) else {
+        return;
+    };
+    physics_world.set_body_motion(body_id.body_id_raw, &mut body, set_motion.motion);
+}
+
+/// Marker on sleeping bodies, added/removed by the activation drain. The
+/// per-tick sync filters these out (no FFI for frozen bodies) and the debug
+/// drawer reads the marker for its sleep color instead of polling Jolt.
+/// Managed by the crate: never add or remove it by hand. Game code reacts
+/// with `Added<JoltSleeping>` / `Removed<JoltSleeping>` queries: no polling,
+/// no callbacks in the public API.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct JoltSleeping;
+
+/// Drains sleep/wake transitions after the step: slept bodies gain
+/// [`JoltSleeping`], woken bodies lose it. Unknown ids (despawned mid-step)
+/// are skipped.
+pub fn sync_sleep_markers(
+    mut commands: Commands,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+    body_entities: Query<(Entity, &JoltBodyId)>,
+) {
+    let mut slept_ids = [0u32; crate::physics_world::JoltWorld::MAX_ACTIVATION_EVENTS];
+    let mut woke_ids = [0u32; crate::physics_world::JoltWorld::MAX_ACTIVATION_EVENTS];
+    let slept_kept = physics_world.drain_slept(&mut slept_ids);
+    let woke_kept = physics_world.drain_woke(&mut woke_ids);
+    let find_body_entity = |body_id_raw: u32| {
+        body_entities
+            .iter()
+            .find(|(_, body_id)| body_id.body_id_raw == body_id_raw)
+            .map(|(body_entity, _)| body_entity)
+    };
+    for slept_index in 0..slept_kept as usize {
+        let Some(slept_entity) = find_body_entity(slept_ids[slept_index]) else {
+            continue;
+        };
+        commands.entity(slept_entity).insert(JoltSleeping);
+    }
+    for woke_index in 0..woke_kept as usize {
+        let Some(woke_entity) = find_body_entity(woke_ids[woke_index]) else {
+            continue;
+        };
+        commands.entity(woke_entity).remove::<JoltSleeping>();
+    }
+}
 /// physics step. Bodies missing their id (not baked yet) are skipped for
 /// the tick, not despawned: unlike joints, a force has no endpoint to go
 /// stale on. One pass with `Option` reads: no extra loop cost for the

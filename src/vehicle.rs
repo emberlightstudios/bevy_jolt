@@ -675,9 +675,9 @@ fn insert_vehicle_id(
     let body_id_raw = vehicle_id.body_id_raw;
     commands.queue(move |world: &mut World| {
         let mut physics_world = world.resource_mut::<JoltPhysicsWorld>();
-        physics_world.register_shape(
+        physics_world.file_shape(
             body_id_raw,
-            crate::physics_world::PhysicsShape::Box { half_extents },
+            std::sync::Arc::new(crate::physics_world::PhysicsShape::Box { half_extents }),
         );
     });
 }
