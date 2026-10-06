@@ -3,19 +3,24 @@
 Safe Bevy integration for Jolt Physics. Raw FFI lives in `jolt_sys`; this
 crate owns world lifetime, the safe body API, and the Bevy schedule wiring.
 
-## The one rule: two schedules
+## Schedules: where your game code goes
 
-- Everything in `FixedUpdate` runs **before** the sim steps. Write drives here.
-- Everything in `JoltStep` runs **after**. The step plus all readbacks live
-  here, slotted between `FixedUpdate` and `FixedPostUpdate`.
-- By `FixedPostUpdate`, the sim has always stepped. Read results here or later.
+Put game logic in `PreFixedUpdate`, `FixedUpdate`, and/or `PostFixedUpdate`.
+The crate guarantees this ordering every tick:
 
-Game code writes drives in `FixedUpdate` and reads results in
-`FixedPostUpdate` (or later) — no manual ordering needed, the schedules
-already run in that sequence. (Inside `JoltStep` the crate itself orders
-readbacks `.after(step_physics_world)`. Tests drive schedules by hand, so
-they run `FixedUpdate` then `JoltStep` explicitly — see the `tick()`
-helper in `tests/`.)
+1. Your `FixedUpdate` systems all finish first. Nothing physics-side runs
+   yet — no change detection, no sim step, no readback.
+2. `JoltStep` runs next: change-detection pushes first (motion, driven
+   velocities), then the sim steps, then all readbacks (poses, measured
+   velocities, contacts, sleep markers).
+3. Your `PostFixedUpdate` systems run last. The step and every readback are
+   done — what you read is this tick's result.
+
+So: write drives in `FixedUpdate`, read results in `PostFixedUpdate` (or
+later). No manual ordering needed — the schedules already run in that
+sequence, so a write can never be missed by ordering. (Tests drive schedules
+by hand, so they run `FixedUpdate` then `JoltStep` explicitly — see the
+`tick()` helper in `tests/`.)
 
 ## Bodies: describe, bake, sync
 
