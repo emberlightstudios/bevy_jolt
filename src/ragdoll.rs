@@ -10,7 +10,7 @@
 
 use bevy::prelude::*;
 
-use crate::body_sync::{JoltBodyId, PreviousBodyTransform};
+use crate::body_sync::{JoltBodyId, JoltMotion, PreviousBodyTransform};
 use crate::plugin::JoltPhysicsWorld;
 
 /// One ragdoll segment: shape + spawn pose + link to the parent.
@@ -70,14 +70,16 @@ pub enum RagdollJoint {
  twist_max: f32,
  },
 }
-
 /// Ragdoll spec: the part list plus shared physics tuning. Spawn with a
 /// `JoltRagdoll`; the plugin expands it into part bodies + joints.
 #[derive(Component, Clone, Debug)]
 pub struct JoltRagdoll {
-    pub parts: Vec<RagdollPart>,
-    pub object_layer: u16,
-    pub density_kg_per_m3: f32,
+ pub parts: Vec<RagdollPart>,
+ pub object_layer: u16,
+ pub density_kg_per_m3: f32,
+ /// Motion every body bakes as. Kinematic = follow bones (hitboxes);
+ /// dynamic = simulate. Flips later cost nothing.
+ pub motion: JoltMotion,
 }
 
 impl JoltRagdoll {
@@ -151,6 +153,7 @@ impl JoltRagdoll {
  ],
  object_layer,
  density_kg_per_m3: 1000.0,
+ motion: JoltMotion::Dynamic,
  }
 }
 }
@@ -173,9 +176,15 @@ pub struct RagdollPartBody;
 /// tears the whole ragdoll out of the system.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct JoltRagdollHandle {
-    pub(crate) ragdoll_raw: *mut jolt_sys::BJoltRagdoll,
+ pub(crate) ragdoll_raw: *mut jolt_sys::BJoltRagdoll,
 }
 
+impl JoltRagdollHandle {
+ /// The opaque Jolt handle, for world calls (`ragdoll_set_motion`, ...).
+ pub fn raw(self) -> *mut jolt_sys::BJoltRagdoll {
+ self.ragdoll_raw
+ }
+}
 // The handle is an opaque Jolt pointer, only touched from the physics thread.
 unsafe impl Send for JoltRagdollHandle {}
 unsafe impl Sync for JoltRagdollHandle {}
@@ -216,18 +225,19 @@ pub fn bake_jolt_ragdoll(
             }
             RagdollShape::Sphere { radius } => (2, radius, 0.0, 0.0),
         };
-        let part_index = world.ragdoll_build_add_part(
-            build,
-            ragdoll_part.parent_part.map_or(-1, |parent| parent as i32),
-            shape_kind,
-            dim_x,
-            dim_y,
-            dim_z,
-            ragdoll_part.part_position,
-            ragdoll_part.part_rotation,
-            ragdoll.object_layer,
-            ragdoll.density_kg_per_m3,
-        );
+ let part_index = world.ragdoll_build_add_part(
+ build,
+ ragdoll_part.parent_part.map_or(-1, |parent| parent as i32),
+ shape_kind,
+ dim_x,
+ dim_y,
+ dim_z,
+ ragdoll_part.part_position,
+ ragdoll_part.part_rotation,
+ ragdoll.object_layer,
+ ragdoll.density_kg_per_m3,
+ ragdoll.motion,
+ );
         assert!(part_index >= 0, "ragdoll part shape invalid");
  if ragdoll_part.parent_part.is_some() {
  let joint_ok = match ragdoll_part.joint {

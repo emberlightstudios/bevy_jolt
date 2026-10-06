@@ -33,7 +33,7 @@ use jolt_sys::{
     bjolt_ragdoll_build_add_part, bjolt_ragdoll_build_create, bjolt_ragdoll_build_destroy,
     bjolt_ragdoll_build_finalize, bjolt_ragdoll_build_set_hinge,
     bjolt_ragdoll_build_set_swing_twist, bjolt_ragdoll_build_stabilize, bjolt_ragdoll_create,
-    bjolt_ragdoll_destroy, bjolt_remove_constraint, bjolt_rigid_character_add_impulse,
+ bjolt_ragdoll_destroy, bjolt_ragdoll_set_motion, bjolt_remove_constraint, bjolt_rigid_character_add_impulse,
     bjolt_rigid_character_add_velocity, bjolt_rigid_character_body, bjolt_rigid_character_create,
     bjolt_rigid_character_destroy, bjolt_rigid_character_ground, bjolt_rigid_character_pose,
     bjolt_rigid_character_post, bjolt_rigid_character_set_layer, bjolt_rigid_character_set_pose,
@@ -2169,27 +2169,34 @@ impl JoltWorld {
         dim_z: f32,
         part_position: Vec3,
         part_rotation: Quat,
-        object_layer: u16,
-        density_kg_per_m3: f32,
-    ) -> i32 {
-        unsafe {
-            bjolt_ragdoll_build_add_part(
-                build,
-                parent_index,
-                shape_kind,
-                dim_x,
-                dim_y,
-                dim_z,
-                part_position.x,
-                part_position.y,
-                part_position.z,
-                part_rotation.x,
-                part_rotation.y,
-                part_rotation.z,
-                part_rotation.w,
-                object_layer,
-                density_kg_per_m3,
-            )
+ object_layer: u16,
+ density_kg_per_m3: f32,
+ motion: JoltMotion,
+ ) -> i32 {
+ let motion_code = match motion {
+ JoltMotion::Static => 0,
+ JoltMotion::Kinematic => 1,
+ JoltMotion::Dynamic => 2,
+ };
+ unsafe {
+ bjolt_ragdoll_build_add_part(
+ build,
+ parent_index,
+ shape_kind,
+ dim_x,
+ dim_y,
+ dim_z,
+ part_position.x,
+ part_position.y,
+ part_position.z,
+ part_rotation.x,
+ part_rotation.y,
+ part_rotation.z,
+ part_rotation.w,
+ object_layer,
+ density_kg_per_m3,
+ motion_code,
+ )
         }
     }
 
@@ -2297,11 +2304,22 @@ impl JoltWorld {
         unsafe { bjolt_ragdoll_body_ids(handle, out_ids.as_mut_ptr(), out_ids.len() as u32) }
     }
 
-    /// Removes bodies + constraints and frees the ragdoll. Never mix with
-    /// per-body remove/destroy on these ids.
-    pub fn ragdoll_destroy(&mut self, handle: *mut jolt_sys::BJoltRagdoll) {
-        unsafe { bjolt_ragdoll_destroy(self.world_ptr, handle) }
-    }
+ /// Removes bodies + constraints and frees the ragdoll. Never mix with
+ /// per-body remove/destroy on these ids.
+ pub fn ragdoll_destroy(&mut self, handle: *mut jolt_sys::BJoltRagdoll) {
+ unsafe { bjolt_ragdoll_destroy(self.world_ptr, handle) }
+ }
+
+ /// Flips every body in the ragdoll to one motion. Kinematic = follow
+ /// bones (hitbox mode, cheap); dynamic = simulate (ragdoll mode).
+ pub fn ragdoll_set_motion(&mut self, handle: *mut jolt_sys::BJoltRagdoll, motion: JoltMotion) {
+ let motion_code = match motion {
+ JoltMotion::Static => 0,
+ JoltMotion::Kinematic => 1,
+ JoltMotion::Dynamic => 2,
+ };
+ unsafe { bjolt_ragdoll_set_motion(self.world_ptr, handle, motion_code) }
+ }
 
     /// Frees the builder (settings only, after create).
     pub fn ragdoll_build_destroy(&mut self, build: *mut jolt_sys::BJoltRagdollBuild) {
