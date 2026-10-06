@@ -7,47 +7,49 @@ use crate::body_sync::JoltMotion;
 use crate::spatial_queries::RayHit;
 use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
-    BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
-    VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
     bjolt_apply_buoyancy, bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide,
-    bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_set_damping, bjolt_body_set_density,
-    bjolt_body_set_sensor, bjolt_body_state, bjolt_body_transform, bjolt_character_can_walk_stairs,
-    bjolt_character_create, bjolt_character_destroy, bjolt_character_ground, bjolt_character_move,
-    bjolt_character_refresh_contacts, bjolt_character_rotation, bjolt_character_set_mass,
-    bjolt_character_set_padding, bjolt_character_set_rotation, bjolt_character_set_shape_offset,
-    bjolt_character_set_up, bjolt_character_set_user_data, bjolt_character_stance,
-    bjolt_character_stick_to_floor, bjolt_character_teleport, bjolt_character_update,
-    bjolt_character_walk_stairs,
+    bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_set_damping,
+    bjolt_body_set_density, bjolt_body_set_sensor, bjolt_body_state, bjolt_body_transform,
+    bjolt_character_can_walk_stairs, bjolt_character_create, bjolt_character_destroy,
+    bjolt_character_ground, bjolt_character_move, bjolt_character_refresh_contacts,
+    bjolt_character_rotation, bjolt_character_set_mass, bjolt_character_set_padding,
+    bjolt_character_set_rotation, bjolt_character_set_shape_offset, bjolt_character_set_up,
+    bjolt_character_set_user_data, bjolt_character_stance, bjolt_character_stick_to_floor,
+    bjolt_character_teleport, bjolt_character_update, bjolt_character_walk_stairs,
     bjolt_constraint_drive_at, bjolt_constraint_path_fraction, bjolt_constraint_path_looping,
     bjolt_create_box, bjolt_create_capsule, bjolt_create_cloth_settings, bjolt_create_compound,
     bjolt_create_cone_constraint, bjolt_create_cube_settings, bjolt_create_cylinder,
     bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
-    bjolt_create_gear_constraint, bjolt_create_hinge_constraint, bjolt_create_motorcycle,
-    bjolt_create_path_cart, bjolt_create_plane, bjolt_create_point_constraint,
-    bjolt_create_pulley_constraint, bjolt_create_rack_pinion_constraint, bjolt_create_shared_settings,
-    bjolt_create_six_dof, bjolt_create_soft_body, bjolt_create_sphere, bjolt_create_sphere_settings,
-    bjolt_create_slider_constraint, bjolt_create_swing_twist_constraint,
+    bjolt_create_gear_constraint, bjolt_create_heightfield, bjolt_create_hinge_constraint,
+    bjolt_create_hull, bjolt_create_mesh, bjolt_create_motorcycle, bjolt_create_path_cart,
+    bjolt_create_plane, bjolt_create_point_constraint, bjolt_create_pulley_constraint,
+    bjolt_create_rack_pinion_constraint, bjolt_create_shared_settings, bjolt_create_six_dof,
+    bjolt_create_slider_constraint, bjolt_create_soft_body, bjolt_create_sphere,
+    bjolt_create_sphere_settings, bjolt_create_swing_twist_constraint,
     bjolt_create_tapered_capsule, bjolt_create_tapered_cylinder, bjolt_create_tracked_vehicle,
-    bjolt_create_wheeled_vehicle, bjolt_create_hull, bjolt_create_mesh, bjolt_create_heightfield,
-    bjolt_destroy_shared_settings, bjolt_drain_contact_added, bjolt_drain_contact_removed,
-    bjolt_drain_slept, bjolt_drain_woke, bjolt_gravity_factor, bjolt_init,
-    bjolt_move_kinematic, bjolt_remove_constraint, bjolt_set_angular_velocity, bjolt_set_ccd,
-    bjolt_set_friction, bjolt_set_gravity, bjolt_set_gravity_factor, bjolt_set_linear_velocity,
-    bjolt_set_motion_type, bjolt_set_position, bjolt_set_position_rotation, bjolt_set_restitution,
-    bjolt_set_rotation, bjolt_set_velocity,
-    bjolt_shared_face_count, bjolt_shared_faces, bjolt_shared_vertex_count,
-    bjolt_sleep_body, bjolt_wake_body,
-    bjolt_rigid_character_add_impulse, bjolt_rigid_character_add_velocity, bjolt_rigid_character_body,
-    bjolt_rigid_character_create, bjolt_rigid_character_destroy, bjolt_rigid_character_ground,
-    bjolt_rigid_character_pose, bjolt_rigid_character_post, bjolt_rigid_character_set_layer,
-    bjolt_rigid_character_set_pose, bjolt_rigid_character_set_velocity, bjolt_rigid_character_stance,
-    bjolt_soft_contacts, bjolt_soft_destroy, bjolt_soft_iterations, bjolt_soft_inv_masses,
-    bjolt_soft_pressure,
-    bjolt_soft_push, bjolt_soft_set_inv_masses, bjolt_soft_set_iterations, bjolt_soft_set_pressure,
-    bjolt_soft_set_vertex_radius, bjolt_soft_velocities, bjolt_soft_vertex_count, bjolt_soft_vertex_radius,
-    bjolt_soft_vertices, bjolt_soft_volume, bjolt_tracked_drive, bjolt_vehicle_drive,
-    bjolt_vehicle_shift, bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_gravity,
-    bjolt_world_update,
+    bjolt_create_wheeled_vehicle, bjolt_destroy_shared_settings, bjolt_drain_contact_added,
+    bjolt_drain_contact_removed, bjolt_drain_slept, bjolt_drain_woke, bjolt_gravity_factor,
+    bjolt_init, bjolt_move_kinematic, bjolt_ragdoll_body_count, bjolt_ragdoll_body_ids,
+    bjolt_ragdoll_build_add_part, bjolt_ragdoll_build_create, bjolt_ragdoll_build_destroy,
+    bjolt_ragdoll_build_finalize, bjolt_ragdoll_build_set_hinge,
+    bjolt_ragdoll_build_set_swing_twist, bjolt_ragdoll_build_stabilize, bjolt_ragdoll_create,
+    bjolt_ragdoll_destroy, bjolt_remove_constraint, bjolt_rigid_character_add_impulse,
+    bjolt_rigid_character_add_velocity, bjolt_rigid_character_body, bjolt_rigid_character_create,
+    bjolt_rigid_character_destroy, bjolt_rigid_character_ground, bjolt_rigid_character_pose,
+    bjolt_rigid_character_post, bjolt_rigid_character_set_layer, bjolt_rigid_character_set_pose,
+    bjolt_rigid_character_set_velocity, bjolt_rigid_character_stance, bjolt_set_angular_velocity,
+    bjolt_set_ccd, bjolt_set_friction, bjolt_set_gravity, bjolt_set_gravity_factor,
+    bjolt_set_linear_velocity, bjolt_set_motion_type, bjolt_set_position,
+    bjolt_set_position_rotation, bjolt_set_restitution, bjolt_set_rotation, bjolt_set_velocity,
+    bjolt_shared_face_count, bjolt_shared_faces, bjolt_shared_vertex_count, bjolt_sleep_body,
+    bjolt_soft_contacts, bjolt_soft_destroy, bjolt_soft_inv_masses, bjolt_soft_iterations,
+    bjolt_soft_pressure, bjolt_soft_push, bjolt_soft_set_inv_masses, bjolt_soft_set_iterations,
+    bjolt_soft_set_pressure, bjolt_soft_set_vertex_radius, bjolt_soft_velocities,
+    bjolt_soft_vertex_count, bjolt_soft_vertex_radius, bjolt_soft_vertices, bjolt_soft_volume,
+    bjolt_tracked_drive, bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_wake_body,
+    bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_gravity, bjolt_world_update,
+    BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi, VehicleLeanFfi, VehicleRollBarFfi,
+    VehicleTransmissionFfi, VehicleWheelFfi,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -181,10 +183,20 @@ pub struct BodyMotion {
 /// implicitly per frame would hide real cost.
 #[derive(Clone, Debug)]
 pub enum PhysicsShape {
-    Box { half_extents: Vec3 },
-    Sphere { sphere_radius: f32 },
-    Capsule { capsule_half_height: f32, capsule_radius: f32 },
-    Cylinder { cylinder_half_height: f32, cylinder_radius: f32 },
+    Box {
+        half_extents: Vec3,
+    },
+    Sphere {
+        sphere_radius: f32,
+    },
+    Capsule {
+        capsule_half_height: f32,
+        capsule_radius: f32,
+    },
+    Cylinder {
+        cylinder_half_height: f32,
+        cylinder_radius: f32,
+    },
     TaperedCylinder {
         tapered_half_height: f32,
         top_radius: f32,
@@ -195,11 +207,18 @@ pub enum PhysicsShape {
         top_radius: f32,
         bottom_radius: f32,
     },
-    Plane { surface_normal: Vec3, plane_constant: f32 },
-    Compound { compound_parts: Vec<CompoundPart> },
+    Plane {
+        surface_normal: Vec3,
+        plane_constant: f32,
+    },
+    Compound {
+        compound_parts: Vec<CompoundPart>,
+    },
     /// Shrink-wrapped lump from a point soup: dents filled, convex only, so
     /// dynamics can tumble it. Rocks, crates, wreckage.
-    Hull { hull_points: Vec<Vec3> },
+    Hull {
+        hull_points: Vec<Vec3>,
+    },
     /// Exact-triangle static scenery: keeps every dent and hole. Static
     /// only (bake rejects motion): archways, stairs meshes, rubble.
     Mesh {
@@ -229,9 +248,16 @@ pub struct CompoundPart {
 /// cylinder half height with the cap radius.
 #[derive(Clone, Copy, Debug)]
 pub enum CompoundGeometry {
-    Box { part_half_extents: Vec3 },
-    Sphere { part_radius: f32 },
-    Capsule { part_half_height: f32, part_radius: f32 },
+    Box {
+        part_half_extents: Vec3,
+    },
+    Sphere {
+        part_radius: f32,
+    },
+    Capsule {
+        part_half_height: f32,
+        part_radius: f32,
+    },
 }
 
 /// Which object layers exist and which pairs can collide, decided in Rust
@@ -309,9 +335,11 @@ impl Default for CollisionLayers {
 pub struct JoltWorld {
     world_ptr: *mut BJoltWorld,
     body_shapes: std::collections::HashMap<u32, std::sync::Arc<PhysicsShape>>,
-    character_positions: std::collections::HashMap<u32, (Vec3, crate::character::JoltCharacterGround)>,
+    character_positions:
+        std::collections::HashMap<u32, (Vec3, crate::character::JoltCharacterGround)>,
     character_shapes: std::collections::HashMap<u32, (f32, f32)>,
     rigid_character_shapes: std::collections::HashMap<u32, (f32, f32)>,
+    next_ragdoll_group: u32,
 }
 
 impl JoltWorld {
@@ -334,6 +362,7 @@ impl JoltWorld {
             character_positions: std::collections::HashMap::new(),
             character_shapes: std::collections::HashMap::new(),
             rigid_character_shapes: std::collections::HashMap::new(),
+            next_ragdoll_group: 1,
         }
     }
 
@@ -428,8 +457,7 @@ impl JoltWorld {
         gravity_factor: f32,
     ) -> u32 {
         assert!(
-            !compound_parts.is_empty()
-                && compound_parts.len() <= jolt_sys::MAX_COMPOUND_PARTS,
+            !compound_parts.is_empty() && compound_parts.len() <= jolt_sys::MAX_COMPOUND_PARTS,
             "compound needs 1..={} parts, got {}",
             jolt_sys::MAX_COMPOUND_PARTS,
             compound_parts.len()
@@ -439,9 +467,12 @@ impl JoltWorld {
             .map(|compound_part| {
                 let (part_kind, part_half_x, part_half_y, part_half_z) =
                     match compound_part.part_geometry {
-                        CompoundGeometry::Box { part_half_extents } => {
-                            (0, part_half_extents.x, part_half_extents.y, part_half_extents.z)
-                        }
+                        CompoundGeometry::Box { part_half_extents } => (
+                            0,
+                            part_half_extents.x,
+                            part_half_extents.y,
+                            part_half_extents.z,
+                        ),
                         CompoundGeometry::Sphere { part_radius } => (1, part_radius, 0.0, 0.0),
                         CompoundGeometry::Capsule {
                             part_half_height,
@@ -1278,8 +1309,7 @@ impl JoltWorld {
         use jolt_sys::{MAX_VEHICLE_DIFFS, MAX_VEHICLE_ROLL_BARS, MAX_VEHICLE_WHEELS};
         let mut body_raw = 0u32;
         let mut constraint_id = 0u32;
-        let wheels: Vec<VehicleWheelFfi> =
-            spec.wheels.iter().map(|wheel| wheel.to_ffi()).collect();
+        let wheels: Vec<VehicleWheelFfi> = spec.wheels.iter().map(|wheel| wheel.to_ffi()).collect();
         let engine: VehicleEngineFfi = spec.engine.to_ffi();
         let gearbox: VehicleTransmissionFfi = spec.transmission.to_ffi();
         let created = match &spec.kind {
@@ -1288,10 +1318,8 @@ impl JoltWorld {
                 roll_bars,
                 limited_slip_ratio,
             } => {
-                let diffs: Vec<VehicleDifferentialFfi> = differentials
-                    .iter()
-                    .map(|diff| diff.to_ffi())
-                    .collect();
+                let diffs: Vec<VehicleDifferentialFfi> =
+                    differentials.iter().map(|diff| diff.to_ffi()).collect();
                 let bars: Vec<VehicleRollBarFfi> =
                     roll_bars.iter().map(|bar| bar.to_ffi()).collect();
                 unsafe {
@@ -1356,10 +1384,8 @@ impl JoltWorld {
                 differentials,
                 lean,
             } => {
-                let diffs: Vec<VehicleDifferentialFfi> = differentials
-                    .iter()
-                    .map(|diff| diff.to_ffi())
-                    .collect();
+                let diffs: Vec<VehicleDifferentialFfi> =
+                    differentials.iter().map(|diff| diff.to_ffi()).collect();
                 let lean_ffi: VehicleLeanFfi = lean.to_ffi();
                 unsafe {
                     bjolt_create_motorcycle(
@@ -1407,7 +1433,14 @@ impl JoltWorld {
         hand_brake: f32,
     ) {
         unsafe {
-            bjolt_vehicle_drive(self.world_ptr, constraint_id, forward, right, brake, hand_brake)
+            bjolt_vehicle_drive(
+                self.world_ptr,
+                constraint_id,
+                forward,
+                right,
+                brake,
+                hand_brake,
+            )
         }
     }
 
@@ -1421,7 +1454,14 @@ impl JoltWorld {
         brake: f32,
     ) {
         unsafe {
-            bjolt_tracked_drive(self.world_ptr, constraint_id, forward, left_ratio, right_ratio, brake)
+            bjolt_tracked_drive(
+                self.world_ptr,
+                constraint_id,
+                forward,
+                left_ratio,
+                right_ratio,
+                brake,
+            )
         }
     }
 
@@ -1466,7 +1506,12 @@ impl JoltWorld {
     }
 
     /// Direct velocity overwrite (not a kick): zero halves stop that axis.
-    pub fn set_body_velocity(&mut self, body_id_raw: u32, linear_velocity: Vec3, angular_velocity: Vec3) {
+    pub fn set_body_velocity(
+        &mut self,
+        body_id_raw: u32,
+        linear_velocity: Vec3,
+        angular_velocity: Vec3,
+    ) {
         unsafe {
             bjolt_set_velocity(
                 self.world_ptr,
@@ -1675,7 +1720,13 @@ impl JoltWorld {
         bend_type: SoftBendType,
     ) -> u64 {
         unsafe {
-            bjolt_create_cloth_settings(grid_nx, grid_nz, grid_spacing, pinned_rows, bend_type as u8)
+            bjolt_create_cloth_settings(
+                grid_nx,
+                grid_nz,
+                grid_spacing,
+                pinned_rows,
+                bend_type as u8,
+            )
         }
     }
 
@@ -1688,7 +1739,12 @@ impl JoltWorld {
         bend_type: SoftBendType,
     ) -> u64 {
         unsafe {
-            bjolt_create_sphere_settings(sphere_radius, theta_segments, phi_segments, bend_type as u8)
+            bjolt_create_sphere_settings(
+                sphere_radius,
+                theta_segments,
+                phi_segments,
+                bend_type as u8,
+            )
         }
     }
 
@@ -1906,7 +1962,6 @@ impl JoltWorld {
         }
     }
 
-
     /// Velocity motor on a slider, hinge, or path joint. False on bad ids.
     pub fn constraint_drive_at(&mut self, constraint_id: u32, target_velocity: f32) -> bool {
         unsafe { bjolt_constraint_drive_at(self.world_ptr, constraint_id, target_velocity) }
@@ -1961,7 +2016,12 @@ impl JoltWorld {
     /// Linear + angular damping on a live body (0 = Jolt default glide).
     /// Takes effect on the next step; ragdolls use it to settle instead of
     /// crawling on joint micro-motion.
-    pub fn set_body_damping(&mut self, body_id_raw: u32, linear_damping: f32, angular_damping: f32) {
+    pub fn set_body_damping(
+        &mut self,
+        body_id_raw: u32,
+        linear_damping: f32,
+        angular_damping: f32,
+    ) {
         unsafe {
             bjolt_body_set_damping(self.world_ptr, body_id_raw, linear_damping, angular_damping)
         }
@@ -1970,9 +2030,7 @@ impl JoltWorld {
     /// Live density in kg/m³: rescales mass + inertia to density × shape
     /// volume. Takes effect on the next step, no re-bake needed.
     pub fn set_body_density(&mut self, body_id_raw: u32, density_kg_per_m3: f32) {
-        unsafe {
-            bjolt_body_set_density(self.world_ptr, body_id_raw, density_kg_per_m3)
-        }
+        unsafe { bjolt_body_set_density(self.world_ptr, body_id_raw, density_kg_per_m3) }
     }
 
     /// Changes the gravity multiplier on a live body (0 floats, 2 pulls
@@ -2075,19 +2133,164 @@ impl JoltWorld {
 
     /// Drains woken body ids into the buffer. Returns ids kept.
     pub fn drain_woke(&mut self, woke_ids: &mut [u32]) -> u32 {
-        unsafe {
-            bjolt_drain_woke(
-                self.world_ptr,
-                woke_ids.as_mut_ptr(),
-                woke_ids.len() as u32,
-            )
-        }
+        unsafe { bjolt_drain_woke(self.world_ptr, woke_ids.as_mut_ptr(), woke_ids.len() as u32) }
     }
 
     /// Stops two bodies colliding (ragdoll parent-child pairs). Shared group
     /// table per pair; game code calls this once per link at bake.
     pub fn set_bodies_no_collide(&mut self, body_a_raw: u32, body_b_raw: u32) {
         unsafe { bjolt_bodies_no_collide(self.world_ptr, body_a_raw, body_b_raw) }
+    }
+
+    /// Ragdoll builder holding Jolt settings + skeleton. Free with
+    /// [`JoltWorld::ragdoll_build_destroy`] after create.
+    pub fn ragdoll_build_create(&mut self) -> *mut jolt_sys::BJoltRagdollBuild {
+        unsafe { bjolt_ragdoll_build_create() }
+    }
+
+    /// Adds one part to the builder. `parent_index` -1 = root; parents must
+    /// come first. `shape_kind` 0 = capsule (`dim_x` cylinder half height,
+    /// `dim_y` radius), 1 = box (half extents), 2 = sphere (`dim_x`
+    /// radius). Returns the part index, or -1 on a bad shape.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ragdoll_build_add_part(
+        &mut self,
+        build: *mut jolt_sys::BJoltRagdollBuild,
+        parent_index: i32,
+        shape_kind: u8,
+        dim_x: f32,
+        dim_y: f32,
+        dim_z: f32,
+        part_position: Vec3,
+        part_rotation: Quat,
+        object_layer: u16,
+        density_kg_per_m3: f32,
+    ) -> i32 {
+        unsafe {
+            bjolt_ragdoll_build_add_part(
+                build,
+                parent_index,
+                shape_kind,
+                dim_x,
+                dim_y,
+                dim_z,
+                part_position.x,
+                part_position.y,
+                part_position.z,
+                part_rotation.x,
+                part_rotation.y,
+                part_rotation.z,
+                part_rotation.w,
+                object_layer,
+                density_kg_per_m3,
+            )
+        }
+    }
+
+    /// Hinge limit between a part and its parent. Seated pose reads zero.
+    pub fn ragdoll_build_set_hinge(
+        &mut self,
+        build: *mut jolt_sys::BJoltRagdollBuild,
+        part_index: i32,
+        hinge_axis: Dir3,
+        normal_axis: Dir3,
+        limits_min: f32,
+        limits_max: f32,
+    ) -> bool {
+        unsafe {
+            bjolt_ragdoll_build_set_hinge(
+                build,
+                part_index,
+                hinge_axis.x,
+                hinge_axis.y,
+                hinge_axis.z,
+                normal_axis.x,
+                normal_axis.y,
+                normal_axis.z,
+                limits_min,
+                limits_max,
+            )
+        }
+    }
+
+    /// Swing-twist limit between a part and its parent. Anchors seat from
+    /// part poses.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ragdoll_build_set_swing_twist(
+        &mut self,
+        build: *mut jolt_sys::BJoltRagdollBuild,
+        part_index: i32,
+        twist_axis: Dir3,
+        plane_axis: Dir3,
+        normal_half_cone: f32,
+        plane_half_cone: f32,
+        twist_min: f32,
+        twist_max: f32,
+    ) -> bool {
+        unsafe {
+            bjolt_ragdoll_build_set_swing_twist(
+                build,
+                part_index,
+                twist_axis.x,
+                twist_axis.y,
+                twist_axis.z,
+                plane_axis.x,
+                plane_axis.y,
+                plane_axis.z,
+                normal_half_cone,
+                plane_half_cone,
+                twist_min,
+                twist_max,
+            )
+        }
+    }
+
+    /// Mass stabilization (ratio clamp + parent-inertia boost), in place.
+    /// Run after all parts, before create. False on failure.
+    pub fn ragdoll_build_stabilize(&mut self, build: *mut jolt_sys::BJoltRagdollBuild) -> bool {
+        unsafe { bjolt_ragdoll_build_stabilize(build) }
+    }
+
+    /// Constraint priorities + shared parent-child no-collide filter.
+    pub fn ragdoll_build_finalize(&mut self, build: *mut jolt_sys::BJoltRagdollBuild) {
+        unsafe { bjolt_ragdoll_build_finalize(build) }
+    }
+
+    /// Creates bodies + constraints and adds them in one shot. Mints a fresh
+    /// collision group per ragdoll. Returns null on failure.
+    pub fn ragdoll_create(
+        &mut self,
+        build: *mut jolt_sys::BJoltRagdollBuild,
+    ) -> Option<*mut jolt_sys::BJoltRagdoll> {
+        let group_id = self.next_ragdoll_group;
+        self.next_ragdoll_group += 1;
+        let handle = unsafe { bjolt_ragdoll_create(self.world_ptr, build, group_id, 0) };
+        (!handle.is_null()).then_some(handle)
+    }
+
+    /// Part count (= body count) of a live ragdoll.
+    pub fn ragdoll_body_count(&self, handle: *mut jolt_sys::BJoltRagdoll) -> u32 {
+        unsafe { bjolt_ragdoll_body_count(handle) }
+    }
+
+    /// Body ids in part order. Returns ids written.
+    pub fn ragdoll_body_ids(
+        &self,
+        handle: *mut jolt_sys::BJoltRagdoll,
+        out_ids: &mut [u32],
+    ) -> u32 {
+        unsafe { bjolt_ragdoll_body_ids(handle, out_ids.as_mut_ptr(), out_ids.len() as u32) }
+    }
+
+    /// Removes bodies + constraints and frees the ragdoll. Never mix with
+    /// per-body remove/destroy on these ids.
+    pub fn ragdoll_destroy(&mut self, handle: *mut jolt_sys::BJoltRagdoll) {
+        unsafe { bjolt_ragdoll_destroy(self.world_ptr, handle) }
+    }
+
+    /// Frees the builder (settings only, after create).
+    pub fn ragdoll_build_destroy(&mut self, build: *mut jolt_sys::BJoltRagdollBuild) {
+        unsafe { bjolt_ragdoll_build_destroy(build) }
     }
 
     /// Creates a virtual character capsule; bottom sits at the position.
@@ -2186,10 +2389,9 @@ impl JoltWorld {
         &mut self,
         character_id_raw: u32,
     ) -> (Vec3, crate::character::JoltCharacterGround) {
-        self.character_positions.remove(&character_id_raw).unwrap_or((
-            Vec3::ZERO,
-            crate::character::JoltCharacterGround::default(),
-        ))
+        self.character_positions
+            .remove(&character_id_raw)
+            .unwrap_or((Vec3::ZERO, crate::character::JoltCharacterGround::default()))
     }
 
     /// Teleports a character to a position with a velocity.
@@ -2405,7 +2607,10 @@ impl JoltWorld {
 
     /// Full ground reading: contact position, surface normal, surface
     /// velocity, supporting body id (0 airborne), body user data.
-    pub fn character_ground_detail(&mut self, character_id_raw: u32) -> (Vec3, Vec3, Vec3, u32, u64) {
+    pub fn character_ground_detail(
+        &mut self,
+        character_id_raw: u32,
+    ) -> (Vec3, Vec3, Vec3, u32, u64) {
         let mut raw_position = [0.0f32; 3];
         let mut raw_normal = [0.0f32; 3];
         let mut raw_velocity = [0.0f32; 3];

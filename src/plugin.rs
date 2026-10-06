@@ -6,10 +6,10 @@
 //! without ever wondering whether the sim has run: the schedules themselves
 //! run in that order, so no per-system ordering can get it wrong.
 
+use crate::physics_world::{CollisionLayers, JoltWorld};
 use bevy::app::FixedMainScheduleOrder;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
-use crate::physics_world::{CollisionLayers, JoltWorld};
 
 /// Step schedule: runs once per fixed tick, right after [`FixedUpdate`] and
 /// before [`FixedPostUpdate`]. Owns the sim step plus every readback (pose
@@ -26,7 +26,7 @@ pub struct JoltCollisionLayers {
     pub collision_layers: CollisionLayers,
 }
 
- /// Startup gravity carried from the [`JoltPlugin`] builder to world
+/// Startup gravity carried from the [`JoltPlugin`] builder to world
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct JoltStartupGravity {
     pub world_gravity: Vec3,
@@ -173,15 +173,14 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::body_sync::despawn_jolt_body);
         app.add_observer(crate::character::despawn_jolt_character);
         app.add_observer(crate::character::despawn_jolt_rigid_character);
-        app.add_observer(crate::vehicle::despawn_jolt_vehicle);
         app.add_observer(crate::soft_body::despawn_jolt_soft_body);
-        // Pre-step bakes: joints/vehicles/ragdoll links resolve before any
+        app.add_observer(crate::ragdoll::despawn_jolt_ragdoll);
+        // Pre-step bakes: joints/vehicles resolve before any
         // drive writes. Everything in FixedUpdate precedes the JoltStep
         // schedule by construction, so no .before() needed.
         app.add_systems(
             FixedUpdate,
             (
-                crate::ragdoll::bake_ragdoll_links,
                 crate::joint_sync::create_jolt_joints,
                 crate::vehicle::create_jolt_vehicles,
             ),
