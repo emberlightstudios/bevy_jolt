@@ -512,18 +512,24 @@ pub fn interpolate_body_transforms(
     }
 }
 
-/// Destroys the Jolt body when its entity is despawned.
+/// Destroys the Jolt body when its entity is despawned. Skips ragdoll parts:
+/// their ids die with the whole ragdoll in `despawn_jolt_ragdoll`
+/// (double destroy crashes).
 pub fn despawn_jolt_body(
-    trigger: On<Remove, JoltBodyId>,
-    body_query: Query<&JoltBodyId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
+ trigger: On<Remove, JoltBodyId>,
+ body_query: Query<&JoltBodyId>,
+ part_bodies: Query<(), With<crate::ragdoll::RagdollPartBody>>,
+ mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    let trigger_entity = trigger.event().entity;
-    let Ok(body_id) = body_query.get(trigger_entity) else {
-        panic!(
-            "JoltBodyId gone on {:?} before despawn ran",
-            trigger_entity
-        );
-    };
-    physics_world.remove_and_destroy_body(body_id.body_id_raw);
+ let trigger_entity = trigger.event().entity;
+ if part_bodies.contains(trigger_entity) {
+ return;
+ }
+ let Ok(body_id) = body_query.get(trigger_entity) else {
+ panic!(
+ "JoltBodyId gone on {:?} before despawn ran",
+ trigger_entity
+ );
+ };
+ physics_world.remove_and_destroy_body(body_id.body_id_raw);
 }

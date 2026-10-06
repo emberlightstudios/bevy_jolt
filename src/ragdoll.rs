@@ -46,26 +46,29 @@ pub enum RagdollShape {
     },
 }
 
-/// Joint between a part and its parent, measured from the seated spawn pose
-/// (identical frames on both sides read zero).
+/// Joint between a part and its parent, about `anchor` (world space),
+/// measured from the seated spawn pose (identical frames on both sides
+/// read zero).
 #[derive(Clone, Copy, Debug)]
 pub enum RagdollJoint {
-    /// Rotation about `hinge_axis` within [`min`, `max`] (elbows, knees).
-    Hinge {
-        hinge_axis: Dir3,
-        normal_axis: Dir3,
-        min: f32,
-        max: f32,
-    },
-    /// Cone swing about `twist_axis` plus bounded twist (everything else).
-    SwingTwist {
-        twist_axis: Dir3,
-        plane_axis: Dir3,
-        normal_half_cone: f32,
-        plane_half_cone: f32,
-        twist_min: f32,
-        twist_max: f32,
-    },
+ /// Rotation about `hinge_axis` within [`min`, `max`] (elbows, knees).
+ Hinge {
+ anchor: Vec3,
+ hinge_axis: Dir3,
+ normal_axis: Dir3,
+ min: f32,
+ max: f32,
+ },
+ /// Cone swing about `twist_axis` plus bounded twist (everything else).
+ SwingTwist {
+ anchor: Vec3,
+ twist_axis: Dir3,
+ plane_axis: Dir3,
+ normal_half_cone: f32,
+ plane_half_cone: f32,
+ twist_min: f32,
+ twist_max: f32,
+ },
 }
 
 /// Ragdoll spec: the part list plus shared physics tuning. Spawn with a
@@ -80,54 +83,91 @@ pub struct JoltRagdoll {
 impl JoltRagdoll {
     /// A small humanoid: hips root, torso, head, two arms (upper + lower),
     /// two legs (upper + lower). Offsets hang down -y from the spawn.
-    pub fn humanoid(object_layer: u16) -> Self {
-        let swing = |cone: f32| RagdollJoint::SwingTwist {
-            twist_axis: Dir3::Y,
-            plane_axis: Dir3::X,
-            normal_half_cone: cone,
-            plane_half_cone: cone,
-            twist_min: -cone,
-            twist_max: cone,
-        };
-        let capsule_part =
-            |half_height: f32, radius: f32, offset: Vec3, parent_part: Option<usize>, cone: f32| {
-                RagdollPart {
-                    shape: RagdollShape::Capsule {
-                        cylinder_half_height: half_height,
-                        radius,
-                    },
-                    part_position: offset,
-                    part_rotation: Quat::IDENTITY,
-                    parent_part,
-                    joint: swing(cone),
-                }
-            };
-        let limb_cone = 0.6;
-        Self {
-            parts: vec![
-                capsule_part(0.15, 0.15, Vec3::new(0.0, 0.9, 0.0), None, 0.0),
-                capsule_part(0.2, 0.14, Vec3::new(0.0, 1.3, 0.0), Some(0), 0.5),
-                capsule_part(0.1, 0.12, Vec3::new(0.0, 1.7, 0.0), Some(1), 0.5),
-                capsule_part(0.12, 0.06, Vec3::new(-0.25, 1.35, 0.0), Some(1), limb_cone),
-                capsule_part(0.12, 0.05, Vec3::new(-0.25, 1.05, 0.0), Some(3), limb_cone),
-                capsule_part(0.12, 0.06, Vec3::new(0.25, 1.35, 0.0), Some(1), limb_cone),
-                capsule_part(0.12, 0.05, Vec3::new(0.25, 1.05, 0.0), Some(5), limb_cone),
-                capsule_part(0.2, 0.08, Vec3::new(-0.12, 0.5, 0.0), Some(0), limb_cone),
-                capsule_part(0.2, 0.07, Vec3::new(-0.12, 0.1, 0.0), Some(7), limb_cone),
-                capsule_part(0.2, 0.08, Vec3::new(0.12, 0.5, 0.0), Some(0), limb_cone),
-                capsule_part(0.2, 0.07, Vec3::new(0.12, 0.1, 0.0), Some(9), limb_cone),
-            ],
-            object_layer,
-            density_kg_per_m3: 1000.0,
-        }
-    }
+ pub fn humanoid(object_layer: u16) -> Self {
+ // Offsets first: anchors are midpoints between parent/child positions.
+ let offsets = [
+ Vec3::new(0.0, 0.9, 0.0),
+ Vec3::new(0.0, 1.3, 0.0),
+ Vec3::new(0.0, 1.7, 0.0),
+ Vec3::new(-0.25, 1.35, 0.0),
+ Vec3::new(-0.25, 1.05, 0.0),
+ Vec3::new(0.25, 1.35, 0.0),
+ Vec3::new(0.25, 1.05, 0.0),
+ Vec3::new(-0.12, 0.5, 0.0),
+ Vec3::new(-0.12, 0.1, 0.0),
+ Vec3::new(0.12, 0.5, 0.0),
+ Vec3::new(0.12, 0.1, 0.0),
+ ];
+ let parents = [
+ None,
+ Some(0),
+ Some(1),
+ Some(1),
+ Some(3),
+ Some(1),
+ Some(5),
+ Some(0),
+ Some(7),
+ Some(0),
+ Some(9),
+ ];
+ let anchor_for = |part: usize| match parents[part] {
+ Some(parent) => (offsets[parent] + offsets[part]) * 0.5,
+ None => offsets[part],
+ };
+ let swing = |part: usize, cone: f32| RagdollJoint::SwingTwist {
+ anchor: anchor_for(part),
+ twist_axis: Dir3::Y,
+ plane_axis: Dir3::X,
+ normal_half_cone: cone,
+ plane_half_cone: cone,
+ twist_min: -cone,
+ twist_max: cone,
+ };
+ let capsule_part = |part: usize, half_height: f32, radius: f32, cone: f32| RagdollPart {
+ shape: RagdollShape::Capsule {
+ cylinder_half_height: half_height,
+ radius,
+ },
+ part_position: offsets[part],
+ part_rotation: Quat::IDENTITY,
+ parent_part: parents[part],
+ joint: swing(part, cone),
+ };
+ let limb_cone = 0.6;
+ Self {
+ parts: vec![
+ capsule_part(0, 0.15, 0.15, 0.0),
+ capsule_part(1, 0.2, 0.14, 0.5),
+ capsule_part(2, 0.1, 0.12, 0.5),
+ capsule_part(3, 0.12, 0.06, limb_cone),
+ capsule_part(4, 0.12, 0.05, limb_cone),
+ capsule_part(5, 0.12, 0.06, limb_cone),
+ capsule_part(6, 0.12, 0.05, limb_cone),
+ capsule_part(7, 0.2, 0.08, limb_cone),
+ capsule_part(8, 0.2, 0.07, limb_cone),
+ capsule_part(9, 0.2, 0.08, limb_cone),
+ capsule_part(10, 0.2, 0.07, limb_cone),
+ ],
+ object_layer,
+ density_kg_per_m3: 1000.0,
+ }
+}
 }
 
 /// Part bodies of one baked ragdoll, in spec order. Read poses from these.
 #[derive(Component, Clone, Debug)]
 pub struct JoltRagdollParts {
-    pub part_entities: Vec<Entity>,
+ pub part_entities: Vec<Entity>,
+ body_ids: Vec<u32>,
 }
+
+/// Marker on ragdoll part entities: their `JoltBodyId` is owned by the
+/// ragdoll teardown, so `despawn_jolt_body` must skip them (double destroy
+/// crashes). The whole ragdoll — bodies and constraints — dies with the
+/// `JoltRagdollHandle`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RagdollPartBody;
 
 /// Live ragdoll handle: owns the Jolt bodies + constraints. Removing this
 /// tears the whole ragdoll out of the system.
@@ -189,41 +229,30 @@ pub fn bake_jolt_ragdoll(
             ragdoll.density_kg_per_m3,
         );
         assert!(part_index >= 0, "ragdoll part shape invalid");
-        if ragdoll_part.parent_part.is_some() {
-            let joint_ok = match ragdoll_part.joint {
-                RagdollJoint::Hinge {
-                    hinge_axis,
-                    normal_axis,
-                    min,
-                    max,
-                } => world.ragdoll_build_set_hinge(
-                    build,
-                    part_index,
-                    hinge_axis,
-                    normal_axis,
-                    min,
-                    max,
-                ),
-                RagdollJoint::SwingTwist {
-                    twist_axis,
-                    plane_axis,
-                    normal_half_cone,
-                    plane_half_cone,
-                    twist_min,
-                    twist_max,
-                } => world.ragdoll_build_set_swing_twist(
-                    build,
-                    part_index,
-                    twist_axis,
-                    plane_axis,
-                    normal_half_cone,
-                    plane_half_cone,
-                    twist_min,
-                    twist_max,
-                ),
-            };
-            assert!(joint_ok, "ragdoll joint failed on part {part_index}");
-        }
+ if ragdoll_part.parent_part.is_some() {
+ let joint_ok = match ragdoll_part.joint {
+ RagdollJoint::Hinge {
+ anchor,
+ hinge_axis,
+ normal_axis,
+ min,
+ max,
+ } => world.ragdoll_build_set_hinge(build, part_index, anchor, hinge_axis, normal_axis, min, max),
+ RagdollJoint::SwingTwist {
+ anchor,
+ twist_axis,
+ plane_axis,
+ normal_half_cone,
+ plane_half_cone,
+ twist_min,
+ twist_max,
+ } => world.ragdoll_build_set_swing_twist(
+ build, part_index, anchor, twist_axis, plane_axis, normal_half_cone, plane_half_cone,
+ twist_min, twist_max,
+ ),
+ };
+ assert!(joint_ok, "ragdoll joint failed on part {part_index}");
+ }
     }
     assert!(
         world.ragdoll_build_stabilize(build),
@@ -246,47 +275,69 @@ pub fn bake_jolt_ragdoll(
     let written = world.ragdoll_body_ids(handle, &mut body_ids);
     assert_eq!(written as usize, body_count, "ragdoll body ids short");
     let mut part_entities = Vec::with_capacity(body_count);
-    for (part_index, body_id_raw) in body_ids.iter().enumerate() {
-        let part_pose = Transform {
-            translation: ragdoll.parts[part_index].part_position,
-            rotation: ragdoll.parts[part_index].part_rotation,
-            ..default()
-        };
-        let part_entity = commands
-            .spawn((
-                part_pose,
-                JoltBodyId {
-                    body_id_raw: *body_id_raw,
-                },
-                crate::body_forces::JoltSleeping { sleeping: false },
-                PreviousBodyTransform {
-                    previous_position: part_pose.translation,
-                    previous_rotation: part_pose.rotation,
-                },
-                ChildOf(ragdoll_entity),
-            ))
-            .id();
-        part_entities.push(part_entity);
-    }
-    commands.entity(ragdoll_entity).insert((
-        JoltRagdollParts { part_entities },
-        JoltRagdollHandle {
-            ragdoll_raw: handle,
-        },
-    ));
-}
-
+ for (part_index, body_id_raw) in body_ids.iter().enumerate() {
+ let part_pose = Transform {
+ translation: ragdoll.parts[part_index].part_position,
+ rotation: ragdoll.parts[part_index].part_rotation,
+ ..default()
+ };
+ // File the outline for the debug visualizer: ragdoll bodies never pass
+ // through the per-body bake that files them otherwise.
+ let outline = match ragdoll.parts[part_index].shape {
+ RagdollShape::Capsule {
+ cylinder_half_height,
+ radius,
+ } => crate::physics_world::PhysicsShape::Capsule {
+ capsule_half_height: cylinder_half_height,
+ capsule_radius: radius,
+ },
+ RagdollShape::Box { half_extents } => crate::physics_world::PhysicsShape::Box { half_extents },
+ RagdollShape::Sphere { radius } => crate::physics_world::PhysicsShape::Sphere {
+ sphere_radius: radius,
+ },
+ };
+ world.file_shape(*body_id_raw, std::sync::Arc::new(outline));
+ let part_entity = commands
+ .spawn((
+ part_pose,
+ JoltBodyId {
+ body_id_raw: *body_id_raw,
+ },
+ RagdollPartBody,
+ crate::body_forces::JoltSleeping { sleeping: false },
+ PreviousBodyTransform {
+ previous_position: part_pose.translation,
+ previous_rotation: part_pose.rotation,
+ },
+ ChildOf(ragdoll_entity),
+ ))
+ .id();
+ part_entities.push(part_entity);
+ }
+ commands.entity(ragdoll_entity).insert((
+ JoltRagdollParts {
+ part_entities,
+ body_ids,
+ },
+ JoltRagdollHandle {
+ ragdoll_raw: handle,
+ },
+ ));
+ }
 /// Tears the whole ragdoll (bodies + constraints) out of Jolt when the
 /// handle leaves. Part entities keep their `JoltBodyId`s but the ids are
 /// dead — the ragdoll entity's despawn takes the parts with it.
 pub fn despawn_jolt_ragdoll(
-    trigger: On<Remove, JoltRagdollHandle>,
-    handle_query: Query<&JoltRagdollHandle>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
+ trigger: On<Remove, JoltRagdollHandle>,
+ handle_query: Query<(&JoltRagdollHandle, &JoltRagdollParts)>,
+ mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    let trigger_entity = trigger.event().entity;
-    let Ok(handle) = handle_query.get(trigger_entity) else {
-        panic!("JoltRagdollHandle gone on {trigger_entity:?} before despawn ran");
-    };
-    physics_world.ragdoll_destroy(handle.ragdoll_raw);
+ let trigger_entity = trigger.event().entity;
+ let Ok((handle, baked)) = handle_query.get(trigger_entity) else {
+ panic!("JoltRagdollHandle gone on {trigger_entity:?} before despawn ran");
+ };
+ for body_id_raw in &baked.body_ids {
+ physics_world.unfile_shape(*body_id_raw);
+ }
+ physics_world.ragdoll_destroy(handle.ragdoll_raw);
 }

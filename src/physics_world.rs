@@ -378,12 +378,18 @@ impl JoltWorld {
         &self.rigid_character_shapes
     }
 
-    /// Files one shared outline recipe for a body: bake and vehicles call
-    /// this with the component's own allocation, so geometry lives once.
-    /// Debug draw only; physics owns the real shape.
-    pub fn file_shape(&mut self, body_id_raw: u32, outline: std::sync::Arc<PhysicsShape>) {
-        self.body_shapes.insert(body_id_raw, outline);
-    }
+ /// Files one shared outline recipe for a body: bake and vehicles call
+ /// this with the component's own allocation, so geometry lives once.
+ /// Debug draw only; physics owns the real shape.
+ pub fn file_shape(&mut self, body_id_raw: u32, outline: std::sync::Arc<PhysicsShape>) {
+ self.body_shapes.insert(body_id_raw, outline);
+ }
+
+ /// Drops a filed outline (ragdoll teardown). Physics bodies are already
+ /// gone; this only clears the debug recipe.
+ pub fn unfile_shape(&mut self, body_id_raw: u32) {
+ self.body_shapes.remove(&body_id_raw);
+ }
 
     pub fn create_floor(&mut self, half_extents: Vec3, floor_position_height: f32) -> u32 {
         let body_id_raw = unsafe {
@@ -2187,63 +2193,72 @@ impl JoltWorld {
         }
     }
 
-    /// Hinge limit between a part and its parent. Seated pose reads zero.
-    pub fn ragdoll_build_set_hinge(
-        &mut self,
-        build: *mut jolt_sys::BJoltRagdollBuild,
-        part_index: i32,
-        hinge_axis: Dir3,
-        normal_axis: Dir3,
-        limits_min: f32,
-        limits_max: f32,
-    ) -> bool {
-        unsafe {
-            bjolt_ragdoll_build_set_hinge(
-                build,
-                part_index,
-                hinge_axis.x,
-                hinge_axis.y,
-                hinge_axis.z,
-                normal_axis.x,
-                normal_axis.y,
-                normal_axis.z,
-                limits_min,
-                limits_max,
-            )
-        }
-    }
+ /// Hinge limit between a part and its parent, about `anchor` (world
+ /// space). Seated pose reads zero.
+ pub fn ragdoll_build_set_hinge(
+ &mut self,
+ build: *mut jolt_sys::BJoltRagdollBuild,
+ part_index: i32,
+ anchor: Vec3,
+ hinge_axis: Dir3,
+ normal_axis: Dir3,
+ limits_min: f32,
+ limits_max: f32,
+ ) -> bool {
+ unsafe {
+ bjolt_ragdoll_build_set_hinge(
+ build,
+ part_index,
+ anchor.x,
+ anchor.y,
+ anchor.z,
+ hinge_axis.x,
+ hinge_axis.y,
+ hinge_axis.z,
+ normal_axis.x,
+ normal_axis.y,
+ normal_axis.z,
+ limits_min,
+ limits_max,
+ )
+ }
+ }
 
-    /// Swing-twist limit between a part and its parent. Anchors seat from
-    /// part poses.
-    #[allow(clippy::too_many_arguments)]
-    pub fn ragdoll_build_set_swing_twist(
-        &mut self,
-        build: *mut jolt_sys::BJoltRagdollBuild,
-        part_index: i32,
-        twist_axis: Dir3,
-        plane_axis: Dir3,
-        normal_half_cone: f32,
-        plane_half_cone: f32,
-        twist_min: f32,
-        twist_max: f32,
-    ) -> bool {
-        unsafe {
-            bjolt_ragdoll_build_set_swing_twist(
-                build,
-                part_index,
-                twist_axis.x,
-                twist_axis.y,
-                twist_axis.z,
-                plane_axis.x,
-                plane_axis.y,
-                plane_axis.z,
-                normal_half_cone,
-                plane_half_cone,
-                twist_min,
-                twist_max,
-            )
-        }
-    }
+ /// Swing-twist limit between a part and its parent, about `anchor`
+ /// (world space).
+ #[allow(clippy::too_many_arguments)]
+ pub fn ragdoll_build_set_swing_twist(
+ &mut self,
+ build: *mut jolt_sys::BJoltRagdollBuild,
+ part_index: i32,
+ anchor: Vec3,
+ twist_axis: Dir3,
+ plane_axis: Dir3,
+ normal_half_cone: f32,
+ plane_half_cone: f32,
+ twist_min: f32,
+ twist_max: f32,
+ ) -> bool {
+ unsafe {
+ bjolt_ragdoll_build_set_swing_twist(
+ build,
+ part_index,
+ anchor.x,
+ anchor.y,
+ anchor.z,
+ twist_axis.x,
+ twist_axis.y,
+ twist_axis.z,
+ plane_axis.x,
+ plane_axis.y,
+ plane_axis.z,
+ normal_half_cone,
+ plane_half_cone,
+ twist_min,
+ twist_max,
+ )
+ }
+ }
 
     /// Mass stabilization (ratio clamp + parent-inertia boost), in place.
     /// Run after all parts, before create. False on failure.

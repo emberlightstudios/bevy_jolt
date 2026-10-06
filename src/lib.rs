@@ -48,7 +48,8 @@ pub use crate::plugin::{
     JoltStep, JoltStepConfig,
 };
 pub use crate::ragdoll::{
-    JoltRagdoll, JoltRagdollHandle, JoltRagdollParts, RagdollJoint, RagdollPart, RagdollShape,
+ JoltRagdoll, JoltRagdollHandle, JoltRagdollParts, RagdollJoint, RagdollPart, RagdollPartBody,
+ RagdollShape,
 };
 pub use crate::soft_body::{
     JoltSoftBodyConfig, JoltSoftBodyId, JoltSoftBodyMesh, JoltSoftSharedSettings,
