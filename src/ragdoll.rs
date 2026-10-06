@@ -46,24 +46,18 @@ pub enum RagdollShape {
     },
 }
 
-/// Joint between a part and its parent, about `anchor` (world space),
-/// measured from the seated spawn pose (identical frames on both sides
-/// read zero).
+/// Joint between a part and its parent, about `anchor` (world space).
+/// Frames derive at bake from the seated part rotations (per side, like
+/// avian's `local_basis2`), so the seated pose reads zero. Hinges flex
+/// about body-local Z (normal Y); swing-twist runs twist along body-local
+/// Y (plane X).
 #[derive(Clone, Copy, Debug)]
 pub enum RagdollJoint {
- /// Rotation about `hinge_axis` within [`min`, `max`] (elbows, knees).
- Hinge {
- anchor: Vec3,
- hinge_axis: Dir3,
- normal_axis: Dir3,
- min: f32,
- max: f32,
- },
- /// Cone swing about `twist_axis` plus bounded twist (everything else).
+ /// Rotation about body-local Z within [`min`, `max`] (elbows, knees).
+ Hinge { anchor: Vec3, min: f32, max: f32 },
+ /// Cone swing about body-local Y plus bounded twist (everything else).
  SwingTwist {
  anchor: Vec3,
- twist_axis: Dir3,
- plane_axis: Dir3,
  normal_half_cone: f32,
  plane_half_cone: f32,
  twist_min: f32,
@@ -119,8 +113,6 @@ impl JoltRagdoll {
  };
  let swing = |part: usize, cone: f32| RagdollJoint::SwingTwist {
  anchor: anchor_for(part),
- twist_axis: Dir3::Y,
- plane_axis: Dir3::X,
  normal_half_cone: cone,
  plane_half_cone: cone,
  twist_min: -cone,
@@ -214,17 +206,20 @@ pub fn bake_jolt_ragdoll(
     }
     let world = &mut **physics_world;
     let build = world.ragdoll_build_create();
-    for ragdoll_part in &ragdoll.parts {
-        let (shape_kind, dim_x, dim_y, dim_z) = match ragdoll_part.shape {
-            RagdollShape::Capsule {
-                cylinder_half_height,
-                radius,
-            } => (0, cylinder_half_height, radius, 0.0),
-            RagdollShape::Box { half_extents } => {
-                (1, half_extents.x, half_extents.y, half_extents.z)
-            }
-            RagdollShape::Sphere { radius } => (2, radius, 0.0, 0.0),
-        };
+ // Seated rotations per part (parents-first, so the parent's frame is
+ // always known): joint frames derive per side from these.
+ let mut seated_rotations = Vec::with_capacity(ragdoll.parts.len());
+ for ragdoll_part in &ragdoll.parts {
+ let (shape_kind, dim_x, dim_y, dim_z) = match ragdoll_part.shape {
+ RagdollShape::Capsule {
+ cylinder_half_height,
+ radius,
+ } => (0, cylinder_half_height, radius, 0.0),
+ RagdollShape::Box { half_extents } => {
+ (1, half_extents.x, half_extents.y, half_extents.z)
+ }
+ RagdollShape::Sphere { radius } => (2, radius, 0.0, 0.0),
+ };
  let part_index = world.ragdoll_build_add_part(
  build,
  ragdoll_part.parent_part.map_or(-1, |parent| parent as i32),
@@ -238,32 +233,49 @@ pub fn bake_jolt_ragdoll(
  ragdoll.density_kg_per_m3,
  ragdoll.motion,
  );
-        assert!(part_index >= 0, "ragdoll part shape invalid");
- if ragdoll_part.parent_part.is_some() {
+ assert!(part_index >= 0, "ragdoll part shape invalid");
+ seated_rotations.push(ragdoll_part.part_rotation);
+ if let Some(parent_index) = ragdoll_part.parent_part {
+ // Per-side frames: local axes through each body's own seated
+ // rotation, so the seated pose reads zero (avian local_basis2).
+ let parent_rotation = seated_rotations[parent_index];
+ let child_rotation = ragdoll_part.part_rotation;
+ let axis = |rotation: Quat, local: Vec3| rotation * local;
  let joint_ok = match ragdoll_part.joint {
- RagdollJoint::Hinge {
+ RagdollJoint::Hinge { anchor, min, max } => world.ragdoll_build_set_hinge(
+ build,
+ part_index,
  anchor,
- hinge_axis,
- normal_axis,
+ axis(parent_rotation, Vec3::Z),
+ axis(parent_rotation, Vec3::Y),
+ axis(child_rotation, Vec3::Z),
+ axis(child_rotation, Vec3::Y),
  min,
  max,
- } => world.ragdoll_build_set_hinge(build, part_index, anchor, hinge_axis, normal_axis, min, max),
+ ),
  RagdollJoint::SwingTwist {
  anchor,
- twist_axis,
- plane_axis,
  normal_half_cone,
  plane_half_cone,
  twist_min,
  twist_max,
  } => world.ragdoll_build_set_swing_twist(
- build, part_index, anchor, twist_axis, plane_axis, normal_half_cone, plane_half_cone,
- twist_min, twist_max,
+ build,
+ part_index,
+ anchor,
+ axis(parent_rotation, Vec3::Y),
+ axis(parent_rotation, Vec3::X),
+ axis(child_rotation, Vec3::Y),
+ axis(child_rotation, Vec3::X),
+ normal_half_cone,
+ plane_half_cone,
+ twist_min,
+ twist_max,
  ),
  };
  assert!(joint_ok, "ragdoll joint failed on part {part_index}");
  }
-    }
+ }
     assert!(
         world.ragdoll_build_stabilize(build),
         "ragdoll stabilization failed"
