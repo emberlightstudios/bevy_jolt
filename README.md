@@ -10,9 +10,12 @@ crate owns world lifetime, the safe body API, and the Bevy schedule wiring.
   here, slotted between `FixedUpdate` and `FixedPostUpdate`.
 - By `FixedPostUpdate`, the sim has always stepped. Read results here or later.
 
-You never order against the step. The schedules run in order, so no
-per-system `.before()` / `.after()` can get it wrong. (Tests drive schedules
-by hand, so they run `FixedUpdate` then `JoltStep` explicitly.)
+Game code writes drives in `FixedUpdate` and reads results in
+`FixedPostUpdate` (or later) — no manual ordering needed, the schedules
+already run in that sequence. (Inside `JoltStep` the crate itself orders
+readbacks `.after(step_physics_world)`. Tests drive schedules by hand, so
+they run `FixedUpdate` then `JoltStep` explicitly — see the `tick()`
+helper in `tests/`.)
 
 ## Bodies: describe, bake, sync
 
@@ -28,9 +31,10 @@ commands.spawn((
 ```
 
 - `JoltBody::dynamic(0)` / `::fixed(0)` / `::kinematic(0)` — motion type +
-  collision layer. Builder methods: `with_density`, `with_gravity`,
-  `with_friction` (0 ice – 1+ rubber), `with_restitution` (0 dead – 1
-  superball), `with_ccd` (fast bullets/swords).
+  collision layer. Builder methods: `with_density`, `with_gravity` (per-body
+  gravity multiplier: 0 floats, 2 double-pulls), `with_friction` (0 ice –
+  1+ rubber), `with_restitution` (0 dead – 1 superball), `with_ccd` (fast
+  bullets/swords).
 - Bake inserts `JoltBodyId` (read it, never write it) plus
   `PreviousBodyTransform` (render interpolation state).
 - Post-step, the sync copies pose into `Transform` and writes measured
@@ -45,14 +49,15 @@ Despawn the entity and the Jolt body is destroyed. Joints on it cascade first
 |---|---|
 | `box_shape(half)` / `sphere(r)` / `capsule(hh, r)` / `cylinder(hh, r)` | Primitives, any motion |
 | `tapered_cylinder(hh, top, bottom)` / `tapered_capsule(...)` | Primitives, any motion |
-| `compound(parts)` | Box/sphere/capsule parts, ≤16, any motion |
-| `hull(points)` | Shrink-wrap from a point soup, any motion. Dents filled |
-| `mesh(verts, tris)` | Exact triangles, **static only** (bake panics otherwise). Single-sided: wind faces toward the player |
-| `heightfield(heights, width, cell)` | `width²` heights on a grid, **static only**. Grid lookup beats tree walk at scale; edges are cliffs |
+| `compound(parts)` | Box/sphere/capsule parts, at most 16, any motion. Empty rejects at bake |
+| `hull(points)` | Convex shrink-wrap from a point soup, any motion. Dents filled — rocks, crates, wreckage |
+| `mesh(verts, tris)` | Exact-triangle static scenery, **static only** (bake panics otherwise). Archways, stairs, rubble |
+| `heightfield(heights, width, cell)` | `width × width` heights on a grid centered on spawn, **static only** (bake panics otherwise). Cheaper than the equivalent mesh at scale |
 | `plane(normal, constant)` | Infinite ground |
 
-`JoltShape` holds an `Arc<PhysicsShape>`: the component and the debug table
-share one allocation. Terrain-sized geometry lives once, not twice.
+`JoltShape` holds an `Arc<PhysicsShape>` filed into the world's debug table
+at bake (`file_shape`): the component and the drawer share one allocation.
+Terrain-sized geometry lives once, not twice.
 
 ## Driving bodies
 
@@ -61,8 +66,8 @@ share one allocation. Terrain-sized geometry lives once, not twice.
 | Trigger | Effect |
 |---|---|
 | `JoltImpulse::linear(e, v)` / `.angular(e, v)` | Instant kick, framerate-independent (`impulse / mass = Δv`) |
-| `JoltSetVelocity::linear(e, v)` / `.stop(e)` | Velocity overwrite (zero stops that axis) |
-| `JoltTeleport { position, rotation }` | Pose move, keeps momentum unless stopped after |
+| `JoltSetVelocity::linear(e, v)` / `.stop(e)` | Velocity overwrite (zero stops that axis; unlike impulse, zeroes are written, not skipped) |
+| `JoltTeleport { body_entity, target_position, target_rotation }` | Pose move that wakes the body; momentum is preserved unless you overwrite velocity afterwards |
 | `JoltSleep { body_entity }` | Freeze in place. Still solid, wakes on contact |
 | `JoltWake { body_entity }` | Rejoin next step, velocities intact |
 | `JoltSetMotion { body_entity, motion }` | Live static/kinematic/dynamic flip. Static is unwakeable; flips `JoltBody.motion` too, never half-synced |
@@ -110,12 +115,16 @@ filters would make misuse silent instead of a compile error.
 - `JoltJoint` + `JointKind` (fixed/distance/hinge/slider/cone/swing-twist/
   six-dof/point/pulley/gear/rack-pinion/path) with `JointSpace::World` or
   `LocalToBodyCom` (center-of-mass relative, NOT Transform origin).
-- `JoltMotorDrive(v)` + `JointMotor` — per-tick motor targets, driven by
-  `apply_jolt_motor_drives`. Ping-pong by rewriting the value.
+- `JoltMotorDrive(target_velocity)` on an entity with `JointMotor` — per-tick
+  motor speed targets, applied by `apply_jolt_motor_drives`. Ping-pong by
+  rewriting the value.
 - Vehicles (`JoltVehicleDrive`, tracked/wheeled), ragdolls (`JoltRagdoll`),
   soft bodies (`JoltSoftBodyConfig`, cloth/balloon/skinned), buoyancy
   (`JoltWater` resource + `JoltBuoyant` tag; flat surface, per-tick push).
-- Sensors: `JoltSensor` at bake (overlaps report, nothing pushes).
+- Sensors: `JoltSensor` flags the Jolt body so overlaps report without
+  pushing. Add it before bake and it lands then; add it after and a retry
+  marker (`PendingSensor`) applies it next tick, before the step, so the
+  first overlap is never missed.
 - Contacts: `JoltContactAdded` / `JoltContactRemoved` entity events after
   the step. Sleeping sensors still report — sleep skips integration, not
   detection.
@@ -123,10 +132,12 @@ filters would make misuse silent instead of a compile error.
 ## Queries (reads, not writes)
 
 `cast_ray_all`, `collide_point_all`, `overlap_shape_all`, `cast_shape_all`
-via `JoltPhysicsWorld`, plus `QueryProbe` shapes. Soft-body vertex reads
-(`soft_vertices`, `soft_volume`) are also reads — the only examples that
-may touch the world directly. Everything that *moves* something goes
-through components.
+on `JoltPhysicsWorld`, plus `QueryProbe` shapes — all pure reads, safe from
+any schedule. Soft-body vertex reads (`soft_vertices`, `soft_volume`) are
+reads too. Everything that *moves* something goes through components,
+triggers, or the body's own config — never ad-hoc world calls from game
+systems (see the soft-body examples for the one place vertex code touches
+the world, and keep it there).
 
 ## Collision layers and gravity
 
@@ -134,23 +145,29 @@ through components.
   everywhere in examples; real games isolate world/character/sensor teams.
 - Restitution combines by **max** (floor 0 + ball 0.9 bounces at 0.9);
   friction by **geometric mean** (either side 0 kills grip).
-- `JoltStartupGravity` / world gravity: global pull, per-body
-  `gravity_factor` scales it (0 floats, 2 double-pulls).
+- World gravity flows one way: `JoltPlugin` builder → `JoltStartupGravity`
+  resource → world at creation, then `JoltPhysicsWorld::set_gravity` for
+  runtime changes. Per-body `with_gravity(factor)` scales it (0 ignores
+  gravity, 1 normal, 2 double pull).
 
 ## Debug outlines (`JoltDebugPlugin`)
 
-Green = awake, grey = sleeping (from the marker, no per-frame poll).
-Boxes/spheres as solids; capsules/cylinders/tapered as line outlines; hulls
-as computed wireframe faces (brute-force triples, debug counts only); meshes
-and heightfields as wireframes. Characters draw their capsules (they never
-enter the body table).
+Green = awake, grey = sleeping. The color comes from the `JoltSleeping`
+marker the activation drain maintains (see "Reading bodies"), not from a
+per-frame Jolt poll. Boxes/spheres draw as solids; capsules/cylinders/tapered
+as line outlines; hulls as computed wireframe faces (brute-force triples,
+debug counts only); meshes and heightfields as wireframes. Virtual characters
+draw their capsules from their own state (they are not Jolt bodies and never
+enter the body table); rigid characters are real bodies and draw like any
+other.
 
 ## Tests and examples
 
 - Tests run single-threaded (`--test-threads=1`): parallel `JoltWorld`s
-  crash on Jolt's shared job plumbing. The harness advances `Time<Fixed>`
-  by one timestep per tick — `run_schedule(FixedUpdate)` alone integrates
-  delta = 0.
+  crash on Jolt's shared job plumbing. Each test drives time by hand — the
+  `tick()` helper in `tests/` advances `Time<Fixed>` one timestep, then runs
+  `FixedUpdate` followed by `JoltStep`. Running `FixedUpdate` alone is not
+  enough: without the `JoltStep` run the sim never steps (delta stays 0).
 - Examples are visual proofs with console assertions, not fixtures:
   `bodies_*` for shapes and drives, `constraint_*` per joint,
   `character_walk` for both character types, `bodies_terrain` for
