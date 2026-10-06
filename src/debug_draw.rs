@@ -40,12 +40,17 @@ fn draw_physics_shapes(
 
     for (body_id_raw, body_shape) in physics_world.body_shapes().iter() {
         let (body_position, body_rotation) = physics_world.body_full_transform(*body_id_raw);
-        // Sleep color from the marker the activation drain maintains: no
+        // Sleep color from the state the activation drain maintains: no
         // per-body FFI poll for a debug tint.
         let body_active = body_entities
             .iter()
             .find(|(_, body_id)| body_id.body_id_raw == *body_id_raw)
-            .map(|(body_entity, _)| body_sleeping.get(body_entity).is_err())
+            .map(|(body_entity, _)| {
+                body_sleeping
+                    .get(body_entity)
+                    .map(|body_sleeping| !**body_sleeping)
+                    .unwrap_or(true)
+            })
             .unwrap_or(true);
         match body_shape.as_ref() {
             PhysicsShape::Box { half_extents } => {

@@ -156,46 +156,23 @@ pub fn apply_jolt_teleport(
     );
 }
 
-/// One-shot sleep: freezes the body where it stands. Still solid, wakes on
-/// contact. For dormant crowds. Missing bodies skipped, same as impulses.
-#[derive(EntityEvent, Clone, Copy, Debug)]
-pub struct JoltSleep {
-    #[event_target]
-    pub body_entity: Entity,
-}
-
-/// One-shot wake: sleeping body rejoins next step, velocities intact.
-/// Harmless on awake bodies. Missing bodies skipped, same as impulses.
-#[derive(EntityEvent, Clone, Copy, Debug)]
-pub struct JoltWake {
-    #[event_target]
-    pub body_entity: Entity,
-}
-
-/// Applies a triggered [`JoltSleep`] to the target entity's Jolt body.
-pub fn apply_jolt_sleep(
-    trigger: On<JoltSleep>,
-    body_ids: Query<&JoltBodyId>,
+/// Pushes `Changed` [`JoltSleeping`] values to Jolt. Write `sleeping = true`
+/// to freeze a body where it stands (still solid, wakes on contact), `false`
+/// to rejoin next step with velocities intact. Harmless on bodies already in
+/// that state. One feedback echo per flip: the post-step drain writes Jolt's
+/// transition back into this same field, which re-fires `Changed` once — the
+/// second push is a no-op (Jolt reports nothing new) and the loop stops.
+pub fn sync_jolt_sleep(
+    sleep_query: Query<(&JoltBodyId, Ref<JoltSleeping>), Changed<JoltSleeping>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    let sleep = trigger.event();
-    let Ok(body_id) = body_ids.get(sleep.body_entity) else {
-        return;
-    };
-    physics_world.sleep_body(body_id.body_id_raw);
-}
-
-/// Applies a triggered [`JoltWake`] to the target entity's Jolt body.
-pub fn apply_jolt_wake(
-    trigger: On<JoltWake>,
-    body_ids: Query<&JoltBodyId>,
-    mut physics_world: ResMut<JoltPhysicsWorld>,
-) {
-    let wake = trigger.event();
-    let Ok(body_id) = body_ids.get(wake.body_entity) else {
-        return;
-    };
-    physics_world.wake_body(body_id.body_id_raw);
+    for (body_id, sleeping) in &sleep_query {
+        if **sleeping {
+            physics_world.sleep_body(body_id.body_id_raw);
+        } else {
+            physics_world.wake_body(body_id.body_id_raw);
+        }
+    }
 }
 
 /// Pushes `Changed` [`JoltBody`] motion values to Jolt. Runs first in
@@ -203,7 +180,7 @@ pub fn apply_jolt_wake(
 /// then, so a direct `body.motion` write takes effect the same tick — no
 /// frame delay, no trigger, no ordering needed. Setting static also sleeps
 /// the body permanently: only setting back to kinematic/dynamic rejoins the
-/// sim, `JoltWake` alone won't do it.
+/// sim, writing `sleeping = false` alone won't do it.
 pub fn sync_jolt_motion(
     motion_query: Query<(&JoltBodyId, Ref<JoltBody>), Changed<JoltBody>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -213,20 +190,36 @@ pub fn sync_jolt_motion(
     }
 }
 
-/// Marker on sleeping bodies, added/removed by the activation drain. The
-/// per-tick sync filters these out (no FFI for frozen bodies) and the debug
-/// drawer reads the marker for its sleep color instead of polling Jolt.
-/// Managed by the crate: never add or remove it by hand. Game code reacts
-/// with `Added<JoltSleeping>` / `Removed<JoltSleeping>` queries: no polling,
-/// no callbacks in the public API.
-#[derive(Component, Clone, Copy, Debug, Default)]
-pub struct JoltSleeping;
+/// Sleep state, written by both sides. Game code writes requests (`sleeping
+/// = true` freezes, `false` rejoins); the pre-step sync pushes `Changed`
+/// values to Jolt; the post-step drain writes Jolt's own transitions back
+/// here. Both operations are idempotent, so the drain's echo costs one extra
+/// no-op push per flip, then stops — it cannot loop. Derefs to bool, so
+/// `if **sleeping` reads the state directly. Never moves the entity between
+/// archetypes, no matter how often bodies nod off and wake.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct JoltSleeping {
+    pub sleeping: bool,
+}
 
-/// Drains sleep/wake transitions after the step: slept bodies gain
-/// [`JoltSleeping`], woken bodies lose it. Unknown ids (despawned mid-step)
-/// are skipped.
-pub fn sync_sleep_markers(
-    mut commands: Commands,
+impl std::ops::Deref for JoltSleeping {
+    type Target = bool;
+
+    fn deref(&self) -> &Self::Target {
+        &self.sleeping
+    }
+}
+
+impl std::ops::DerefMut for JoltSleeping {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.sleeping
+    }
+}
+
+/// Drains sleep/wake transitions after the step: slept bodies read sleeping,
+/// woken bodies read awake. Unknown ids (despawned mid-step) are skipped.
+pub fn sync_sleep_states(
+    mut sleep_query: Query<&mut JoltSleeping>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
     body_entities: Query<(Entity, &JoltBodyId)>,
 ) {
@@ -241,16 +234,22 @@ pub fn sync_sleep_markers(
             .map(|(body_entity, _)| body_entity)
     };
     for slept_index in 0..slept_kept as usize {
-        let Some(slept_entity) = find_body_entity(slept_ids[slept_index]) else {
+        let Some(sleeping_entity) = find_body_entity(slept_ids[slept_index]) else {
             continue;
         };
-        commands.entity(slept_entity).insert(JoltSleeping);
+        let Ok(mut sleeping) = sleep_query.get_mut(sleeping_entity) else {
+            continue;
+        };
+        sleeping.sleeping = true;
     }
     for woke_index in 0..woke_kept as usize {
-        let Some(woke_entity) = find_body_entity(woke_ids[woke_index]) else {
+        let Some(waking_entity) = find_body_entity(woke_ids[woke_index]) else {
             continue;
         };
-        commands.entity(woke_entity).remove::<JoltSleeping>();
+        let Ok(mut sleeping) = sleep_query.get_mut(waking_entity) else {
+            continue;
+        };
+        sleeping.sleeping = false;
     }
 }
 /// physics step. Bodies missing their id (not baked yet) are skipped for

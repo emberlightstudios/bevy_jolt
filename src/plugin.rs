@@ -161,8 +161,6 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::ragdoll::bake_jolt_ragdoll);
         app.add_observer(crate::body_forces::apply_jolt_impulse);
         app.add_observer(crate::body_forces::apply_jolt_teleport);
-        app.add_observer(crate::body_forces::apply_jolt_sleep);
-        app.add_observer(crate::body_forces::apply_jolt_wake);
         app.add_observer(crate::character::apply_jolt_character_teleport);
         app.add_observer(crate::character::apply_jolt_rigid_character_impulse);
         app.add_observer(crate::character::apply_jolt_rigid_character_push);
@@ -218,6 +216,7 @@ impl Plugin for JoltPlugin {
             JoltStep,
             (
                 crate::body_forces::sync_jolt_motion,
+                crate::body_forces::sync_jolt_sleep,
                 crate::body_forces::apply_jolt_driven_velocities,
             )
                 .before(step_physics_world),
@@ -231,7 +230,7 @@ impl Plugin for JoltPlugin {
                 crate::character::sync_rigid_character_transforms,
                 crate::soft_body::sync_soft_body_meshes,
                 crate::contact_events::drain_contact_events,
-                crate::body_forces::sync_sleep_markers,
+                crate::body_forces::sync_sleep_states,
             )
                 .after(step_physics_world),
         );

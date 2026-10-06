@@ -414,6 +414,7 @@ pub fn spawn_jolt_body(
     let mut baked_entity = commands.entity(trigger_entity);
     baked_entity.insert((
         JoltBodyId { body_id_raw },
+        crate::body_forces::JoltSleeping { sleeping: false },
         PreviousBodyTransform {
             previous_position: spawn_transform.translation,
             previous_rotation: spawn_transform.rotation,
@@ -442,26 +443,28 @@ pub fn spawn_jolt_body(
 /// FFI for values that cannot change. Runs after the physics step in the
 /// same Fixed tick; the render interpolation blends between the two poses.
 pub fn sync_body_transforms(
-    mut body_query: Query<
-        (
-            &JoltBodyId,
-            &mut Transform,
-            &mut PreviousBodyTransform,
-            Option<&mut crate::body_forces::JoltLinearVelocity>,
-            Option<&mut crate::body_forces::JoltAngularVelocity>,
-        ),
-        Without<crate::body_forces::JoltSleeping>,
-    >,
+    mut body_query: Query<(
+        &JoltBodyId,
+        &crate::body_forces::JoltSleeping,
+        &mut Transform,
+        &mut PreviousBodyTransform,
+        Option<&mut crate::body_forces::JoltLinearVelocity>,
+        Option<&mut crate::body_forces::JoltAngularVelocity>,
+    )>,
     physics_world: Res<JoltPhysicsWorld>,
 ) {
     for (
         body_id,
+        body_sleeping,
         mut entity_transform,
         mut previous_transform,
         unified_linear,
         unified_angular,
     ) in body_query.iter_mut()
     {
+        if **body_sleeping {
+            continue;
+        }
         previous_transform.previous_position = entity_transform.translation;
         previous_transform.previous_rotation = entity_transform.rotation;
         let body_motion = physics_world.body_full_motion(body_id.body_id_raw);

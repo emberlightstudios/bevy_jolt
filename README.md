@@ -68,21 +68,30 @@ Terrain-sized geometry lives once, not twice.
 
 **Fire-and-forget triggers** (no archetype churn, missing bodies skipped):
 
-| `JoltSleep { body_entity }` | Freeze in place. Still solid, wakes on contact |
-| `JoltWake { body_entity }` | Rejoin next step, velocities intact |
+| Trigger | Effect |
+|---|---|
+| `JoltImpulse::linear(e, v)` / `.angular(e, v)` | Instant kick, framerate-independent (`impulse / mass = Δv`) |
+| `JoltTeleport { body_entity, target_position, target_rotation }` | Pose move that wakes the body; momentum is preserved unless you overwrite velocity afterwards |
 
 Motion type (`JoltBody.motion`) is a plain component write — no trigger.
 Static is solid ground that sleeps forever, kinematic is driven by you via
 `JoltKinematicTarget`, dynamic is moved by physics. Write it in `FixedUpdate`
 and the sync at the start of the next `JoltStep` pushes it to Jolt before the
 sim steps. Only writing back to kinematic/dynamic wakes a staticked body —
-`JoltWake` alone won't.
+writing `sleeping = false` alone won't.
+
+Sleep (`JoltSleeping.sleeping`) is a plain component write too — no trigger.
+`true` freezes the body where it stands (still solid, wakes on contact, for
+dormant crowds); `false` rejoins next step with velocities intact. Jolt's own
+transitions (settling asleep, waking on contact) land in the same field via
+the post-step drain, so what you read is always the truth. Both operations
+are idempotent, so the drain's echo costs one extra no-op push per flip, then
+stops — it cannot loop. Derefs to bool: `if **sleeping` reads it directly.
 
 There is deliberately no velocity trigger: write `JoltLinearVelocity` /
 `JoltAngularVelocity` and change detection pushes it at the start of the next
 `JoltStep`, before the sim steps (see below). Triggers are for things a
-component can't say — kicks, teleports, sleep — not for values you own
-already.
+component can't say — kicks, teleports — not for values you own already.
 
 **Held components** (attach once, remove to stop):
 
@@ -124,9 +133,11 @@ Impulse ≠ one-frame force: forces scale with dt, impulses don't.
 
 ## Sleep and observation
 
-- `JoltSleeping` — marker the activation drain maintains. Sync filters it
-  out; debug greys it. React with `Added<JoltSleeping>` /
-  `Removed<JoltSleeping>` — no polling, no callbacks in the API.
+- `JoltSleeping` — sleep state the activation drain maintains. The sync skips
+  sleeping bodies; debug greys them. Derefs to bool, so `if **sleeping`
+  reads the state directly. Field writes, not marker add/remove — frequent
+  flips never move the entity between archetypes. React with
+  `Changed<JoltSleeping>` — no polling, no callbacks in the API.
 
 ## Characters (two kinds, different components)
 
@@ -184,7 +195,7 @@ the world, and keep it there).
 ## Debug outlines (`JoltDebugPlugin`)
 
 Green = awake, grey = sleeping. The color comes from the `JoltSleeping`
-marker the activation drain maintains (see "Reading bodies"), not from a
+state the activation drain maintains (see "Reading bodies"), not from a
 per-frame Jolt poll. Boxes/spheres draw as solids; capsules/cylinders/tapered
 as line outlines; hulls as computed wireframe faces (brute-force triples,
 debug counts only); meshes and heightfields as wireframes. Virtual characters

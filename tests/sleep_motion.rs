@@ -1,11 +1,12 @@
-// Sleep/wake triggers + motion component: a falling ball freezes on sleep,
-// resumes on wake, goes unwakeable on a static motion write, and rejoins on
-// writing back. Run single-threaded (`--test-threads=1`): parallel
-// `JoltWorld`s crash on the shared job plumbing (see joint_lifecycle.rs).
+// Sleep state + motion component: a falling ball freezes on a sleep write,
+// resumes on a wake write, goes unwakeable on a static motion write, and
+// rejoins on writing back. Run single-threaded (`--test-threads=1`):
+// parallel `JoltWorld`s crash on the shared job plumbing (see
+// joint_lifecycle.rs).
 use bevy::prelude::*;
 use bevy_jolt::{
-    JoltBody, JoltMotion, JoltPhysicsWorld, JoltPlugin, JoltShape, JoltSleep,
-    JoltSleeping, JoltStep, JoltWake,
+    JoltBody, JoltMotion, JoltPhysicsWorld, JoltPlugin, JoltShape, JoltSleeping,
+    JoltStep,
 };
 
 fn tick(app: &mut App) {
@@ -49,7 +50,10 @@ fn sleep_freezes_and_wake_resumes() {
         body_speed(&app, ball) < -1.0,
         "ball should be falling before sleep"
     );
-    app.world_mut().trigger(JoltSleep { body_entity: ball });
+    app.world_mut()
+        .get_mut::<JoltSleeping>(ball)
+        .expect("ball carries sleep state")
+        .sleeping = true;
     for _ in 0..10 {
         tick(&mut app);
     }
@@ -59,16 +63,25 @@ fn sleep_freezes_and_wake_resumes() {
         "sleeping ball should report zero velocity"
     );
     assert!(
-        app.world().get::<JoltSleeping>(ball).is_some(),
-        "slept ball should carry the sleeping marker"
+        **app
+            .world()
+            .get::<JoltSleeping>(ball)
+            .expect("ball carries sleep state"),
+        "slept ball should read sleeping"
     );
-    app.world_mut().trigger(JoltWake { body_entity: ball });
+    app.world_mut()
+        .get_mut::<JoltSleeping>(ball)
+        .expect("ball carries sleep state")
+        .sleeping = false;
     for _ in 0..10 {
         tick(&mut app);
     }
     assert!(
-        app.world().get::<JoltSleeping>(ball).is_none(),
-        "woken ball should lose the sleeping marker"
+        !**app
+            .world()
+            .get::<JoltSleeping>(ball)
+            .expect("ball carries sleep state"),
+        "woken ball should read awake"
     );
     for _ in 0..10 {
         tick(&mut app);
