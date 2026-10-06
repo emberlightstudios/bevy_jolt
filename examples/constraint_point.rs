@@ -3,9 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
+    JointSpace, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
     JoltShape,
-    JointSpace,
 };
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 5.0, 0.0);
@@ -83,7 +82,9 @@ fn spawn_scene(
             JoltShape::sphere(0.3),
         ))
         .id();
-    let joint = commands.spawn(JoltJoint::point(anchor, ball, ANCHOR, JointSpace::World)).id();
+    let joint = commands
+        .spawn(JoltJoint::point(anchor, ball, ANCHOR, JointSpace::World))
+        .id();
     commands.insert_resource(Demo {
         anchor,
         ball,
@@ -102,7 +103,11 @@ fn kick_ball(
         return;
     }
     if demo.kick_in == 0 {
-        let target = if demo.next_kick == 0 { demo.ball } else { demo.anchor };
+        let target = if demo.next_kick == 0 {
+            demo.ball
+        } else {
+            demo.anchor
+        };
         demo.next_kick = (demo.next_kick + 1) % 2;
         commands.trigger(JoltImpulse::linear(target, Vec3::new(0.0, 2000.0, 0.0)));
         demo.kick_in = KICK_EVERY_N_TICKS;

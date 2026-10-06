@@ -2,8 +2,8 @@
 //! Alternating kicks keep the jack pumping up and down.
 use bevy::prelude::*;
 use bevy_jolt::{
-JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
-    JoltShape, JointSpace,
+    JointSpace, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
+    JoltShape,
 };
 
 const PINION_POS: Vec3 = Vec3::new(0.0, 3.0, 0.0);
@@ -50,7 +50,8 @@ fn spawn_scene(
         Mesh3d(meshes.add(Cuboid::new(200.0, 2.0, 200.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.35, 0.38))),
         Transform::from_xyz(0.0, -1.0, 0.0),
-        JoltBody::fixed(0), JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
+        JoltBody::fixed(0),
+        JoltShape::box_shape(Vec3::new(100.0, 1.0, 100.0)),
     ));
     commands.spawn((
         Text::new("rack-and-pinion (jack)"),
@@ -148,7 +149,11 @@ fn spawn_scene(
     });
 }
 
-fn kick_rack(mut demo: ResMut<Demo>, joint_query: Query<(), With<JoltJointId>>, mut commands: Commands) {
+fn kick_rack(
+    mut demo: ResMut<Demo>,
+    joint_query: Query<(), With<JoltJointId>>,
+    mut commands: Commands,
+) {
     if joint_query.get(demo.joint).is_err() {
         return;
     }

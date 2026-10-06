@@ -5,8 +5,7 @@
 use bevy::prelude::*;
 
 use bevy_jolt::{
-JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint,
-    JoltPlugin, JoltShape, JointSpace,
+    JointSpace, JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint, JoltPlugin, JoltShape,
 };
 
 const DISC1_POS: Vec3 = Vec3::new(-0.65, 3.0, 0.0);

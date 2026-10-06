@@ -1,9 +1,8 @@
 //! Cone Joint: the ball's spin is driven directly with an
-//! angular velocity, swinging freely inside the cone. 
+//! angular velocity, swinging freely inside the cone.
 use bevy::prelude::*;
 use bevy_jolt::{
-JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint,
-    JoltPlugin, JoltShape, JointSpace,
+    JointSpace, JoltAngularVelocity, JoltBody, JoltDebugPlugin, JoltJoint, JoltPlugin, JoltShape,
 };
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 4.5, 0.0);
@@ -93,17 +92,10 @@ fn spawn_scene(
             JointSpace::World,
         ))
         .id();
-    commands.insert_resource(Demo {
-        anchor,
-        ball,
-    });
+    commands.insert_resource(Demo { anchor, ball });
 }
 
-fn draw_link(
-    demo: Res<Demo>,
-    transform_query: Query<&Transform>,
-    mut gizmos: Gizmos,
-) {
+fn draw_link(demo: Res<Demo>, transform_query: Query<&Transform>, mut gizmos: Gizmos) {
     let (Ok(anchor), Ok(ball)) = (
         transform_query.get(demo.anchor),
         transform_query.get(demo.ball),

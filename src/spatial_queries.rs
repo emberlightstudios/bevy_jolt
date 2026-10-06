@@ -7,8 +7,8 @@
 
 use bevy::prelude::Vec3;
 use jolt_sys::{
-    BJoltWorld, bjolt_cast_ray_all, bjolt_cast_shape_all, bjolt_collide_point_all,
-    bjolt_overlap_shape_all,
+    bjolt_cast_ray_all, bjolt_cast_shape_all, bjolt_collide_point_all, bjolt_overlap_shape_all,
+    BJoltWorld,
 };
 
 /// Max hits any batch query reports. Nearest-first, so overflow drops the
@@ -51,9 +51,11 @@ impl QueryProbe {
 
     fn ffi_halves(self) -> (f32, f32, f32) {
         match self {
-            QueryProbe::Box {
-                probe_half_extents,
-            } => (probe_half_extents.x, probe_half_extents.y, probe_half_extents.z),
+            QueryProbe::Box { probe_half_extents } => (
+                probe_half_extents.x,
+                probe_half_extents.y,
+                probe_half_extents.z,
+            ),
             QueryProbe::Sphere { probe_radius } => (probe_radius, 0.0, 0.0),
         }
     }
@@ -62,7 +64,11 @@ impl QueryProbe {
 /// Every body a ray passes through, nearest first. Empty when the ray hits
 /// nothing. `ray_direction` sets both direction and reach: hits past
 /// `origin + direction` are not reported.
-pub fn cast_ray_all(world_ptr: *mut BJoltWorld, ray_origin: Vec3, ray_direction: Vec3) -> Vec<RayHit> {
+pub fn cast_ray_all(
+    world_ptr: *mut BJoltWorld,
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+) -> Vec<RayHit> {
     let mut hit_bodies = [0u32; MAX_QUERY_HITS];
     let mut hit_fractions = [0.0f32; MAX_QUERY_HITS];
     let hit_total = unsafe {

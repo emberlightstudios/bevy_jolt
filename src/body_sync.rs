@@ -65,9 +65,7 @@ impl JoltShape {
     }
 
     pub fn sphere(sphere_radius: f32) -> Self {
-        Self(std::sync::Arc::new(PhysicsShape::Sphere {
-            sphere_radius,
-        }))
+        Self(std::sync::Arc::new(PhysicsShape::Sphere { sphere_radius }))
     }
 
     pub fn capsule(capsule_half_height: f32, capsule_radius: f32) -> Self {
@@ -84,11 +82,7 @@ impl JoltShape {
         }))
     }
 
-    pub fn tapered_cylinder(
-        tapered_half_height: f32,
-        top_radius: f32,
-        bottom_radius: f32,
-    ) -> Self {
+    pub fn tapered_cylinder(tapered_half_height: f32, top_radius: f32, bottom_radius: f32) -> Self {
         Self(std::sync::Arc::new(PhysicsShape::TaperedCylinder {
             tapered_half_height,
             top_radius,
@@ -96,11 +90,7 @@ impl JoltShape {
         }))
     }
 
-    pub fn tapered_capsule(
-        tapered_half_height: f32,
-        top_radius: f32,
-        bottom_radius: f32,
-    ) -> Self {
+    pub fn tapered_capsule(tapered_half_height: f32, top_radius: f32, bottom_radius: f32) -> Self {
         Self(std::sync::Arc::new(PhysicsShape::TaperedCapsule {
             tapered_half_height,
             top_radius,
@@ -210,7 +200,8 @@ pub fn spawn_jolt_body(
         spawn_restitution,
         spawn_ccd,
         spawn_damping,
-    )) = body_query.get(trigger_entity) else {
+    )) = body_query.get(trigger_entity)
+    else {
         panic!(
             "JoltBody added without a JoltShape + Transform on {:?}: shape and spawn pose are required",
             trigger_entity
@@ -317,12 +308,7 @@ pub fn spawn_jolt_body(
         PhysicsShape::Plane {
             surface_normal,
             plane_constant,
-        } => physics_world.create_plane(
-            *surface_normal,
-            *plane_constant,
-            50.0,
-            body.object_layer,
-        ),
+        } => physics_world.create_plane(*surface_normal, *plane_constant, 50.0, body.object_layer),
         PhysicsShape::Compound { compound_parts } => physics_world.create_compound(
             compound_parts,
             spawn_position,
@@ -465,14 +451,10 @@ pub fn sync_body_transforms(
         entity_transform.translation = body_motion.body_position;
         entity_transform.rotation = body_motion.body_rotation;
         if let Some(mut unified_linear) = unified_linear {
-            unified_linear
-                .bypass_change_detection()
-                .linear_velocity = body_motion.body_velocity;
+            unified_linear.bypass_change_detection().linear_velocity = body_motion.body_velocity;
         }
         if let Some(mut unified_angular) = unified_angular {
-            unified_angular
-                .bypass_change_detection()
-                .angular_velocity = body_motion.body_spin;
+            unified_angular.bypass_change_detection().angular_velocity = body_motion.body_spin;
         }
     }
 }
@@ -493,16 +475,13 @@ pub fn interpolate_body_transforms(
     physics_world: Res<JoltPhysicsWorld>,
 ) {
     let blend_factor = fixed_time.overstep_fraction().clamp(0.0, 1.0);
-    for (body, body_id, mut entity_transform, previous_transform) in
-        body_query.iter_mut()
-    {
+    for (body, body_id, mut entity_transform, previous_transform) in body_query.iter_mut() {
         // Only static bodies skip interpolation; kinematic bodies move via
         // MoveKinematic and need the same render blending as dynamics.
         if body.motion == JoltMotion::Static {
             continue;
         }
-        let (tick_position, tick_rotation) =
-            physics_world.body_full_transform(body_id.body_id_raw);
+        let (tick_position, tick_rotation) = physics_world.body_full_transform(body_id.body_id_raw);
         entity_transform.translation = previous_transform
             .previous_position
             .lerp(tick_position, blend_factor);
@@ -516,20 +495,17 @@ pub fn interpolate_body_transforms(
 /// their ids die with the whole ragdoll in `despawn_jolt_ragdoll`
 /// (double destroy crashes).
 pub fn despawn_jolt_body(
- trigger: On<Remove, JoltBodyId>,
- body_query: Query<&JoltBodyId>,
- part_bodies: Query<(), With<crate::ragdoll::RagdollPartBody>>,
- mut physics_world: ResMut<JoltPhysicsWorld>,
+    trigger: On<Remove, JoltBodyId>,
+    body_query: Query<&JoltBodyId>,
+    part_bodies: Query<(), With<crate::ragdoll::RagdollPartBody>>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
- let trigger_entity = trigger.event().entity;
- if part_bodies.contains(trigger_entity) {
- return;
- }
- let Ok(body_id) = body_query.get(trigger_entity) else {
- panic!(
- "JoltBodyId gone on {:?} before despawn ran",
- trigger_entity
- );
- };
- physics_world.remove_and_destroy_body(body_id.body_id_raw);
+    let trigger_entity = trigger.event().entity;
+    if part_bodies.contains(trigger_entity) {
+        return;
+    }
+    let Ok(body_id) = body_query.get(trigger_entity) else {
+        panic!("JoltBodyId gone on {:?} before despawn ran", trigger_entity);
+    };
+    physics_world.remove_and_destroy_body(body_id.body_id_raw);
 }

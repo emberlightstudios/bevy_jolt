@@ -439,7 +439,6 @@ pub fn apply_jolt_forces(
     }
 }
 
-
 /// Pushes `Changed` [`JoltLinearVelocity`] / [`JoltAngularVelocity`] values
 /// to Jolt. Runs first in `JoltStep`, before the sim steps, so every
 /// `FixedUpdate` write has landed no matter what order game code ran in.
@@ -455,10 +454,7 @@ pub fn apply_jolt_driven_velocities(
             Option<Ref<JoltLinearVelocity>>,
             Option<Ref<JoltAngularVelocity>>,
         ),
-        Or<(
-            Changed<JoltLinearVelocity>,
-            Changed<JoltAngularVelocity>,
-        )>,
+        Or<(Changed<JoltLinearVelocity>, Changed<JoltAngularVelocity>)>,
     >,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {

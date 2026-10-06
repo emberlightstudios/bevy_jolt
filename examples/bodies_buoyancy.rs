@@ -63,11 +63,17 @@ fn spawn_float_scene(
     ));
     let floater = commands
         .spawn((
-            Transform::from_xyz(-2.0, -3.0, 0.0)
-                .with_rotation(Quat::from_euler(EulerRot::XYZ, 0.3, 0.0, 0.2)),
+            Transform::from_xyz(-2.0, -3.0, 0.0).with_rotation(Quat::from_euler(
+                EulerRot::XYZ,
+                0.3,
+                0.0,
+                0.2,
+            )),
             JoltBody::dynamic(0),
             JoltShape::box_shape(Vec3::new(0.5, 0.5, 0.5)),
-            JoltBuoyant { buoyancy_scale: 1.2 },
+            JoltBuoyant {
+                buoyancy_scale: 1.2,
+            },
         ))
         .id();
     let sinker = commands

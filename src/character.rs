@@ -434,7 +434,8 @@ pub fn sync_rigid_character_transforms(
     for (character_id, character_spec, mut character_transform, mut character_ground) in
         &mut character_query
     {
-        physics_world.rigid_character_post(character_id.character_id_raw, character_spec.max_separation);
+        physics_world
+            .rigid_character_post(character_id.character_id_raw, character_spec.max_separation);
         let (character_position, character_rotation, _, ground_reading) =
             physics_world.rigid_character_pose(character_id.character_id_raw);
         character_transform.translation = character_position;

@@ -84,12 +84,7 @@ impl JoltSoftSharedSettings {
     }
 
     /// Flat cloth grid hanging below the origin, top rows pinned.
-    pub fn cloth(
-        grid_columns: u32,
-        grid_rows: u32,
-        grid_spacing: f32,
-        pinned_rows: u32,
-    ) -> Self {
+    pub fn cloth(grid_columns: u32, grid_rows: u32, grid_spacing: f32, pinned_rows: u32) -> Self {
         let column_total = grid_columns.max(2) as usize;
         let row_total = grid_rows.max(2) as usize;
         let offset_x = -0.5 * grid_spacing * (column_total as f32 - 1.0);
@@ -137,7 +132,10 @@ impl JoltSoftSharedSettings {
     pub fn sphere(sphere_radius: f32, theta_segments: u32, phi_segments: u32) -> Self {
         let theta_total = theta_segments.max(3);
         let phi_total = phi_segments.max(3);
-        let mut vertex_positions = vec![Vec3::new(0.0, sphere_radius, 0.0), Vec3::new(0.0, -sphere_radius, 0.0)];
+        let mut vertex_positions = vec![
+            Vec3::new(0.0, sphere_radius, 0.0),
+            Vec3::new(0.0, -sphere_radius, 0.0),
+        ];
         for theta in 1..theta_total - 1 {
             for phi in 0..phi_total {
                 let polar = std::f32::consts::PI * theta as f32 / (theta_total - 1) as f32;
@@ -220,23 +218,73 @@ impl JoltSoftSharedSettings {
             }
         }
         // Surface faces only (6 sides); interior verts ride the volumes.
-        let vertex_index = |x: usize, y: usize, z: usize| (x + y * axis_total + z * axis_total * axis_total) as u32;
+        let vertex_index = |x: usize, y: usize, z: usize| {
+            (x + y * axis_total + z * axis_total * axis_total) as u32
+        };
         let mut face_triangles = Vec::new();
         for y in 0..axis_total - 1 {
             for x in 0..axis_total - 1 {
-                face_triangles.push([vertex_index(x, y, 0), vertex_index(x, y + 1, 0), vertex_index(x + 1, y + 1, 0)]);
-                face_triangles.push([vertex_index(x, y, 0), vertex_index(x + 1, y + 1, 0), vertex_index(x + 1, y, 0)]);
+                face_triangles.push([
+                    vertex_index(x, y, 0),
+                    vertex_index(x, y + 1, 0),
+                    vertex_index(x + 1, y + 1, 0),
+                ]);
+                face_triangles.push([
+                    vertex_index(x, y, 0),
+                    vertex_index(x + 1, y + 1, 0),
+                    vertex_index(x + 1, y, 0),
+                ]);
                 let far = axis_total - 1;
-                face_triangles.push([vertex_index(x, y, far), vertex_index(x + 1, y + 1, far), vertex_index(x, y + 1, far)]);
-                face_triangles.push([vertex_index(x, y, far), vertex_index(x + 1, y, far), vertex_index(x + 1, y + 1, far)]);
-                face_triangles.push([vertex_index(x, 0, y), vertex_index(x, 0, y + 1), vertex_index(x + 1, 0, y + 1)]);
-                face_triangles.push([vertex_index(x, 0, y), vertex_index(x + 1, 0, y), vertex_index(x + 1, 0, y + 1)]);
-                face_triangles.push([vertex_index(x, far, y), vertex_index(x, far, y + 1), vertex_index(x + 1, far, y + 1)]);
-                face_triangles.push([vertex_index(x, far, y), vertex_index(x + 1, far, y + 1), vertex_index(x + 1, far, y)]);
-                face_triangles.push([vertex_index(0, x, y), vertex_index(0, x, y + 1), vertex_index(0, x + 1, y + 1)]);
-                face_triangles.push([vertex_index(0, x, y), vertex_index(0, x + 1, y + 1), vertex_index(0, x + 1, y)]);
-                face_triangles.push([vertex_index(far, x, y), vertex_index(far, x + 1, y + 1), vertex_index(far, x, y + 1)]);
-                face_triangles.push([vertex_index(far, x, y), vertex_index(far, x + 1, y), vertex_index(far, x + 1, y + 1)]);
+                face_triangles.push([
+                    vertex_index(x, y, far),
+                    vertex_index(x + 1, y + 1, far),
+                    vertex_index(x, y + 1, far),
+                ]);
+                face_triangles.push([
+                    vertex_index(x, y, far),
+                    vertex_index(x + 1, y, far),
+                    vertex_index(x + 1, y + 1, far),
+                ]);
+                face_triangles.push([
+                    vertex_index(x, 0, y),
+                    vertex_index(x, 0, y + 1),
+                    vertex_index(x + 1, 0, y + 1),
+                ]);
+                face_triangles.push([
+                    vertex_index(x, 0, y),
+                    vertex_index(x + 1, 0, y),
+                    vertex_index(x + 1, 0, y + 1),
+                ]);
+                face_triangles.push([
+                    vertex_index(x, far, y),
+                    vertex_index(x, far, y + 1),
+                    vertex_index(x + 1, far, y + 1),
+                ]);
+                face_triangles.push([
+                    vertex_index(x, far, y),
+                    vertex_index(x + 1, far, y + 1),
+                    vertex_index(x + 1, far, y),
+                ]);
+                face_triangles.push([
+                    vertex_index(0, x, y),
+                    vertex_index(0, x, y + 1),
+                    vertex_index(0, x + 1, y + 1),
+                ]);
+                face_triangles.push([
+                    vertex_index(0, x, y),
+                    vertex_index(0, x + 1, y + 1),
+                    vertex_index(0, x + 1, y),
+                ]);
+                face_triangles.push([
+                    vertex_index(far, x, y),
+                    vertex_index(far, x + 1, y + 1),
+                    vertex_index(far, x, y + 1),
+                ]);
+                face_triangles.push([
+                    vertex_index(far, x, y),
+                    vertex_index(far, x + 1, y),
+                    vertex_index(far, x + 1, y + 1),
+                ]);
             }
         }
         let vertex_total = vertex_positions.len();
@@ -368,7 +416,11 @@ impl JoltSoftBodyMesh {
 pub fn bake_jolt_soft_body(
     trigger: On<Add, JoltSoftSharedSettings>,
     mut commands: Commands,
-    soft_query: Query<(&JoltSoftSharedSettings, &JoltSoftBodyConfig, Option<&JoltSoftBodyMesh>)>,
+    soft_query: Query<(
+        &JoltSoftSharedSettings,
+        &JoltSoftBodyConfig,
+        Option<&JoltSoftBodyMesh>,
+    )>,
     meshes: Option<ResMut<Assets<Mesh>>>,
     materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -396,11 +448,22 @@ pub fn bake_jolt_soft_body(
     assert_ne!(shared_handle, 0, "Jolt rejected the soft shared settings");
     let body_id_raw = physics_world.create_soft_body(shared_handle, &body_config.as_world_config());
     assert_ne!(body_id_raw, 0, "Jolt rejected the soft body");
-    commands.entity(soft_entity).insert(JoltSoftBodyId { body_id_raw });
-    let Some(mesh_request) = mesh_request else { return };
-    let (Some(meshes), Some(materials)) = (meshes, materials) else { return };
+    commands
+        .entity(soft_entity)
+        .insert(JoltSoftBodyId { body_id_raw });
+    let Some(mesh_request) = mesh_request else {
+        return;
+    };
+    let (Some(meshes), Some(materials)) = (meshes, materials) else {
+        return;
+    };
     let vertex_total = shared_shape.vertex_positions.len();
-    let flat_triangles: Vec<u32> = shared_shape.face_triangles.iter().flatten().copied().collect();
+    let flat_triangles: Vec<u32> = shared_shape
+        .face_triangles
+        .iter()
+        .flatten()
+        .copied()
+        .collect();
     let cloth_mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,

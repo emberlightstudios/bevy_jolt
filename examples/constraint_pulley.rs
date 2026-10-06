@@ -3,8 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
-    JoltShape, JointSpace,
+    JointSpace, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
+    JoltShape,
 };
 
 const FIXED1: Vec3 = Vec3::new(-1.0, 6.0, 0.0);
@@ -108,7 +108,11 @@ fn spawn_scene(
     });
 }
 
-fn kick_weights(mut demo: ResMut<Demo>, joint_query: Query<(), With<JoltJointId>>, mut commands: Commands) {
+fn kick_weights(
+    mut demo: ResMut<Demo>,
+    joint_query: Query<(), With<JoltJointId>>,
+    mut commands: Commands,
+) {
     if joint_query.get(demo.joint).is_err() {
         return;
     }
@@ -124,7 +128,6 @@ fn kick_weights(mut demo: ResMut<Demo>, joint_query: Query<(), With<JoltJointId>
         demo.kick_in = KICK_EVERY_N_TICKS;
     }
 }
-
 
 fn draw_ropes(
     demo: Res<Demo>,

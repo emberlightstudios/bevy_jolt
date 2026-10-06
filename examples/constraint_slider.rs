@@ -3,8 +3,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
-    JoltPlugin, JoltShape, JointSpace,
+    JointSpace, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive, JoltPlugin,
+    JoltShape,
 };
 
 fn main() {
@@ -97,7 +97,10 @@ fn spawn_scene(
             JoltMotorDrive(3.0),
         ))
         .id();
-    commands.insert_resource(Demo { joint, flip_in: 200 });
+    commands.insert_resource(Demo {
+        joint,
+        flip_in: 200,
+    });
 }
 
 fn pingpong_motor(
@@ -118,11 +121,7 @@ fn pingpong_motor(
     }
 }
 
-fn draw_rail(
-    demo: Res<Demo>,
-    joint_query: Query<(), With<JoltJointId>>,
-    mut gizmos: Gizmos,
-) {
+fn draw_rail(demo: Res<Demo>, joint_query: Query<(), With<JoltJointId>>, mut gizmos: Gizmos) {
     if joint_query.get(demo.joint).is_err() {
         return;
     }

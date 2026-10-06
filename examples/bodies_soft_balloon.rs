@@ -78,7 +78,10 @@ fn watch_balloon_scene(
     assert!(vertex_total > 0, "balloon should report vertices");
     let mut balloon_positions = vec![Vec3::ZERO; vertex_total];
     let written = physics_world.soft_vertices(soft_id.body_id_raw, &mut balloon_positions);
-    assert_eq!(written as usize, vertex_total, "balloon should report every vertex");
+    assert_eq!(
+        written as usize, vertex_total,
+        "balloon should report every vertex"
+    );
     let lowest_y = balloon_positions
         .iter()
         .map(|vertex_position| vertex_position.y)

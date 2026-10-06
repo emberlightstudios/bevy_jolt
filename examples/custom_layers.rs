@@ -86,7 +86,10 @@ fn watch_layer_demo(
         (box_height - 0.5).abs() < 0.05,
         "normal box should rest on the floor"
     );
-    assert!(ghost_height < -5.0, "ghost box should fall through the floor");
+    assert!(
+        ghost_height < -5.0,
+        "ghost box should fall through the floor"
+    );
     println!("Custom layers behaved: ghosts ignore everything.");
     app_exit.write(AppExit::Success);
 }

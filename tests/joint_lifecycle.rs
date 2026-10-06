@@ -5,10 +5,7 @@
 // worker threads at once. Run this file single-threaded
 // (`--test-threads=1`) until worlds share one pool or tests share one App.
 use bevy::prelude::*;
-use bevy_jolt::{
-JoltBody, JoltBodyId, JoltJoint, JoltJointId, JoltPlugin, JoltShape,
-    JointSpace,
-};
+use bevy_jolt::{JointSpace, JoltBody, JoltBodyId, JoltJoint, JoltJointId, JoltPlugin, JoltShape};
 
 fn spawn_pair(app: &mut App) -> (Entity, Entity, Entity) {
     let body_a = app

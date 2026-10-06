@@ -33,9 +33,7 @@ fn spawn_character_scene(mut commands: Commands) {
         Camera3d::default(),
         Transform::from_xyz(-6.0, 3.0, 12.0).looking_at(Vec3::new(-6.0, 1.5, 1.5), Vec3::Y),
     ));
-    commands.spawn((
-        DirectionalLight::default(),
-    ));
+    commands.spawn((DirectionalLight::default(),));
     // Floor plus a two-step staircase (0.2 m rises) the walker climbs.
     commands.spawn((
         Transform::from_xyz(0.0, -1.0, 0.0),
@@ -44,11 +42,7 @@ fn spawn_character_scene(mut commands: Commands) {
     ));
     for (stair_index, stair_top) in [0.2, 0.4].into_iter().enumerate() {
         commands.spawn((
-            Transform::from_xyz(
-                3.0 + stair_index as f32 * 1.0,
-                stair_top - 0.5,
-                1.5,
-            ),
+            Transform::from_xyz(3.0 + stair_index as f32 * 1.0, stair_top - 0.5, 1.5),
             JoltBody::fixed(0),
             JoltShape::box_shape(Vec3::new(0.5, 0.5, 4.0)),
         ));
@@ -101,13 +95,11 @@ fn drive_character(
     mut app_exit: MessageWriter<AppExit>,
 ) {
     *tick_count += 1;
-    let Ok((mut walker_velocity, walker_pose, walker_ground)) =
-        velocity_query.get_mut(demo.walker)
+    let Ok((mut walker_velocity, walker_pose, walker_ground)) = velocity_query.get_mut(demo.walker)
     else {
         return;
     };
-    let Ok((mut rigid_velocity, rigid_pose, rigid_ground)) =
-        rigid_query.get_mut(demo.rigid_walker)
+    let Ok((mut rigid_velocity, rigid_pose, rigid_ground)) = rigid_query.get_mut(demo.rigid_walker)
     else {
         return;
     };
@@ -118,11 +110,14 @@ fn drive_character(
     // Side-on tracking shot: the camera rides along with the walker.
     // Pulled back and aimed between the lanes so both walkers stay framed.
     for mut camera_pose in &mut camera_query {
-        *camera_pose =
-            Transform::from_xyz(walker_pose.translation.x, 3.0, 12.0).looking_at(
-                Vec3::new(walker_pose.translation.x, walker_pose.translation.y + 0.5, 1.5),
-                Vec3::Y,
-            );
+        *camera_pose = Transform::from_xyz(walker_pose.translation.x, 3.0, 12.0).looking_at(
+            Vec3::new(
+                walker_pose.translation.x,
+                walker_pose.translation.y + 0.5,
+                1.5,
+            ),
+            Vec3::Y,
+        );
     }
     if *tick_count % 60 == 0 {
         println!(

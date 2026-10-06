@@ -33,10 +33,11 @@ use jolt_sys::{
     bjolt_ragdoll_build_add_part, bjolt_ragdoll_build_create, bjolt_ragdoll_build_destroy,
     bjolt_ragdoll_build_finalize, bjolt_ragdoll_build_set_hinge,
     bjolt_ragdoll_build_set_swing_twist, bjolt_ragdoll_build_stabilize, bjolt_ragdoll_create,
- bjolt_ragdoll_destroy, bjolt_ragdoll_set_motion, bjolt_remove_constraint, bjolt_rigid_character_add_impulse,
-    bjolt_rigid_character_add_velocity, bjolt_rigid_character_body, bjolt_rigid_character_create,
-    bjolt_rigid_character_destroy, bjolt_rigid_character_ground, bjolt_rigid_character_pose,
-    bjolt_rigid_character_post, bjolt_rigid_character_set_layer, bjolt_rigid_character_set_pose,
+    bjolt_ragdoll_destroy, bjolt_ragdoll_set_motion, bjolt_remove_constraint,
+    bjolt_rigid_character_add_impulse, bjolt_rigid_character_add_velocity,
+    bjolt_rigid_character_body, bjolt_rigid_character_create, bjolt_rigid_character_destroy,
+    bjolt_rigid_character_ground, bjolt_rigid_character_pose, bjolt_rigid_character_post,
+    bjolt_rigid_character_set_layer, bjolt_rigid_character_set_pose,
     bjolt_rigid_character_set_velocity, bjolt_rigid_character_stance, bjolt_set_angular_velocity,
     bjolt_set_ccd, bjolt_set_friction, bjolt_set_gravity, bjolt_set_gravity_factor,
     bjolt_set_linear_velocity, bjolt_set_motion_type, bjolt_set_position,
@@ -378,18 +379,18 @@ impl JoltWorld {
         &self.rigid_character_shapes
     }
 
- /// Files one shared outline recipe for a body: bake and vehicles call
- /// this with the component's own allocation, so geometry lives once.
- /// Debug draw only; physics owns the real shape.
- pub fn file_shape(&mut self, body_id_raw: u32, outline: std::sync::Arc<PhysicsShape>) {
- self.body_shapes.insert(body_id_raw, outline);
- }
+    /// Files one shared outline recipe for a body: bake and vehicles call
+    /// this with the component's own allocation, so geometry lives once.
+    /// Debug draw only; physics owns the real shape.
+    pub fn file_shape(&mut self, body_id_raw: u32, outline: std::sync::Arc<PhysicsShape>) {
+        self.body_shapes.insert(body_id_raw, outline);
+    }
 
- /// Drops a filed outline (ragdoll teardown). Physics bodies are already
- /// gone; this only clears the debug recipe.
- pub fn unfile_shape(&mut self, body_id_raw: u32) {
- self.body_shapes.remove(&body_id_raw);
- }
+    /// Drops a filed outline (ragdoll teardown). Physics bodies are already
+    /// gone; this only clears the debug recipe.
+    pub fn unfile_shape(&mut self, body_id_raw: u32) {
+        self.body_shapes.remove(&body_id_raw);
+    }
 
     pub fn create_floor(&mut self, half_extents: Vec3, floor_position_height: f32) -> u32 {
         let body_id_raw = unsafe {
@@ -2169,119 +2170,119 @@ impl JoltWorld {
         dim_z: f32,
         part_position: Vec3,
         part_rotation: Quat,
- object_layer: u16,
- density_kg_per_m3: f32,
- motion: JoltMotion,
- ) -> i32 {
- let motion_code = match motion {
- JoltMotion::Static => 0,
- JoltMotion::Kinematic => 1,
- JoltMotion::Dynamic => 2,
- };
- unsafe {
- bjolt_ragdoll_build_add_part(
- build,
- parent_index,
- shape_kind,
- dim_x,
- dim_y,
- dim_z,
- part_position.x,
- part_position.y,
- part_position.z,
- part_rotation.x,
- part_rotation.y,
- part_rotation.z,
- part_rotation.w,
- object_layer,
- density_kg_per_m3,
- motion_code,
- )
+        object_layer: u16,
+        density_kg_per_m3: f32,
+        motion: JoltMotion,
+    ) -> i32 {
+        let motion_code = match motion {
+            JoltMotion::Static => 0,
+            JoltMotion::Kinematic => 1,
+            JoltMotion::Dynamic => 2,
+        };
+        unsafe {
+            bjolt_ragdoll_build_add_part(
+                build,
+                parent_index,
+                shape_kind,
+                dim_x,
+                dim_y,
+                dim_z,
+                part_position.x,
+                part_position.y,
+                part_position.z,
+                part_rotation.x,
+                part_rotation.y,
+                part_rotation.z,
+                part_rotation.w,
+                object_layer,
+                density_kg_per_m3,
+                motion_code,
+            )
         }
     }
 
- /// Hinge limit between a part and its parent, about `anchor` (world
- /// space). Seated pose reads zero.
- pub fn ragdoll_build_set_hinge(
- &mut self,
- build: *mut jolt_sys::BJoltRagdollBuild,
- part_index: i32,
- anchor: Vec3,
- hinge_axis1: Vec3,
- normal_axis1: Vec3,
- hinge_axis2: Vec3,
- normal_axis2: Vec3,
- limits_min: f32,
- limits_max: f32,
- ) -> bool {
- unsafe {
- bjolt_ragdoll_build_set_hinge(
- build,
- part_index,
- anchor.x,
- anchor.y,
- anchor.z,
- hinge_axis1.x,
- hinge_axis1.y,
- hinge_axis1.z,
- normal_axis1.x,
- normal_axis1.y,
- normal_axis1.z,
- hinge_axis2.x,
- hinge_axis2.y,
- hinge_axis2.z,
- normal_axis2.x,
- normal_axis2.y,
- normal_axis2.z,
- limits_min,
- limits_max,
- )
- }
- }
+    /// Hinge limit between a part and its parent, about `anchor` (world
+    /// space). Seated pose reads zero.
+    pub fn ragdoll_build_set_hinge(
+        &mut self,
+        build: *mut jolt_sys::BJoltRagdollBuild,
+        part_index: i32,
+        anchor: Vec3,
+        hinge_axis1: Vec3,
+        normal_axis1: Vec3,
+        hinge_axis2: Vec3,
+        normal_axis2: Vec3,
+        limits_min: f32,
+        limits_max: f32,
+    ) -> bool {
+        unsafe {
+            bjolt_ragdoll_build_set_hinge(
+                build,
+                part_index,
+                anchor.x,
+                anchor.y,
+                anchor.z,
+                hinge_axis1.x,
+                hinge_axis1.y,
+                hinge_axis1.z,
+                normal_axis1.x,
+                normal_axis1.y,
+                normal_axis1.z,
+                hinge_axis2.x,
+                hinge_axis2.y,
+                hinge_axis2.z,
+                normal_axis2.x,
+                normal_axis2.y,
+                normal_axis2.z,
+                limits_min,
+                limits_max,
+            )
+        }
+    }
 
- /// Swing-twist limit between a part and its parent, about `anchor`
- /// (world space). Per-side frames.
- #[allow(clippy::too_many_arguments)]
- pub fn ragdoll_build_set_swing_twist(
- &mut self,
- build: *mut jolt_sys::BJoltRagdollBuild,
- part_index: i32,
- anchor: Vec3,
- twist_axis1: Vec3,
- plane_axis1: Vec3,
- twist_axis2: Vec3,
- plane_axis2: Vec3,
- normal_half_cone: f32,
- plane_half_cone: f32,
- twist_min: f32,
- twist_max: f32,
- ) -> bool {
- unsafe {
- bjolt_ragdoll_build_set_swing_twist(
- build,
- part_index,
- anchor.x,
- anchor.y,
- anchor.z,
- twist_axis1.x,
- twist_axis1.y,
- twist_axis1.z,
- plane_axis1.x,
- plane_axis1.y,
- plane_axis1.z,
- twist_axis2.x,
- twist_axis2.y,
- twist_axis2.z,
- plane_axis2.x,
- plane_axis2.y,
- plane_axis2.z,
- normal_half_cone,
- plane_half_cone,
- twist_min,
- twist_max,
- )
- }
- }
+    /// Swing-twist limit between a part and its parent, about `anchor`
+    /// (world space). Per-side frames.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ragdoll_build_set_swing_twist(
+        &mut self,
+        build: *mut jolt_sys::BJoltRagdollBuild,
+        part_index: i32,
+        anchor: Vec3,
+        twist_axis1: Vec3,
+        plane_axis1: Vec3,
+        twist_axis2: Vec3,
+        plane_axis2: Vec3,
+        normal_half_cone: f32,
+        plane_half_cone: f32,
+        twist_min: f32,
+        twist_max: f32,
+    ) -> bool {
+        unsafe {
+            bjolt_ragdoll_build_set_swing_twist(
+                build,
+                part_index,
+                anchor.x,
+                anchor.y,
+                anchor.z,
+                twist_axis1.x,
+                twist_axis1.y,
+                twist_axis1.z,
+                plane_axis1.x,
+                plane_axis1.y,
+                plane_axis1.z,
+                twist_axis2.x,
+                twist_axis2.y,
+                twist_axis2.z,
+                plane_axis2.x,
+                plane_axis2.y,
+                plane_axis2.z,
+                normal_half_cone,
+                plane_half_cone,
+                twist_min,
+                twist_max,
+            )
+        }
+    }
 
     /// Mass stabilization (ratio clamp + parent-inertia boost), in place.
     /// Run after all parts, before create. False on failure.
@@ -2320,22 +2321,22 @@ impl JoltWorld {
         unsafe { bjolt_ragdoll_body_ids(handle, out_ids.as_mut_ptr(), out_ids.len() as u32) }
     }
 
- /// Removes bodies + constraints and frees the ragdoll. Never mix with
- /// per-body remove/destroy on these ids.
- pub fn ragdoll_destroy(&mut self, handle: *mut jolt_sys::BJoltRagdoll) {
- unsafe { bjolt_ragdoll_destroy(self.world_ptr, handle) }
- }
+    /// Removes bodies + constraints and frees the ragdoll. Never mix with
+    /// per-body remove/destroy on these ids.
+    pub fn ragdoll_destroy(&mut self, handle: *mut jolt_sys::BJoltRagdoll) {
+        unsafe { bjolt_ragdoll_destroy(self.world_ptr, handle) }
+    }
 
- /// Flips every body in the ragdoll to one motion. Kinematic = follow
- /// bones (hitbox mode, cheap); dynamic = simulate (ragdoll mode).
- pub fn ragdoll_set_motion(&mut self, handle: *mut jolt_sys::BJoltRagdoll, motion: JoltMotion) {
- let motion_code = match motion {
- JoltMotion::Static => 0,
- JoltMotion::Kinematic => 1,
- JoltMotion::Dynamic => 2,
- };
- unsafe { bjolt_ragdoll_set_motion(self.world_ptr, handle, motion_code) }
- }
+    /// Flips every body in the ragdoll to one motion. Kinematic = follow
+    /// bones (hitbox mode, cheap); dynamic = simulate (ragdoll mode).
+    pub fn ragdoll_set_motion(&mut self, handle: *mut jolt_sys::BJoltRagdoll, motion: JoltMotion) {
+        let motion_code = match motion {
+            JoltMotion::Static => 0,
+            JoltMotion::Kinematic => 1,
+            JoltMotion::Dynamic => 2,
+        };
+        unsafe { bjolt_ragdoll_set_motion(self.world_ptr, handle, motion_code) }
+    }
 
     /// Frees the builder (settings only, after create).
     pub fn ragdoll_build_destroy(&mut self, build: *mut jolt_sys::BJoltRagdollBuild) {

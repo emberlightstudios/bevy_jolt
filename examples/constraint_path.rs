@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
-    JoltPlugin, JoltShape, JointMotor, JointSpace, PathRotation,
+    JointMotor, JointSpace, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
+    JoltPlugin, JoltShape, PathRotation,
 };
 
 /// Oval waypoints (x/z plane) lifted to cart height: the Hermite builder
@@ -144,12 +144,12 @@ fn spawn_scene(
     commands.insert_resource(Demo { joints });
 }
 
-fn draw_track(
-    demo: Res<Demo>,
-    joint_query: Query<(), With<JoltJointId>>,
-    mut gizmos: Gizmos,
-) {
-    if demo.joints.iter().all(|joint| joint_query.get(*joint).is_err()) {
+fn draw_track(demo: Res<Demo>, joint_query: Query<(), With<JoltJointId>>, mut gizmos: Gizmos) {
+    if demo
+        .joints
+        .iter()
+        .all(|joint| joint_query.get(*joint).is_err())
+    {
         return;
     }
     for i in 0..WAYPOINTS.len() {

@@ -15,9 +15,9 @@ use std::f32::consts::PI;
 
 use crate::plugin::JoltPhysicsWorld;
 use jolt_sys::{
-    CurvePointFfi, MAX_CURVE_POINTS, MAX_VEHICLE_GEARS, MAX_VEHICLE_WHEELS, VehicleDifferentialFfi,
-    VehicleEngineFfi, VehicleLeanFfi, VehicleRollBarFfi, VehicleTrackFfi, VehicleTransmissionFfi,
-    VehicleWheelFfi,
+    CurvePointFfi, VehicleDifferentialFfi, VehicleEngineFfi, VehicleLeanFfi, VehicleRollBarFfi,
+    VehicleTrackFfi, VehicleTransmissionFfi, VehicleWheelFfi, MAX_CURVE_POINTS, MAX_VEHICLE_GEARS,
+    MAX_VEHICLE_WHEELS,
 };
 
 /// One `(x, y)` knot for a Jolt `LinearCurve`: slip ratio/angle or RPM
@@ -31,25 +31,52 @@ pub struct CurveKnot {
 /// Jolt's stock car-tire longitudinal curve: slip ratio -> friction.
 /// (0, 0), (0.06, 1.2), (0.2, 1.0).
 pub const STOCK_TIRE_LONGITUDINAL: [CurveKnot; 3] = [
-    CurveKnot { knot_x: 0.0, knot_y: 0.0 },
-    CurveKnot { knot_x: 0.06, knot_y: 1.2 },
-    CurveKnot { knot_x: 0.2, knot_y: 1.0 },
+    CurveKnot {
+        knot_x: 0.0,
+        knot_y: 0.0,
+    },
+    CurveKnot {
+        knot_x: 0.06,
+        knot_y: 1.2,
+    },
+    CurveKnot {
+        knot_x: 0.2,
+        knot_y: 1.0,
+    },
 ];
 
 /// Jolt's stock car-tire lateral curve: slip angle (degrees) -> friction.
 /// (0, 0), (3, 1.2), (20, 1.0).
 pub const STOCK_TIRE_LATERAL: [CurveKnot; 3] = [
-    CurveKnot { knot_x: 0.0, knot_y: 0.0 },
-    CurveKnot { knot_x: 3.0, knot_y: 1.2 },
-    CurveKnot { knot_x: 20.0, knot_y: 1.0 },
+    CurveKnot {
+        knot_x: 0.0,
+        knot_y: 0.0,
+    },
+    CurveKnot {
+        knot_x: 3.0,
+        knot_y: 1.2,
+    },
+    CurveKnot {
+        knot_x: 20.0,
+        knot_y: 1.0,
+    },
 ];
 
 /// Jolt's stock engine curve: RPM fraction -> torque ratio.
 /// (0, 0.8), (0.66, 1.0), (1.0, 0.8).
 pub const STOCK_ENGINE_TORQUE: [CurveKnot; 3] = [
-    CurveKnot { knot_x: 0.0, knot_y: 0.8 },
-    CurveKnot { knot_x: 0.66, knot_y: 1.0 },
-    CurveKnot { knot_x: 1.0, knot_y: 0.8 },
+    CurveKnot {
+        knot_x: 0.0,
+        knot_y: 0.8,
+    },
+    CurveKnot {
+        knot_x: 0.66,
+        knot_y: 1.0,
+    },
+    CurveKnot {
+        knot_x: 1.0,
+        knot_y: 0.8,
+    },
 ];
 
 /// One wheel: mount + suspension + tire. Empty friction curves keep Jolt's
@@ -188,7 +215,10 @@ impl VehicleEngine {
 
 /// Copies up to [`MAX_CURVE_POINTS`] knots into a fixed FFI array.
 fn curve_to_ffi(curve_knots: &[CurveKnot]) -> [CurvePointFfi; MAX_CURVE_POINTS] {
-    let mut knots = [CurvePointFfi { knot_x: 0.0, knot_y: 0.0 }; MAX_CURVE_POINTS];
+    let mut knots = [CurvePointFfi {
+        knot_x: 0.0,
+        knot_y: 0.0,
+    }; MAX_CURVE_POINTS];
     for (slot, knot) in knots.iter_mut().zip(curve_knots.iter()) {
         slot.knot_x = knot.knot_x;
         slot.knot_y = knot.knot_y;
@@ -232,10 +262,7 @@ impl VehicleTransmission {
         let mut reverse_gear_ratios = [0.0; MAX_VEHICLE_GEARS];
         let gear_count = self.gear_ratios.len().min(MAX_VEHICLE_GEARS);
         gear_ratios[..gear_count].copy_from_slice(&self.gear_ratios[..gear_count]);
-        let reverse_count = self
-            .reverse_gear_ratios
-            .len()
-            .min(MAX_VEHICLE_GEARS);
+        let reverse_count = self.reverse_gear_ratios.len().min(MAX_VEHICLE_GEARS);
         reverse_gear_ratios[..reverse_count]
             .copy_from_slice(&self.reverse_gear_ratios[..reverse_count]);
         VehicleTransmissionFfi {
@@ -459,7 +486,10 @@ impl Default for VehicleSpec {
         let wheel_radius = 0.35;
         let mut wheels = Vec::with_capacity(4);
         for side in [1.0, -1.0] {
-            for (front, z) in [(true, 2.2 - 2.0 * wheel_radius), (false, -2.2 + 2.0 * wheel_radius)] {
+            for (front, z) in [
+                (true, 2.2 - 2.0 * wheel_radius),
+                (false, -2.2 + 2.0 * wheel_radius),
+            ] {
                 wheels.push(VehicleWheel {
                     mount_position: Vec3::new(0.9 * side, -0.9 * 0.6, z),
                     suspension_min_length: 0.2,
@@ -642,12 +672,17 @@ pub fn create_jolt_vehicles(
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     for (vehicle_entity, spec, spawn_transform) in &pending_specs {
-        let Some(vehicle_id) =
-            physics_world.create_vehicle(spec, spawn_transform.translation)
+        let Some(vehicle_id) = physics_world.create_vehicle(spec, spawn_transform.translation)
         else {
             panic!("Jolt rejected vehicle creation on {vehicle_entity:?}: {spec:?}");
         };
-        insert_vehicle_id(&mut commands, vehicle_entity, vehicle_id, spec, spawn_transform);
+        insert_vehicle_id(
+            &mut commands,
+            vehicle_entity,
+            vehicle_id,
+            spec,
+            spawn_transform,
+        );
     }
 }
 

@@ -4,8 +4,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
-    JoltShape, JointSpace,
+    JointSpace, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltJointId, JoltPlugin,
+    JoltShape,
 };
 
 const ANCHOR: Vec3 = Vec3::new(0.0, 4.2, 0.0);

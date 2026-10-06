@@ -2,10 +2,7 @@
 //! S brake/reverse, A/D steer). No keys: sits still.
 
 use bevy::prelude::*;
-use bevy_jolt::{
-JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape, JoltVehicleDrive,
-    VehicleSpec,
-};
+use bevy_jolt::{JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape, JoltVehicleDrive, VehicleSpec};
 
 const CAR_SPAWN: Vec3 = Vec3::new(0.0, 1.2, 0.0);
 
@@ -58,10 +55,7 @@ fn spawn_scene(
 
 /// WASD driving: W gas, S brake/reverse, A/D steer. Car sits still
 /// with no keys held.
-fn drive_car(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut drive_query: Query<&mut JoltVehicleDrive>,
-) {
+fn drive_car(keyboard: Res<ButtonInput<KeyCode>>, mut drive_query: Query<&mut JoltVehicleDrive>) {
     for mut drive in &mut drive_query {
         drive.forward = if keyboard.pressed(KeyCode::KeyW) {
             1.0

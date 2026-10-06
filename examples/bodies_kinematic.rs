@@ -4,9 +4,7 @@
 //! Watch the platform carry the ball side to side.
 
 use bevy::prelude::*;
-use bevy_jolt::{
-    JoltBody, JoltDebugPlugin, JoltKinematicTarget, JoltPlugin, JoltShape,
-};
+use bevy_jolt::{JoltBody, JoltDebugPlugin, JoltKinematicTarget, JoltPlugin, JoltShape};
 
 fn main() {
     App::new()

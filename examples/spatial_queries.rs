@@ -104,7 +104,10 @@ fn run_queries(
             overlap_hit.hit_contact.z,
         );
     }
-    assert!(!overlap_hits.is_empty(), "overlap should find the middle box");
+    assert!(
+        !overlap_hits.is_empty(),
+        "overlap should find the middle box"
+    );
 
     let sweep_probe = QueryProbe::Sphere { probe_radius: 0.25 };
     let sweep_hits = physics_world.cast_shape_all(

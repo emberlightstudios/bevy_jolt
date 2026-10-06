@@ -53,11 +53,11 @@ fn spawn_shape_scene(mut commands: Commands, mut demo: ResMut<ShapeDemo>) {
         ("sphere", JoltShape::sphere(0.5)),
         ("capsule", JoltShape::capsule(0.5, 0.3)),
         ("cylinder", JoltShape::cylinder(0.4, 0.5)),
-        ("tapered_cylinder", JoltShape::tapered_cylinder(0.4, 0.3, 0.5)),
         (
-            "tapered_capsule",
-            JoltShape::tapered_capsule(0.4, 0.3, 0.5),
+            "tapered_cylinder",
+            JoltShape::tapered_cylinder(0.4, 0.3, 0.5),
         ),
+        ("tapered_capsule", JoltShape::tapered_capsule(0.4, 0.3, 0.5)),
     ];
     for (tumbler_index, (_, tumbler_shape)) in tumbler_specs.into_iter().enumerate() {
         // Mirrored with the ramp (spans x 8 to 16 at y ~0.5): every

@@ -6,8 +6,8 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-JointMotor, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId,
-    JoltMotorDrive, JoltPlugin, JoltShape, JointSpace, SixDofAxis, SixDofFrame, SixDofLimits,
+    JointMotor, JointSpace, JoltBody, JoltDebugPlugin, JoltJoint, JoltJointId, JoltMotorDrive,
+    JoltPlugin, JoltShape, SixDofAxis, SixDofFrame, SixDofLimits,
 };
 /// Fixed axis band: min > max pins the axis at zero (Jolt convention).
 const FIXED: f32 = 1.0;
@@ -109,7 +109,10 @@ fn spawn_scene(
             JoltMotorDrive(3.0),
         ))
         .id();
-    commands.insert_resource(Demo { joint, flip_in: 200 });
+    commands.insert_resource(Demo {
+        joint,
+        flip_in: 200,
+    });
 }
 
 fn pingpong_motor(
@@ -130,11 +133,7 @@ fn pingpong_motor(
     }
 }
 
-fn draw_rail(
-    demo: Res<Demo>,
-    joint_query: Query<(), With<JoltJointId>>,
-    mut gizmos: Gizmos,
-) {
+fn draw_rail(demo: Res<Demo>, joint_query: Query<(), With<JoltJointId>>, mut gizmos: Gizmos) {
     if joint_query.get(demo.joint).is_err() {
         return;
     }

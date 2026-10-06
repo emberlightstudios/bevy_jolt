@@ -37,7 +37,6 @@ fn draw_physics_shapes(
     body_entities: Query<(Entity, &crate::body_sync::JoltBodyId)>,
     mut gizmos: Gizmos,
 ) {
-
     for (body_id_raw, body_shape) in physics_world.body_shapes().iter() {
         let (body_position, body_rotation) = physics_world.body_full_transform(*body_id_raw);
         // Sleep color from the state the activation drain maintains: no
@@ -151,7 +150,12 @@ fn draw_physics_shapes(
                         compound_part.part_offset,
                         compound_part.part_rotation,
                     );
-                    draw_compound_part(&mut gizmos, part_pose, compound_part.part_geometry, debug_color);
+                    draw_compound_part(
+                        &mut gizmos,
+                        part_pose,
+                        compound_part.part_geometry,
+                        debug_color,
+                    );
                 }
             }
             PhysicsShape::Hull { hull_points } => {
@@ -432,8 +436,7 @@ fn draw_cap_arc(
     let rail_direction = rail_offset.normalize_or_zero();
     let mut arc_previous = cap_center + rail_offset;
     for cap_step in 1..=CAP_SEGMENTS {
-        let arc_angle =
-            cap_step as f32 / CAP_SEGMENTS as f32 * std::f32::consts::FRAC_PI_2;
+        let arc_angle = cap_step as f32 / CAP_SEGMENTS as f32 * std::f32::consts::FRAC_PI_2;
         let arc_point = cap_center
             + rail_direction * (arc_angle.cos() * capsule_radius)
             + pole_direction * (arc_angle.sin() * capsule_radius);
@@ -469,10 +472,12 @@ fn draw_plane_grid(
 
     for grid_line in -PLANE_GRID_HALF_CELLS..=PLANE_GRID_HALF_CELLS {
         let line_offset = grid_line as f32 * PLANE_GRID_CELL_SIZE;
-        let line_start_x = grid_origin + tangent_axis_z * line_offset - tangent_axis_x * grid_extent;
+        let line_start_x =
+            grid_origin + tangent_axis_z * line_offset - tangent_axis_x * grid_extent;
         let line_end_x = grid_origin + tangent_axis_z * line_offset + tangent_axis_x * grid_extent;
         gizmos.line(line_start_x, line_end_x, PLANE_GRID_COLOR);
-        let line_start_z = grid_origin + tangent_axis_x * line_offset - tangent_axis_z * grid_extent;
+        let line_start_z =
+            grid_origin + tangent_axis_x * line_offset - tangent_axis_z * grid_extent;
         let line_end_z = grid_origin + tangent_axis_x * line_offset + tangent_axis_z * grid_extent;
         gizmos.line(line_start_z, line_end_z, PLANE_GRID_COLOR);
     }
@@ -565,7 +570,11 @@ fn draw_tapered_capsule_outline(
         for rail_sign in [1.0, -1.0] {
             let top_offset = rail_direction * (rail_sign * top_radius);
             let bottom_offset = rail_direction * (rail_sign * bottom_radius);
-            gizmos.line(bottom_cap_center + bottom_offset, top_cap_center + top_offset, debug_color);
+            gizmos.line(
+                bottom_cap_center + bottom_offset,
+                top_cap_center + top_offset,
+                debug_color,
+            );
             draw_cap_arc(
                 gizmos,
                 top_cap_center,

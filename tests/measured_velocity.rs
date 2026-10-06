@@ -3,9 +3,7 @@
 // single-threaded (`--test-threads=1`): parallel `JoltWorld`s crash on the
 // shared job plumbing (see joint_lifecycle.rs).
 use bevy::prelude::*;
-use bevy_jolt::{
-    JoltAngularVelocity, JoltBody, JoltLinearVelocity, JoltPlugin, JoltShape,
-};
+use bevy_jolt::{JoltAngularVelocity, JoltBody, JoltLinearVelocity, JoltPlugin, JoltShape};
 
 fn tick(app: &mut App) {
     app.update();

@@ -88,12 +88,20 @@ pub fn path_knots_from_waypoints(waypoints: &[Vec3], looping: bool) -> Vec<PathK
     (0..point_count)
         .map(|knot_index| {
             let prev_index = if knot_index == 0 {
-                if looping { point_count - 1 } else { knot_index }
+                if looping {
+                    point_count - 1
+                } else {
+                    knot_index
+                }
             } else {
                 knot_index - 1
             };
             let next_index = if knot_index + 1 == point_count {
-                if looping { 0 } else { knot_index }
+                if looping {
+                    0
+                } else {
+                    knot_index
+                }
             } else {
                 knot_index + 1
             };
@@ -628,9 +636,9 @@ impl JoltJoint {
     /// (gear / rack-pinion sub-joints).
     fn depends_on_joint(&self, joint_entity: Entity) -> bool {
         match self.kind {
-            JointKind::Gear { hinge_a, hinge_b, .. } => {
-                hinge_a == joint_entity || hinge_b == joint_entity
-            }
+            JointKind::Gear {
+                hinge_a, hinge_b, ..
+            } => hinge_a == joint_entity || hinge_b == joint_entity,
             JointKind::RackPinion {
                 pinion_hinge,
                 rack_slider,
@@ -662,12 +670,7 @@ pub fn create_jolt_joints(
     bodies: Query<(), With<JoltBody>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    let body_raw = |entity: Entity| {
-        body_ids
-            .get(entity)
-            .ok()
-            .map(|body_id| body_id.body_id_raw)
-    };
+    let body_raw = |entity: Entity| body_ids.get(entity).ok().map(|body_id| body_id.body_id_raw);
     let sub_joint_raw = |entity: Entity| {
         joint_ids
             .get(entity)
@@ -684,8 +687,7 @@ pub fn create_jolt_joints(
             commands.entity(joint_entity).despawn();
             continue;
         }
-        let (Some(body_a_raw), Some(body_b_raw)) =
-            (body_raw(joint.body_a), body_raw(joint.body_b))
+        let (Some(body_a_raw), Some(body_b_raw)) = (body_raw(joint.body_a), body_raw(joint.body_b))
         else {
             continue;
         };
@@ -891,9 +893,9 @@ pub fn create_jolt_joints(
             constraint_id != 0,
             "Jolt rejected joint creation on {joint_entity:?}: {joint:?}",
         );
-        commands
-            .entity(joint_entity)
-            .insert(JoltJointId { constraint_id_raw: constraint_id });
+        commands.entity(joint_entity).insert(JoltJointId {
+            constraint_id_raw: constraint_id,
+        });
     }
 }
 

@@ -150,7 +150,8 @@ fn spawn_skin_scene(
             ..default()
         })),
         SkinnedMesh {
-            inverse_bindposes: inverse_bindposes.add(SkinnedMeshInverseBindposes::from(rest_bindposes)),
+            inverse_bindposes: inverse_bindposes
+                .add(SkinnedMeshInverseBindposes::from(rest_bindposes)),
             joints: sim_joints.clone(),
         },
     ));

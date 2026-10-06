@@ -3,8 +3,7 @@
 
 use bevy::prelude::*;
 use bevy_jolt::{
-JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltPlugin, JoltShape,
-    JointSpace,
+    JointSpace, JoltBody, JoltDebugPlugin, JoltImpulse, JoltJoint, JoltPlugin, JoltShape,
 };
 
 const KICK_EVERY_N_TICKS: u32 = 300;
@@ -81,13 +80,13 @@ fn spawn_scene(
     });
 }
 
-fn rekick_pair(
-    mut demo: ResMut<Demo>,
-    mut commands: Commands,
-) {
+fn rekick_pair(mut demo: ResMut<Demo>, mut commands: Commands) {
     demo.kick_in = demo.kick_in.saturating_sub(1);
     if demo.kick_in == 0 {
-        commands.trigger(JoltImpulse::linear(demo.bottom, Vec3::new(0.0, 2000.0, 0.0)));
+        commands.trigger(JoltImpulse::linear(
+            demo.bottom,
+            Vec3::new(0.0, 2000.0, 0.0),
+        ));
         demo.kick_in = KICK_EVERY_N_TICKS;
         println!("kicked the bottom object");
     }

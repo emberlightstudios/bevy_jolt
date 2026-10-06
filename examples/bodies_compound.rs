@@ -134,12 +134,18 @@ fn box_faces(box_min: Vec3, box_max: Vec3) -> (Vec<Vec3>, Vec<[u32; 3]>) {
         Vec3::new(box_min.x, box_max.y, box_max.z), // 7
     ];
     let box_triangles = vec![
-        [0, 2, 1], [0, 3, 2], // bottom (down-facing)
-        [4, 5, 6], [4, 6, 7], // top (up-facing)
-        [0, 1, 5], [0, 5, 4], // back
-        [3, 6, 2], [3, 7, 6], // front
-        [0, 4, 7], [0, 7, 3], // left
-        [1, 2, 6], [1, 6, 5], // right
+        [0, 2, 1],
+        [0, 3, 2], // bottom (down-facing)
+        [4, 5, 6],
+        [4, 6, 7], // top (up-facing)
+        [0, 1, 5],
+        [0, 5, 4], // back
+        [3, 6, 2],
+        [3, 7, 6], // front
+        [0, 4, 7],
+        [0, 7, 3], // left
+        [1, 2, 6],
+        [1, 6, 5], // right
     ];
     (box_corners, box_triangles)
 }
@@ -147,29 +153,21 @@ fn box_faces(box_min: Vec3, box_max: Vec3) -> (Vec<Vec3>, Vec<[u32; 3]>) {
 /// Hammer head + handle as one triangle soup: head box offset up, handle
 /// box below it. Indices shifted for the second box.
 fn hammer_mesh() -> (Vec<Vec3>, Vec<[u32; 3]>) {
-    let (head_vertices, head_triangles) = box_faces(
-        Vec3::new(-0.25, 0.4, -0.1),
-        Vec3::new(0.25, 0.6, 0.1),
-    );
-    let (handle_vertices, handle_triangles) = box_faces(
-        Vec3::new(-0.06, -0.4, -0.06),
-        Vec3::new(0.06, 0.4, 0.06),
-    );
+    let (head_vertices, head_triangles) =
+        box_faces(Vec3::new(-0.25, 0.4, -0.1), Vec3::new(0.25, 0.6, 0.1));
+    let (handle_vertices, handle_triangles) =
+        box_faces(Vec3::new(-0.06, -0.4, -0.06), Vec3::new(0.06, 0.4, 0.06));
     let mut hammer_vertices = head_vertices;
     let handle_base = hammer_vertices.len() as u32;
     hammer_vertices.extend(handle_vertices);
     let mut hammer_triangles = head_triangles;
-    hammer_triangles.extend(
-        handle_triangles
-            .iter()
-            .map(|handle_triangle| {
-                [
-                    handle_triangle[0] + handle_base,
-                    handle_triangle[1] + handle_base,
-                    handle_triangle[2] + handle_base,
-                ]
-            }),
-    );
+    hammer_triangles.extend(handle_triangles.iter().map(|handle_triangle| {
+        [
+            handle_triangle[0] + handle_base,
+            handle_triangle[1] + handle_base,
+            handle_triangle[2] + handle_base,
+        ]
+    }));
     (hammer_vertices, hammer_triangles)
 }
 

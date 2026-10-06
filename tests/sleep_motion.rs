@@ -5,8 +5,7 @@
 // joint_lifecycle.rs).
 use bevy::prelude::*;
 use bevy_jolt::{
-    JoltBody, JoltMotion, JoltPhysicsWorld, JoltPlugin, JoltShape, JoltSleeping,
-    JoltStep,
+    JoltBody, JoltMotion, JoltPhysicsWorld, JoltPlugin, JoltShape, JoltSleeping, JoltStep,
 };
 
 fn tick(app: &mut App) {
