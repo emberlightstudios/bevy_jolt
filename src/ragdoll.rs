@@ -90,22 +90,20 @@ pub struct JoltRagdollParts {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct RagdollPartBody;
 
-/// Live ragdoll handle: owns the Jolt bodies + constraints. Removing this
-/// tears the whole ragdoll out of the system.
+/// Live ragdoll handle: 1-based id into the world's ragdoll registry. Plain
+/// `u32` — no pointers, no unsafe impls, safe to copy. Removing this
+/// tears the whole ragdoll (bodies + constraints) out of the system.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct JoltRagdollHandle {
-    pub(crate) ragdoll_raw: *mut jolt_sys::BJoltRagdoll,
+    pub(crate) ragdoll_id: u32,
 }
 
 impl JoltRagdollHandle {
-    /// The opaque Jolt handle, for world calls (`ragdoll_set_motion`, ...).
-    pub fn raw(self) -> *mut jolt_sys::BJoltRagdoll {
-        self.ragdoll_raw
+    /// The registry id, for world calls (`ragdoll_set_motion`, ...).
+    pub fn id(self) -> u32 {
+        self.ragdoll_id
     }
 }
-// The handle is an opaque Jolt pointer, only touched from the physics thread.
-unsafe impl Send for JoltRagdollHandle {}
-unsafe impl Sync for JoltRagdollHandle {}
 
 /// Bakes a [`JoltRagdoll`] in one shot: settings builder → stabilize →
 ///
@@ -207,12 +205,10 @@ pub fn bake_jolt_ragdoll(
         "ragdoll stabilization failed"
     );
     world.ragdoll_build_finalize(build);
-    let handle = world.ragdoll_create(build);
+    let ragdoll_id = world.ragdoll_create(build);
     world.ragdoll_build_destroy(build);
-    let Some(handle) = handle else {
-        panic!("ragdoll create failed on {ragdoll_entity:?}");
-    };
-    let body_count = world.ragdoll_body_count(handle) as usize;
+    assert_ne!(ragdoll_id, 0, "ragdoll create failed on {ragdoll_entity:?}");
+    let body_count = world.ragdoll_body_count(ragdoll_id) as usize;
     assert_eq!(
         body_count,
         ragdoll.parts.len(),
@@ -220,7 +216,7 @@ pub fn bake_jolt_ragdoll(
         ragdoll.parts.len()
     );
     let mut body_ids = vec![0u32; body_count];
-    let written = world.ragdoll_body_ids(handle, &mut body_ids);
+    let written = world.ragdoll_body_ids(ragdoll_id, &mut body_ids);
     assert_eq!(written as usize, body_count, "ragdoll body ids short");
     let mut part_entities = Vec::with_capacity(body_count);
     for (part_index, body_id_raw) in body_ids.iter().enumerate() {
@@ -269,9 +265,7 @@ pub fn bake_jolt_ragdoll(
             part_entities,
             body_ids,
         },
-        JoltRagdollHandle {
-            ragdoll_raw: handle,
-        },
+        JoltRagdollHandle { ragdoll_id },
     ));
 }
 /// Tears the whole ragdoll (bodies + constraints) out of Jolt when the
@@ -289,5 +283,5 @@ pub fn despawn_jolt_ragdoll(
     for body_id_raw in &baked.body_ids {
         physics_world.unfile_shape(*body_id_raw);
     }
-    physics_world.ragdoll_destroy(handle.ragdoll_raw);
+    physics_world.ragdoll_destroy(handle.ragdoll_id);
 }

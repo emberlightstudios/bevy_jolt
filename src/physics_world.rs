@@ -2296,46 +2296,39 @@ impl JoltWorld {
     }
 
     /// Creates bodies + constraints and adds them in one shot. Mints a fresh
-    /// collision group per ragdoll. Returns null on failure.
-    pub fn ragdoll_create(
-        &mut self,
-        build: *mut jolt_sys::BJoltRagdollBuild,
-    ) -> Option<*mut jolt_sys::BJoltRagdoll> {
+    /// collision group per ragdoll. Returns the 1-based registry id, or 0 on
+    /// failure.
+    pub fn ragdoll_create(&mut self, build: *mut jolt_sys::BJoltRagdollBuild) -> u32 {
         let group_id = self.next_ragdoll_group;
         self.next_ragdoll_group += 1;
-        let handle = unsafe { bjolt_ragdoll_create(self.world_ptr, build, group_id, 0) };
-        (!handle.is_null()).then_some(handle)
+        unsafe { bjolt_ragdoll_create(self.world_ptr, build, group_id, 0) }
     }
 
     /// Part count (= body count) of a live ragdoll.
-    pub fn ragdoll_body_count(&self, handle: *mut jolt_sys::BJoltRagdoll) -> u32 {
-        unsafe { bjolt_ragdoll_body_count(handle) }
+    pub fn ragdoll_body_count(&self, ragdoll_id: u32) -> u32 {
+        unsafe { bjolt_ragdoll_body_count(self.world_ptr, ragdoll_id) }
     }
 
     /// Body ids in part order. Returns ids written.
-    pub fn ragdoll_body_ids(
-        &self,
-        handle: *mut jolt_sys::BJoltRagdoll,
-        out_ids: &mut [u32],
-    ) -> u32 {
-        unsafe { bjolt_ragdoll_body_ids(handle, out_ids.as_mut_ptr(), out_ids.len() as u32) }
+    pub fn ragdoll_body_ids(&self, ragdoll_id: u32, out_ids: &mut [u32]) -> u32 {
+        unsafe { bjolt_ragdoll_body_ids(self.world_ptr, ragdoll_id, out_ids.as_mut_ptr(), out_ids.len() as u32) }
     }
 
-    /// Removes bodies + constraints and frees the ragdoll. Never mix with
-    /// per-body remove/destroy on these ids.
-    pub fn ragdoll_destroy(&mut self, handle: *mut jolt_sys::BJoltRagdoll) {
-        unsafe { bjolt_ragdoll_destroy(self.world_ptr, handle) }
+    /// Removes bodies + constraints and releases the registry slot. Never mix
+    /// with per-body remove/destroy on these ids.
+    pub fn ragdoll_destroy(&mut self, ragdoll_id: u32) {
+        unsafe { bjolt_ragdoll_destroy(self.world_ptr, ragdoll_id) }
     }
 
     /// Flips every body in the ragdoll to one motion. Kinematic = follow
     /// bones (hitbox mode, cheap); dynamic = simulate (ragdoll mode).
-    pub fn ragdoll_set_motion(&mut self, handle: *mut jolt_sys::BJoltRagdoll, motion: JoltMotion) {
+    pub fn ragdoll_set_motion(&mut self, ragdoll_id: u32, motion: JoltMotion) {
         let motion_code = match motion {
             JoltMotion::Static => 0,
             JoltMotion::Kinematic => 1,
             JoltMotion::Dynamic => 2,
         };
-        unsafe { bjolt_ragdoll_set_motion(self.world_ptr, handle, motion_code) }
+        unsafe { bjolt_ragdoll_set_motion(self.world_ptr, ragdoll_id, motion_code) }
     }
 
     /// Frees the builder (settings only, after create).
