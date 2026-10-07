@@ -4,25 +4,28 @@
 //! on via the `jolt_sys` build). This type only owns the world pointer.
 
 use crate::body_sync::JoltMotion;
+use crate::ragdoll::RagdollDriveAxis;
 use crate::spatial_queries::RayHit;
 use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
-    bjolt_apply_buoyancy, bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide,
-    bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_set_damping,
-    bjolt_body_set_density, bjolt_body_set_sensor, bjolt_body_state, bjolt_body_transform,
-    bjolt_character_can_walk_stairs, bjolt_character_create, bjolt_character_destroy,
-    bjolt_character_ground, bjolt_character_move, bjolt_character_refresh_contacts,
-    bjolt_character_rotation, bjolt_character_set_mass, bjolt_character_set_padding,
-    bjolt_character_set_rotation, bjolt_character_set_shape_offset, bjolt_character_set_up,
-    bjolt_character_set_user_data, bjolt_character_stance, bjolt_character_stick_to_floor,
-    bjolt_character_teleport, bjolt_character_update, bjolt_character_walk_stairs,
-    bjolt_constraint_drive_at, bjolt_constraint_path_fraction, bjolt_constraint_path_looping,
-    bjolt_create_box, bjolt_create_capsule, bjolt_create_cloth_settings, bjolt_create_compound,
-    bjolt_create_cone_constraint, bjolt_create_cube_settings, bjolt_create_cylinder,
-    bjolt_create_distance_constraint, bjolt_create_fixed_constraint, bjolt_create_floor,
-    bjolt_create_gear_constraint, bjolt_create_heightfield, bjolt_create_hinge_constraint,
-    bjolt_create_hull, bjolt_create_mesh, bjolt_create_motorcycle, bjolt_create_path_cart,
-    bjolt_create_plane, bjolt_create_point_constraint, bjolt_create_pulley_constraint,
+    BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi, VehicleLeanFfi, VehicleRollBarFfi,
+    VehicleTransmissionFfi, VehicleWheelFfi, bjolt_apply_buoyancy, bjolt_apply_force,
+    bjolt_apply_impulse, bjolt_bodies_no_collide, bjolt_body_is_active, bjolt_body_remove_destroy,
+    bjolt_body_set_damping, bjolt_body_set_density, bjolt_body_set_sensor, bjolt_body_state,
+    bjolt_body_transform, bjolt_character_can_walk_stairs, bjolt_character_create,
+    bjolt_character_destroy, bjolt_character_ground, bjolt_character_move,
+    bjolt_character_refresh_contacts, bjolt_character_rotation, bjolt_character_set_mass,
+    bjolt_character_set_padding, bjolt_character_set_rotation, bjolt_character_set_shape_offset,
+    bjolt_character_set_up, bjolt_character_set_user_data, bjolt_character_stance,
+    bjolt_character_stick_to_floor, bjolt_character_teleport, bjolt_character_update,
+    bjolt_character_walk_stairs, bjolt_constraint_drive_at, bjolt_constraint_path_fraction,
+    bjolt_constraint_path_looping, bjolt_create_box, bjolt_create_capsule,
+    bjolt_create_cloth_settings, bjolt_create_compound, bjolt_create_cone_constraint,
+    bjolt_create_cube_settings, bjolt_create_cylinder, bjolt_create_distance_constraint,
+    bjolt_create_fixed_constraint, bjolt_create_floor, bjolt_create_gear_constraint,
+    bjolt_create_heightfield, bjolt_create_hinge_constraint, bjolt_create_hull, bjolt_create_mesh,
+    bjolt_create_motorcycle, bjolt_create_path_cart, bjolt_create_plane,
+    bjolt_create_point_constraint, bjolt_create_pulley_constraint,
     bjolt_create_rack_pinion_constraint, bjolt_create_shared_settings, bjolt_create_six_dof,
     bjolt_create_slider_constraint, bjolt_create_soft_body, bjolt_create_sphere,
     bjolt_create_sphere_settings, bjolt_create_swing_twist_constraint,
@@ -33,8 +36,8 @@ use jolt_sys::{
     bjolt_ragdoll_build_add_part, bjolt_ragdoll_build_create, bjolt_ragdoll_build_destroy,
     bjolt_ragdoll_build_finalize, bjolt_ragdoll_build_set_hinge,
     bjolt_ragdoll_build_set_swing_twist, bjolt_ragdoll_build_stabilize, bjolt_ragdoll_create,
-    bjolt_ragdoll_destroy, bjolt_ragdoll_set_motion, bjolt_remove_constraint,
-    bjolt_rigid_character_add_impulse, bjolt_rigid_character_add_velocity,
+    bjolt_ragdoll_destroy, bjolt_ragdoll_drive, bjolt_ragdoll_motor_off, bjolt_ragdoll_set_motion,
+    bjolt_remove_constraint, bjolt_rigid_character_add_impulse, bjolt_rigid_character_add_velocity,
     bjolt_rigid_character_body, bjolt_rigid_character_create, bjolt_rigid_character_destroy,
     bjolt_rigid_character_ground, bjolt_rigid_character_pose, bjolt_rigid_character_post,
     bjolt_rigid_character_set_layer, bjolt_rigid_character_set_pose,
@@ -49,8 +52,6 @@ use jolt_sys::{
     bjolt_soft_vertex_count, bjolt_soft_vertex_radius, bjolt_soft_vertices, bjolt_soft_volume,
     bjolt_tracked_drive, bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_wake_body,
     bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_gravity, bjolt_world_update,
-    BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi, VehicleLeanFfi, VehicleRollBarFfi,
-    VehicleTransmissionFfi, VehicleWheelFfi,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -1273,7 +1274,7 @@ impl JoltWorld {
         motor: crate::joint_sync::JointMotor,
         cart_rotation: crate::joint_sync::PathRotation,
     ) -> u32 {
-        use jolt_sys::{PathPointFfi, MAX_PATH_POINTS};
+        use jolt_sys::{MAX_PATH_POINTS, PathPointFfi};
         let points: Vec<PathPointFfi> = track_knots
             .iter()
             .map(|knot| PathPointFfi {
@@ -2311,7 +2312,14 @@ impl JoltWorld {
 
     /// Body ids in part order. Returns ids written.
     pub fn ragdoll_body_ids(&self, ragdoll_id: u32, out_ids: &mut [u32]) -> u32 {
-        unsafe { bjolt_ragdoll_body_ids(self.world_ptr, ragdoll_id, out_ids.as_mut_ptr(), out_ids.len() as u32) }
+        unsafe {
+            bjolt_ragdoll_body_ids(
+                self.world_ptr,
+                ragdoll_id,
+                out_ids.as_mut_ptr(),
+                out_ids.len() as u32,
+            )
+        }
     }
 
     /// Removes bodies + constraints and releases the registry slot. Never mix
@@ -2329,6 +2337,39 @@ impl JoltWorld {
             JoltMotion::Dynamic => 2,
         };
         unsafe { bjolt_ragdoll_set_motion(self.world_ptr, ragdoll_id, motion_code) }
+    }
+
+    /// Drives the velocity motor on the joint feeding `part_index` (0 =
+    /// root, which has no joint). Speed 0 brakes (motor holds);
+    /// [`ragdoll_motor_off`](Self::ragdoll_motor_off) releases. False on a
+    /// bad id, the root part, or a mismatched joint type.
+    pub fn ragdoll_drive(
+        &mut self,
+        ragdoll_id: u32,
+        part_index: u32,
+        drive_axis: RagdollDriveAxis,
+        target_velocity: f32,
+    ) -> bool {
+        let axis = match drive_axis {
+            RagdollDriveAxis::Hinge | RagdollDriveAxis::Twist => 0,
+            RagdollDriveAxis::Swing => 1,
+        };
+        unsafe {
+            bjolt_ragdoll_drive(
+                self.world_ptr,
+                ragdoll_id,
+                part_index,
+                axis,
+                target_velocity,
+            )
+        }
+    }
+
+    /// Releases both motors on the joint feeding `part_index`, so the limb
+    /// hangs on limits alone. False on a bad id, the root part, or a joint
+    /// type with no motors.
+    pub fn ragdoll_motor_off(&mut self, ragdoll_id: u32, part_index: u32) -> bool {
+        unsafe { bjolt_ragdoll_motor_off(self.world_ptr, ragdoll_id, part_index) }
     }
 
     /// Frees the builder (settings only, after create).

@@ -64,8 +64,20 @@ pub enum RagdollJoint {
         twist_max: f32,
     },
 }
+
+/// Which motor axis to run on a ragdoll joint. Hinges take `Hinge`;
+/// swing-twist joints take `Twist` or `Swing`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RagdollDriveAxis {
+    /// Hinge flex about body-local Z (elbows, knees).
+    Hinge,
+    /// Swing-twist spin about body-local Y.
+    Twist,
+    /// Swing-twist sweep about body-local X.
+    Swing,
+}
+
 /// Ragdoll spec: the part list plus shared physics tuning. Spawn with a
-/// `JoltRagdoll`; the plugin expands it into part bodies + joints.
 #[derive(Component, Clone, Debug)]
 pub struct JoltRagdoll {
     pub parts: Vec<RagdollPart>,

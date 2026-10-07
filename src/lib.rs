@@ -34,32 +34,32 @@ pub use crate::contact_events::{
     JoltContactAdded, JoltContactRemoved, JoltSensor, MAX_CONTACT_EVENTS,
 };
 pub use crate::debug_draw::JoltDebugPlugin;
-pub use crate::joint_sync::{
-    path_knots_from_waypoints, PathKnot, PathRotation, SixDofAxis, SixDofFrame, SixDofLimits,
-    MAX_PATH_KNOTS,
-};
 pub use crate::joint_sync::{JointKind, JointMotor, JoltJoint, JoltJointId, JoltMotorDrive};
+pub use crate::joint_sync::{
+    MAX_PATH_KNOTS, PathKnot, PathRotation, SixDofAxis, SixDofFrame, SixDofLimits,
+    path_knots_from_waypoints,
+};
 pub use crate::physics_world::{
     BodyMotion, BodySnapshot, CharacterDofs, CollisionLayers, CompoundGeometry, CompoundPart,
     JointSpace, JoltWorld, PhysicsShape, SoftBendType, SoftBodyConfig,
 };
 pub use crate::plugin::{
-    step_physics_world, JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity,
-    JoltStep, JoltStepConfig,
+    JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStep,
+    JoltStepConfig, step_physics_world,
 };
 pub use crate::ragdoll::{
-    JoltRagdoll, JoltRagdollHandle, JoltRagdollParts, RagdollJoint, RagdollPart, RagdollPartBody,
-    RagdollShape,
+    JoltRagdoll, JoltRagdollHandle, JoltRagdollParts, RagdollDriveAxis, RagdollJoint, RagdollPart,
+    RagdollPartBody, RagdollShape,
 };
 pub use crate::soft_body::{
     JoltSoftBodyConfig, JoltSoftBodyId, JoltSoftBodyMesh, JoltSoftSharedSettings,
 };
-pub use crate::spatial_queries::{OverlapHit, QueryProbe, RayHit, MAX_QUERY_HITS};
+pub use crate::spatial_queries::{MAX_QUERY_HITS, OverlapHit, QueryProbe, RayHit};
 pub use crate::vehicle::{
     CurveKnot, JoltTrackedDrive, JoltVehicleDrive, JoltVehicleId, JoltVehicleShift,
-    VehicleDifferential, VehicleEngine, VehicleKind, VehicleLean, VehicleRollBar, VehicleSpec,
-    VehicleTrack, VehicleTransmission, VehicleWheel, STOCK_ENGINE_TORQUE, STOCK_TIRE_LATERAL,
-    STOCK_TIRE_LONGITUDINAL,
+    STOCK_ENGINE_TORQUE, STOCK_TIRE_LATERAL, STOCK_TIRE_LONGITUDINAL, VehicleDifferential,
+    VehicleEngine, VehicleKind, VehicleLean, VehicleRollBar, VehicleSpec, VehicleTrack,
+    VehicleTransmission, VehicleWheel,
 };
 pub use jolt_sys::MAX_OBJECT_LAYERS;
 
@@ -83,7 +83,7 @@ pub mod prelude {
     pub use crate::joint_sync::{JointKind, JointMotor, JoltJoint, JoltMotorDrive};
     pub use crate::physics_world::{BodySnapshot, CollisionLayers};
     pub use crate::plugin::{JoltPhysicsWorld, JoltPlugin, JoltStep};
-    pub use crate::ragdoll::{JoltRagdoll, JoltRagdollParts};
+    pub use crate::ragdoll::{JoltRagdoll, JoltRagdollParts, RagdollDriveAxis};
     pub use crate::soft_body::JoltSoftBodyConfig;
     pub use crate::spatial_queries::{QueryProbe, RayHit};
     pub use crate::vehicle::{JoltTrackedDrive, JoltVehicleDrive};
