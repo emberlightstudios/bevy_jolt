@@ -476,7 +476,7 @@ pub fn apply_jolt_kinematic_targets(
     mut physics_world: ResMut<JoltPhysicsWorld>,
     fixed_time: Res<Time<Fixed>>,
 ) {
-    let tick_delta = fixed_time.delta().as_secs_f32();
+    let tick_delta = physics_world.sim_tick_delta(fixed_time.delta().as_secs_f32());
     for (body_id, kinematic_target) in &target_query {
         physics_world.move_kinematic(
             body_id.body_id_raw,

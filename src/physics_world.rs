@@ -332,7 +332,6 @@ impl Default for CollisionLayers {
         Self::single_layer()
     }
 }
-
 /// A Jolt physics world: floor + dynamic bodies, stepped on the ThreadPool job system.
 pub struct JoltWorld {
     world_ptr: *mut BJoltWorld,
@@ -342,6 +341,11 @@ pub struct JoltWorld {
     character_shapes: std::collections::HashMap<u32, (f32, f32)>,
     rigid_character_shapes: std::collections::HashMap<u32, (f32, f32)>,
     next_ragdoll_group: u32,
+    /// Sim speed multiplier: 1 = real time, 0.2 = slow motion, 2 = double
+    /// speed. Every tick delta the sim consumes is multiplied by this, so
+    /// the fixed step stays fixed and the world just advances less (or
+    /// more) per tick. The render interpolation already smooths the rest.
+    time_scale: f32,
 }
 
 impl JoltWorld {
@@ -365,7 +369,31 @@ impl JoltWorld {
             character_shapes: std::collections::HashMap::new(),
             rigid_character_shapes: std::collections::HashMap::new(),
             next_ragdoll_group: 1,
+            time_scale: 1.0,
         }
+    }
+
+    /// Current sim speed multiplier (1 = real time).
+    pub fn time_scale(&self) -> f32 {
+        self.time_scale
+    }
+
+    /// Sets the sim speed multiplier: 0.2 = slow motion, 2 = double speed.
+    /// Must be finite and non-negative (0 pauses the sim). Takes effect on
+    /// the next tick; no rebuild, no state to flush.
+    pub fn set_time_scale(&mut self, time_scale: f32) {
+        assert!(
+            time_scale.is_finite() && time_scale >= 0.0,
+            "time scale must be finite and non-negative, got {}",
+            time_scale
+        );
+        self.time_scale = time_scale;
+    }
+
+    /// Fixed tick delta scaled to sim time: every system that feeds a delta
+    /// into Jolt reads this, so slow motion stays consistent everywhere.
+    pub fn sim_tick_delta(&self, fixed_tick_delta: f32) -> f32 {
+        fixed_tick_delta * self.time_scale
     }
 
     /// Every known body and its outline recipe, for the debug visualizer.

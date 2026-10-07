@@ -47,7 +47,7 @@ pub fn apply_buoyancy(
     let Some(water) = water else {
         return;
     };
-    let tick_delta = fixed_time.delta().as_secs_f32();
+    let tick_delta = physics_world.sim_tick_delta(fixed_time.delta().as_secs_f32());
     let world_gravity = physics_world.world_gravity();
     for (body_id, buoyant) in &buoyant_query {
         physics_world.apply_buoyancy(

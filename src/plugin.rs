@@ -244,14 +244,13 @@ impl Plugin for JoltPlugin {
     }
 }
 
-/// Advances the Jolt world once per Fixed tick using the tick's delta.
+/// Advances the Jolt world once per Fixed tick, scaled to sim time.
+/// `time_scale` 1 = real time; 0.2 steps a fifth of the tick (slow motion).
 pub fn step_physics_world(
     mut physics_world: ResMut<JoltPhysicsWorld>,
     step_config: Res<JoltStepConfig>,
     fixed_time: Res<Time<Fixed>>,
 ) {
-    physics_world.update(
-        fixed_time.delta().as_secs_f32(),
-        step_config.max_sub_steps as i32,
-    );
+    let sim_delta = physics_world.sim_tick_delta(fixed_time.delta().as_secs_f32());
+    physics_world.update(sim_delta, step_config.max_sub_steps as i32);
 }

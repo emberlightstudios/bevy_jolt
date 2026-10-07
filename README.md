@@ -193,7 +193,27 @@ the world, and keep it there).
   runtime changes. Per-body `JoltGravity::new(factor)` scales it (0 ignores
   gravity, 1 normal, 2 double pull).
 
-## Debug outlines (`JoltDebugPlugin`)
+## Time scale (slow motion)
+
+`JoltPhysicsWorld::set_time_scale` scales how much sim time each fixed tick
+advances (`1` = real time, `0.15` = slow motion, `0` = paused). The tick
+itself stays fixed: every tick still steps once, just with a smaller delta
+(`tick × scale`). See the `bodies_slow_mo` example.
+
+Limits worth knowing:
+
+- **Determinism:** a scaled run is only deterministic for a fixed scale
+  history. Same inputs at 1x and 0.15x take different solver paths (smaller
+  steps integrate slightly differently), so replays must record the scale
+  alongside inputs — replaying inputs alone at a different scale diverges.
+- **Stability at extremes:** very small scales take very small steps, which
+  is stable but wastes solver work per unit of visible motion; very large
+  scales (2x+) take oversized steps that can tunnel fast bodies — prefer
+  `JoltCcd` on those, or cap the scale.
+- **Driven things stay consistent:** kinematic targets, buoyancy, and
+  character movers all consume the same scaled delta, so nothing drifts out
+  of sync with the world step.
+
 
 Green = awake, grey = sleeping. The color comes from the `JoltSleeping`
 state the activation drain maintains (see "Reading bodies"), not from a

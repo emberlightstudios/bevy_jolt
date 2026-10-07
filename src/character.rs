@@ -193,7 +193,7 @@ pub fn step_jolt_characters(
     fixed_time: Res<Time<Fixed>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    let tick_delta = fixed_time.timestep().as_secs_f32();
+    let tick_delta = physics_world.sim_tick_delta(fixed_time.timestep().as_secs_f32());
     let world_gravity = physics_world.world_gravity();
     for (character_id, character_velocity, character_step) in &character_query {
         let wanted_velocity = character_velocity
