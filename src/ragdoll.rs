@@ -123,14 +123,19 @@ impl JoltRagdollHandle {
 /// creates because a half-built ragdoll is never useful.
 pub fn bake_jolt_ragdoll(
     trigger: On<Add, JoltRagdoll>,
-    ragdoll_query: Query<&JoltRagdoll>,
+    ragdoll_query: Query<(&JoltRagdoll, Option<&Transform>)>,
     mut commands: Commands,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     let ragdoll_entity = trigger.event().entity;
-    let Ok(ragdoll) = ragdoll_query.get(ragdoll_entity) else {
+    let Ok((ragdoll, ragdoll_transform)) = ragdoll_query.get(ragdoll_entity) else {
         panic!("JoltRagdoll gone on {ragdoll_entity:?} before bake ran");
     };
+    if ragdoll_transform.is_none() {
+        // Part entities parent under the spec entity, so the spec needs a
+        // Transform: without it every part warns (Bevy B0004).
+        commands.entity(ragdoll_entity).insert(Transform::IDENTITY);
+    }
     assert!(!ragdoll.parts.is_empty(), "ragdoll needs at least one part");
     for (part_index, ragdoll_part) in ragdoll.parts.iter().enumerate() {
         if let Some(parent_index) = ragdoll_part.parent_part {
