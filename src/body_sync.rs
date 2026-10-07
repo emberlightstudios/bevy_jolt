@@ -463,22 +463,25 @@ pub fn sync_body_transforms(
 /// physics pose using the Fixed overstep fraction. Reads the tick pose from
 /// Jolt (never from the blended `Transform`), so repeated frames can't
 /// accumulate error: the same tick always blends to the same picture.
-/// Static bodies skip the blend; their pose never changes.
+/// Static bodies skip the blend; their pose never changes. Keys on
+/// `PreviousBodyTransform` (not `JoltBody`) so ragdoll parts — whose motion
+/// lives in Jolt, flippable without a component swap — blend too.
 pub fn interpolate_body_transforms(
     fixed_time: Res<Time<Fixed>>,
     mut body_query: Query<(
-        &JoltBody,
         &JoltBodyId,
         &mut Transform,
         &PreviousBodyTransform,
+        Option<&JoltBody>,
     )>,
     physics_world: Res<JoltPhysicsWorld>,
 ) {
     let blend_factor = fixed_time.overstep_fraction().clamp(0.0, 1.0);
-    for (body, body_id, mut entity_transform, previous_transform) in body_query.iter_mut() {
-        // Only static bodies skip interpolation; kinematic bodies move via
-        // MoveKinematic and need the same render blending as dynamics.
-        if body.motion == JoltMotion::Static {
+    for (body_id, mut entity_transform, previous_transform, body) in body_query.iter_mut() {
+        // Static bodies never move: skip the blend. Bodies without a
+        // `JoltBody` marker (ragdoll parts) always blend; their motion type
+        // lives in Jolt and flips at runtime.
+        if body.is_some_and(|body| body.motion == JoltMotion::Static) {
             continue;
         }
         let (tick_position, tick_rotation) = physics_world.body_full_transform(body_id.body_id_raw);
