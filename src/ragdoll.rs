@@ -50,7 +50,11 @@ pub enum RagdollShape {
 /// Frames derive at bake from the seated part rotations (per side, like
 /// avian's `local_basis2`), so the seated pose reads zero. Hinges flex
 /// about body-local Z (normal Y); swing-twist runs twist along body-local
-/// Y (plane X).
+/// Y (plane X). `SwingTwistFramed` uses explicit per-side twist/plane axes
+/// (each side's own seated rotation carries them to world) for joints where
+/// neither body's long axis is the anatomical axis — e.g. the ankle, whose
+/// cone must open down the foot (ankle → toe), not along the shin or the
+/// foot box's measured Y.
 #[derive(Clone, Copy, Debug)]
 pub enum RagdollJoint {
     /// Rotation about body-local Z within [`min`, `max`] (elbows, knees).
@@ -58,6 +62,24 @@ pub enum RagdollJoint {
     /// Cone swing about body-local Y plus bounded twist (everything else).
     SwingTwist {
         anchor: Vec3,
+        normal_half_cone: f32,
+        plane_half_cone: f32,
+        twist_min: f32,
+        twist_max: f32,
+    },
+    /// Cone swing about an explicit twist axis (in each side's seated local
+    /// frame) plus bounded twist. Same semantics as `SwingTwist`, but the
+    /// cone opens along `twist_axis` instead of body-local Y.
+    SwingTwistFramed {
+        anchor: Vec3,
+        /// Twist axis in the parent's seated local frame.
+        parent_twist: Vec3,
+        /// Plane axis in the parent's seated local frame.
+        parent_plane: Vec3,
+        /// Twist axis in the child's seated local frame.
+        child_twist: Vec3,
+        /// Plane axis in the child's seated local frame.
+        child_plane: Vec3,
         normal_half_cone: f32,
         plane_half_cone: f32,
         twist_min: f32,
@@ -208,6 +230,29 @@ pub fn bake_jolt_ragdoll(
                     axis(parent_rotation, Vec3::X),
                     axis(child_rotation, Vec3::Y),
                     axis(child_rotation, Vec3::X),
+                    normal_half_cone,
+                    plane_half_cone,
+                    twist_min,
+                    twist_max,
+                ),
+                RagdollJoint::SwingTwistFramed {
+                    anchor,
+                    parent_twist,
+                    parent_plane,
+                    child_twist,
+                    child_plane,
+                    normal_half_cone,
+                    plane_half_cone,
+                    twist_min,
+                    twist_max,
+                } => world.ragdoll_build_set_swing_twist(
+                    build,
+                    part_index,
+                    anchor,
+                    axis(parent_rotation, parent_twist),
+                    axis(parent_rotation, parent_plane),
+                    axis(child_rotation, child_twist),
+                    axis(child_rotation, child_plane),
                     normal_half_cone,
                     plane_half_cone,
                     twist_min,
