@@ -37,7 +37,8 @@ use jolt_sys::{
     bjolt_ragdoll_build_add_part, bjolt_ragdoll_build_create, bjolt_ragdoll_build_destroy,
     bjolt_ragdoll_build_finalize, bjolt_ragdoll_build_set_hinge,
     bjolt_ragdoll_build_set_swing_twist, bjolt_ragdoll_build_stabilize, bjolt_ragdoll_create,
-    bjolt_ragdoll_destroy, bjolt_ragdoll_drive, bjolt_ragdoll_motor_off, bjolt_ragdoll_set_motion,
+    bjolt_ragdoll_destroy, bjolt_ragdoll_drive, bjolt_ragdoll_motor_off, bjolt_ragdoll_set_layer,
+    bjolt_ragdoll_set_motion,
     bjolt_remove_constraint, bjolt_rigid_character_add_impulse, bjolt_rigid_character_add_velocity,
     bjolt_rigid_character_body, bjolt_rigid_character_create, bjolt_rigid_character_destroy,
     bjolt_rigid_character_ground, bjolt_rigid_character_pose, bjolt_rigid_character_post,
@@ -2418,6 +2419,13 @@ impl JoltWorld {
             JoltMotion::Dynamic => 2,
         };
         unsafe { bjolt_ragdoll_set_motion(self.world_ptr, ragdoll_id, motion_code) }
+    }
+
+    /// Moves every part body to another object layer (broadphase re-insert,
+    /// no velocity change). Pair with the motion flip: quiet team for
+    /// hitbox follow, world-meeting team for simulation.
+    pub fn ragdoll_set_layer(&mut self, ragdoll_id: u32, object_layer: u16) {
+        unsafe { bjolt_ragdoll_set_layer(self.world_ptr, ragdoll_id, object_layer) }
     }
 
     /// Drives the velocity motor on the joint feeding `part_index` (0 =
