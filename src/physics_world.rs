@@ -53,7 +53,8 @@ use jolt_sys::{
     bjolt_soft_set_pressure, bjolt_soft_set_vertex_radius, bjolt_soft_velocities,
     bjolt_soft_vertex_count, bjolt_soft_vertex_radius, bjolt_soft_vertices, bjolt_soft_volume,
     bjolt_tracked_drive, bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_wake_body,
-    bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_gravity, bjolt_world_update,
+    bjolt_world_body_count, bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_gravity,
+    bjolt_world_update,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -334,6 +335,34 @@ impl Default for CollisionLayers {
         Self::single_layer()
     }
 }
+/// Fixed-size Jolt budgets, decided once at world creation: Jolt
+/// preallocates and never grows. Size for the biggest scene, not the
+/// smallest: an exhausted body pool fails creates (loudly, via the wrapper
+/// guard), while overflowing pairs/contacts silently drops collisions for
+/// a step (ghosting). Rule of thumb: pairs ≈ 10–20× bodies.
+#[derive(Clone, Copy, Debug)]
+pub struct JoltWorldBudgets {
+    /// Max live bodies. One slot per body regardless of shape.
+    pub max_bodies: u32,
+    /// Max broadphase pair candidates per step.
+    pub max_body_pairs: u32,
+    /// Max solved contacts per step.
+    pub max_contact_constraints: u32,
+    /// Solver scratch bytes per step.
+    pub temp_allocator_bytes: u64,
+}
+
+impl Default for JoltWorldBudgets {
+    fn default() -> Self {
+        Self {
+            max_bodies: 4096,
+            max_body_pairs: 4096,
+            max_contact_constraints: 4096,
+            temp_allocator_bytes: 32 * 1024 * 1024,
+        }
+    }
+}
+
 /// A Jolt physics world: floor + dynamic bodies, stepped on the ThreadPool job system.
 pub struct JoltWorld {
     world_ptr: *mut BJoltWorld,
@@ -357,11 +386,38 @@ impl JoltWorld {
     }
 
     pub fn with_layers(collision_layers: CollisionLayers) -> Self {
+        Self::with_layers_and_budgets(collision_layers, JoltWorldBudgets::default())
+    }
+
+    pub fn with_layers_and_budgets(
+        collision_layers: CollisionLayers,
+        world_budgets: JoltWorldBudgets,
+    ) -> Self {
+        assert!(
+            world_budgets.max_bodies >= 1,
+            "need at least 1 body, got {}",
+            world_budgets.max_bodies
+        );
+        assert!(
+            world_budgets.max_body_pairs >= world_budgets.max_bodies,
+            "pairs ({}) below bodies ({}): every body can pair, size pairs >= bodies",
+            world_budgets.max_body_pairs,
+            world_budgets.max_bodies
+        );
+        assert!(
+            world_budgets.max_contact_constraints >= 1,
+            "need at least 1 contact, got {}",
+            world_budgets.max_contact_constraints
+        );
         let world_ptr = unsafe {
             assert!(bjolt_init(), "Jolt initialization failed");
             bjolt_world_create_with_layers(
                 collision_layers.layer_count as u32,
                 collision_layers.collide_matrix.as_ptr() as *const u8,
+                world_budgets.max_bodies,
+                world_budgets.max_body_pairs,
+                world_budgets.max_contact_constraints,
+                world_budgets.temp_allocator_bytes,
             )
         };
         assert!(!world_ptr.is_null(), "Jolt world creation failed");
@@ -375,6 +431,15 @@ impl JoltWorld {
             sensor_bodies: std::collections::HashSet::new(),
             time_scale: 1.0,
         }
+    }
+    /// Live bodies + budget max: log headroom while tuning scene size.
+    /// Pairs/contacts have no Jolt-side counter — size those by rule
+    /// (see [`JoltWorldBudgets`]); bodies are the ones you can watch.
+    pub fn body_stats(&mut self) -> (u32, u32) {
+        let mut max_bodies = 0u32;
+        let live_bodies =
+            unsafe { bjolt_world_body_count(self.world_ptr, &mut max_bodies) };
+        (live_bodies, max_bodies)
     }
 
     /// Current sim speed multiplier (1 = real time).

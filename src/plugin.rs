@@ -32,6 +32,12 @@ pub struct JoltStartupGravity {
     pub world_gravity: Vec3,
 }
 
+/// Startup budgets carried from the [`JoltPlugin`] builder to world
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct JoltStartupBudgets {
+    pub world_budgets: crate::physics_world::JoltWorldBudgets,
+}
+
 /// Bevy resource owning the Jolt physics world. Derefs to [`JoltWorld`] so
 /// systems call `physics_world.create_box(...)` directly; the field stays
 /// for the rare case the resource wrapper itself matters.
@@ -46,7 +52,12 @@ impl FromWorld for JoltPhysicsWorld {
             .get_resource::<JoltCollisionLayers>()
             .map(|layers_resource| layers_resource.collision_layers.clone())
             .unwrap_or_default();
-        let mut physics_world = JoltWorld::with_layers(collision_layers);
+        let world_budgets = world
+            .get_resource::<JoltStartupBudgets>()
+            .map(|budgets_resource| budgets_resource.world_budgets)
+            .unwrap_or_default();
+        let mut physics_world =
+            JoltWorld::with_layers_and_budgets(collision_layers, world_budgets);
         // The plugin builder owns the startup gravity: Jolt itself always
         // starts at Earth-like (0, -9.81, 0), so overwrite with whatever the
         // builder carries (default = same value, no visible change).
@@ -64,6 +75,7 @@ impl FromWorld for JoltPhysicsWorld {
 /// never inserts resources or steps the world manually.
 pub struct JoltPlugin {
     collision_layers: CollisionLayers,
+    world_budgets: crate::physics_world::JoltWorldBudgets,
     physics_hz: f64,
     max_sub_steps: u32,
     world_gravity: Vec3,
@@ -84,6 +96,7 @@ impl JoltPlugin {
     pub fn new() -> Self {
         Self {
             collision_layers: CollisionLayers::default(),
+            world_budgets: crate::physics_world::JoltWorldBudgets::default(),
             physics_hz: Self::DEFAULT_PHYSICS_HZ,
             max_sub_steps: Self::DEFAULT_MAX_SUB_STEPS,
             world_gravity: Self::DEFAULT_GRAVITY,
@@ -95,7 +108,15 @@ impl JoltPlugin {
         self
     }
 
-    /// Physics ticks per second. Must be positive and finite.
+    /// Fixed Jolt budgets (bodies, pairs, contacts, solver scratch).
+    /// Defaults fit small scenes; crowd scenes pass bigger numbers.
+    pub fn with_world_budgets(
+        mut self,
+        world_budgets: crate::physics_world::JoltWorldBudgets,
+    ) -> Self {
+        self.world_budgets = world_budgets;
+        self
+    }
     pub fn with_physics_hz(mut self, physics_hz: f64) -> Self {
         assert!(
             physics_hz.is_finite() && physics_hz > 0.0,
@@ -144,9 +165,12 @@ impl Plugin for JoltPlugin {
         app.insert_resource(JoltCollisionLayers {
             collision_layers: self.collision_layers.clone(),
         });
-        // Before the world resource: FromWorld reads this for startup gravity.
+        // Before the world resource: FromWorld reads these for startup gravity + budgets.
         app.insert_resource(JoltStartupGravity {
             world_gravity: self.world_gravity,
+        });
+        app.insert_resource(JoltStartupBudgets {
+            world_budgets: self.world_budgets,
         });
         app.init_resource::<JoltPhysicsWorld>();
         app.insert_resource(Time::<Fixed>::from_hz(self.physics_hz));

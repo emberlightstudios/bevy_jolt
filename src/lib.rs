@@ -44,11 +44,11 @@ pub use crate::joint_sync::{
 };
 pub use crate::physics_world::{
     BodyMotion, BodySnapshot, CharacterDofs, CollisionLayers, CompoundGeometry, CompoundPart,
-    JointSpace, JoltWorld, PhysicsShape, SoftBendType, SoftBodyConfig,
+    JointSpace, JoltWorld, JoltWorldBudgets, PhysicsShape, SoftBendType, SoftBodyConfig,
 };
 pub use crate::plugin::{
-    JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupGravity, JoltStep,
-    JoltStepConfig, step_physics_world,
+    JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupBudgets, JoltStartupGravity,
+    JoltStep, JoltStepConfig, step_physics_world,
 };
 pub use crate::ragdoll::{
     JoltRagdoll, JoltRagdollHandle, JoltRagdollParts, RagdollDriveAxis, RagdollJoint, RagdollPart,
@@ -84,7 +84,7 @@ pub mod prelude {
     pub use crate::contact_events::{JoltContactAdded, JoltContactRemoved, JoltSensor};
     pub use crate::debug_draw::JoltDebugPlugin;
     pub use crate::joint_sync::{JointKind, JointMotor, JoltJoint, JoltMotorDrive};
-    pub use crate::physics_world::{BodySnapshot, CollisionLayers};
+    pub use crate::physics_world::{BodySnapshot, CollisionLayers, JoltWorldBudgets};
     pub use crate::plugin::{JoltPhysicsWorld, JoltPlugin, JoltStep};
     pub use crate::ragdoll::{JoltRagdoll, JoltRagdollParts, RagdollDriveAxis};
     pub use crate::soft_body::JoltSoftBodyConfig;
