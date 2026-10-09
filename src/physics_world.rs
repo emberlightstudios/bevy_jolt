@@ -342,6 +342,7 @@ pub struct JoltWorld {
     character_shapes: std::collections::HashMap<u32, (f32, f32)>,
     rigid_character_shapes: std::collections::HashMap<u32, (f32, f32)>,
     next_ragdoll_group: u32,
+    sensor_bodies: std::collections::HashSet<u32>,
     /// Sim speed multiplier: 1 = real time, 0.2 = slow motion, 2 = double
     /// speed. Every tick delta the sim consumes is multiplied by this, so
     /// the fixed step stays fixed and the world just advances less (or
@@ -370,6 +371,7 @@ impl JoltWorld {
             character_shapes: std::collections::HashMap::new(),
             rigid_character_shapes: std::collections::HashMap::new(),
             next_ragdoll_group: 1,
+            sensor_bodies: std::collections::HashSet::new(),
             time_scale: 1.0,
         }
     }
@@ -2134,11 +2136,27 @@ impl JoltWorld {
     pub fn remove_and_destroy_body(&mut self, body_id_raw: u32) {
         unsafe { bjolt_body_remove_destroy(self.world_ptr, body_id_raw) }
         self.body_shapes.remove(&body_id_raw);
+        self.sensor_bodies.remove(&body_id_raw);
     }
 
-    /// Flags a body as a sensor (overlaps report, nothing pushes).
+    /// Flags a body as a sensor (overlaps report, nothing pushes). Tracks
+    /// the flag in `sensor_bodies` so `body_collides` can read it back: no
+    /// FFI getter exists, so the world remembers what it set.
     pub fn set_body_sensor(&mut self, body_id_raw: u32, is_sensor: bool) {
         unsafe { bjolt_body_set_sensor(self.world_ptr, body_id_raw, is_sensor) }
+        if is_sensor {
+            self.sensor_bodies.insert(body_id_raw);
+        } else {
+            self.sensor_bodies.remove(&body_id_raw);
+        }
+    }
+
+    /// Whether a body currently collides (false while sensor-flagged).
+    /// Reads the tracked `set_body_sensor` state. Game code reacts to
+    /// `JoltDisabled` presence instead of polling this per frame; tests
+    /// use it as the disable-state readback.
+    pub fn body_collides(&self, body_id_raw: u32) -> bool {
+        !self.sensor_bodies.contains(&body_id_raw)
     }
 
     /// Drains contact begin pairs into the buffers. Returns pairs kept.
@@ -2366,9 +2384,29 @@ impl JoltWorld {
     }
 
     /// Removes bodies + constraints and releases the registry slot. Never mix
-    /// with per-body remove/destroy on these ids.
-    pub fn ragdoll_destroy(&mut self, ragdoll_id: u32) {
+    /// with per-body remove/destroy on these ids. `destroyed_body_ids` (from
+    /// `JoltRagdollParts.body_ids`) clears tracked sensor flags so a
+    /// recycled raw id never reads stale-disabled.
+    pub fn ragdoll_destroy(&mut self, ragdoll_id: u32, destroyed_body_ids: &[u32]) {
         unsafe { bjolt_ragdoll_destroy(self.world_ptr, ragdoll_id) }
+        for destroyed_body in destroyed_body_ids {
+            self.sensor_bodies.remove(destroyed_body);
+        }
+    }
+
+    /// Flags every body in the ragdoll as sensor-quiet (or restores
+    /// collision). Disable path for settled ragdolls: the bodies stay in
+    /// the broadphase but never wake on contact. Reads ids from
+    /// `JoltRagdollParts.body_ids`, so callers pass ids, not entities.
+    pub fn ragdoll_set_disabled(&mut self, ragdoll_disabled_body_ids: &[u32], ragdoll_disabled: bool) {
+        for ragdoll_body in ragdoll_disabled_body_ids {
+            unsafe { bjolt_body_set_sensor(self.world_ptr, *ragdoll_body, ragdoll_disabled) }
+            if ragdoll_disabled {
+                self.sensor_bodies.insert(*ragdoll_body);
+            } else {
+                self.sensor_bodies.remove(ragdoll_body);
+            }
+        }
     }
 
     /// Flips every body in the ragdoll to one motion. Kinematic = follow

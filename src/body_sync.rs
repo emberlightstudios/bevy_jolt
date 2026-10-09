@@ -20,6 +20,67 @@ pub struct JoltBody {
     pub object_layer: u16,
 }
 
+/// Non-destructive disable: the body stays in the world but stops colliding.
+/// Add to freeze a settled ragdoll (never wakes on contact) or park an
+/// inactive terrain LOD; remove to rejoin. Sensor-flag under the hood, so
+/// the broadphase entry and debug outline survive with no rebake cost.
+/// Bake-race safe: bodies not yet baked park on `PendingDisable` and apply
+/// pre-step, the same pattern as `PendingSensor`.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct JoltDisabled;
+
+/// Retry marker for `JoltDisabled` added before its body baked. Removed
+/// once the flag lands, pre-step so disables never miss their first tick.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct PendingDisable;
+
+/// Disables a body when `JoltDisabled` is added: overlaps still report
+/// through contact events but apply no collision response. Bodies missing
+/// their id (not baked yet) park on `PendingDisable` and retry pre-step.
+pub fn bake_jolt_disabled(
+    trigger: On<Add, JoltDisabled>,
+    body_ids: Query<&JoltBodyId>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+    mut commands: Commands,
+) {
+    let disabled_entity = trigger.event().entity;
+    if let Ok(body_id) = body_ids.get(disabled_entity) {
+        physics_world.set_body_sensor(body_id.body_id_raw, true);
+    } else {
+        commands.entity(disabled_entity).insert(PendingDisable);
+    }
+}
+
+/// Re-enables a body when `JoltDisabled` leaves: collision response back on.
+/// Missing bodies (despawned mid-frame) are skipped: removal means gone.
+pub fn remove_jolt_disabled(
+    trigger: On<Remove, JoltDisabled>,
+    body_ids: Query<&JoltBodyId>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    let reenabled_entity = trigger.event().entity;
+    if let Ok(body_id) = body_ids.get(reenabled_entity) {
+        physics_world.set_body_sensor(body_id.body_id_raw, false);
+    }
+}
+
+/// Applies `PendingDisable` once the body bakes. Runs before the physics
+/// step so parked disables never miss their first overlap.
+pub fn apply_pending_disables(
+    pending_query: Query<(Entity, &JoltBodyId), With<PendingDisable>>,
+    disabled_query: Query<(), With<JoltDisabled>>,
+    mut commands: Commands,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (pending_entity, body_id) in &pending_query {
+        // Marker removed while waiting: stale park, clear it without touching Jolt.
+        if disabled_query.contains(pending_entity) {
+            physics_world.set_body_sensor(body_id.body_id_raw, true);
+        }
+        commands.entity(pending_entity).remove::<PendingDisable>();
+    }
+}
+
 /// Jolt motion type: static never moves, kinematic moves by velocity and
 /// pushes dynamics without responding to forces, dynamic fully simulates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

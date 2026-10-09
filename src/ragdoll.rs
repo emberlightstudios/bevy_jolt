@@ -111,10 +111,12 @@ pub struct JoltRagdoll {
 }
 
 /// Part bodies of one baked ragdoll, in spec order. Read poses from these.
+/// `body_ids` parallels `part_entities`: raw ids for world calls like the
+/// ragdoll disable path, which flags every part without touching entities.
 #[derive(Component, Clone, Debug)]
 pub struct JoltRagdollParts {
     pub part_entities: Vec<Entity>,
-    body_ids: Vec<u32>,
+    pub body_ids: Vec<u32>,
 }
 
 /// Marker on ragdoll part entities: their `JoltBodyId` is owned by the
@@ -345,5 +347,5 @@ pub fn despawn_jolt_ragdoll(
     for body_id_raw in &baked.body_ids {
         physics_world.unfile_shape(*body_id_raw);
     }
-    physics_world.ragdoll_destroy(handle.ragdoll_id);
+    physics_world.ragdoll_destroy(handle.ragdoll_id, &baked.body_ids);
 }

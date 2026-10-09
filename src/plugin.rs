@@ -166,6 +166,8 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::character::apply_jolt_rigid_character_push);
         app.add_observer(crate::character::apply_jolt_rigid_character_teleport);
         app.add_observer(crate::contact_events::bake_jolt_sensor);
+        app.add_observer(crate::body_sync::bake_jolt_disabled);
+        app.add_observer(crate::body_sync::remove_jolt_disabled);
         app.add_observer(crate::joint_sync::despawn_jolt_joint);
         // Joint cascade before body destroy: constraint removals here are
         // synchronous, so the solver never sees a constraint on a dead body.
@@ -198,6 +200,7 @@ impl Plugin for JoltPlugin {
                 crate::character::step_jolt_characters,
                 crate::character::step_jolt_rigid_characters,
                 crate::contact_events::apply_pending_sensors,
+                crate::body_sync::apply_pending_disables,
                 crate::joint_sync::apply_jolt_motor_drives,
                 crate::vehicle::apply_jolt_vehicle_drives,
             ),

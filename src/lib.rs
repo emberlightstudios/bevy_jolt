@@ -22,7 +22,10 @@ pub use crate::body_forces::{
     JoltGravity, JoltImpulse, JoltKinematicTarget, JoltLinearForce, JoltLinearVelocity,
     JoltRestitution, JoltSleeping, JoltTeleport,
 };
-pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape, PreviousBodyTransform};
+pub use crate::body_sync::{
+     JoltBody, JoltBodyId, JoltDisabled, JoltMotion, JoltShape, PreviousBodyTransform,
+     apply_pending_disables, bake_jolt_disabled, remove_jolt_disabled,
+};
 pub use crate::buoyancy::{JoltBuoyant, JoltWater};
 pub use crate::character::{
     CharacterGround, JoltCharacter, JoltCharacterGround, JoltCharacterId, JoltCharacterStep,
@@ -72,7 +75,7 @@ pub mod prelude {
         JoltGravity, JoltImpulse, JoltKinematicTarget, JoltLinearForce, JoltLinearVelocity,
         JoltRestitution, JoltSleeping, JoltTeleport,
     };
-    pub use crate::body_sync::{JoltBody, JoltBodyId, JoltMotion, JoltShape};
+    pub use crate::body_sync::{JoltBody, JoltBodyId, JoltDisabled, JoltMotion, JoltShape};
     pub use crate::buoyancy::{JoltBuoyant, JoltWater};
     pub use crate::character::{
         JoltCharacter, JoltCharacterGround, JoltCharacterTeleport, JoltCharacterVelocity,
