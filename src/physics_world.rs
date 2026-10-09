@@ -353,11 +353,13 @@ pub struct JoltWorldBudgets {
 }
 
 impl Default for JoltWorldBudgets {
+    // Matches Godot's Jolt defaults (jolt_project_settings.cpp): 10240
+    // bodies, 65536 pairs, 20480 contacts, 32 MiB scratch.
     fn default() -> Self {
         Self {
-            max_bodies: 4096,
-            max_body_pairs: 4096,
-            max_contact_constraints: 4096,
+            max_bodies: 10240,
+            max_body_pairs: 65536,
+            max_contact_constraints: 20480,
             temp_allocator_bytes: 32 * 1024 * 1024,
         }
     }
