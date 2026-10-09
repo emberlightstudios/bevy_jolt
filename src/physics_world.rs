@@ -18,7 +18,8 @@ use jolt_sys::{
     bjolt_character_set_padding, bjolt_character_set_rotation, bjolt_character_set_shape_offset,
     bjolt_character_set_up, bjolt_character_set_user_data, bjolt_character_stance,
     bjolt_character_stick_to_floor, bjolt_character_teleport, bjolt_character_update,
-    bjolt_character_walk_stairs, bjolt_constraint_drive_at, bjolt_constraint_path_fraction,
+    bjolt_character_walk_stairs, bjolt_constraint_drive_at,
+    bjolt_constraint_drive_swing_twist, bjolt_constraint_path_fraction,
     bjolt_constraint_path_looping, bjolt_create_box, bjolt_create_capsule,
     bjolt_create_cloth_settings, bjolt_create_compound, bjolt_create_cone_constraint,
     bjolt_create_cube_settings, bjolt_create_cylinder, bjolt_create_distance_constraint,
@@ -2001,6 +2002,20 @@ impl JoltWorld {
     /// Velocity motor on a slider, hinge, or path joint. False on bad ids.
     pub fn constraint_drive_at(&mut self, constraint_id: u32, target_velocity: f32) -> bool {
         unsafe { bjolt_constraint_drive_at(self.world_ptr, constraint_id, target_velocity) }
+    }
+
+    /// Velocity motor on a swing-twist joint: `axis` 0 = twist (spin about
+    /// the constraint X axis), 1 = swing (sweep about constraint Y/Z).
+    /// False on bad ids or non-swing-twist joints.
+    pub fn constraint_drive_swing_twist(
+        &mut self,
+        constraint_id: u32,
+        axis: u8,
+        target_velocity: f32,
+    ) -> bool {
+        unsafe {
+            bjolt_constraint_drive_swing_twist(self.world_ptr, constraint_id, axis, target_velocity)
+        }
     }
 
     /// Current path fraction of a path constraint. NaN on bad ids or
