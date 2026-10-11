@@ -33,7 +33,11 @@ impl Plugin for JoltDebugPlugin {
 fn draw_physics_shapes(
     physics_world: Res<JoltPhysicsWorld>,
     character_query: Query<(&crate::character::JoltCharacter, &Transform)>,
-    rigid_query: Query<(&crate::character::JoltRigidCharacterId, &Transform)>,
+    rigid_query: Query<(
+        &crate::character::JoltRigidCharacterId,
+        &crate::character::JoltRigidCharacter,
+        &Transform,
+    )>,
     body_sleeping: Query<&crate::body_forces::JoltSleeping>,
     body_entities: Query<(Entity, &crate::body_sync::JoltBodyId)>,
     mut gizmos: Gizmos,
@@ -246,16 +250,16 @@ fn draw_physics_shapes(
     }
     // Rigid characters own a real simulated body, but it never enters the
     // body table — draw their filed capsule at the live entity pose.
-    for (rigid_id, rigid_pose) in &rigid_query {
+    for (rigid_id, rigid_spec, rigid_pose) in &rigid_query {
         let Some((capsule_half_height, capsule_radius)) = physics_world
             .rigid_character_shapes()
             .get(&rigid_id.character_id_raw)
         else {
             continue;
         };
-        // Rigid GetPosition returns the body origin (capsule center), not
-        // the feet like the virtual side: draw here with no lift.
-        let capsule_center = rigid_pose.translation;
+        // The entity origin sits at the capsule bottom (feet); the body
+        // rides one center-height above it, so lift the outline to the body.
+        let capsule_center = rigid_pose.translation + Vec3::Y * rigid_spec.capsule_center_height;
         draw_capsule_outline(
             &mut gizmos,
             capsule_center,

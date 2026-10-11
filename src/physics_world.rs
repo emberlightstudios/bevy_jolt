@@ -3124,8 +3124,14 @@ impl JoltWorld {
         unsafe { bjolt_rigid_character_set_layer(self.world_ptr, character_id_raw, object_layer) }
     }
 
-    /// Swaps the rigid capsule (stand/crouch). False = still penetrating,
-    /// old capsule keeps running.
+    /// Swaps the rigid capsule (stand/crouch, fit to a skeleton). `SetShape`
+    /// keeps the body position, so the swap rides the body up or down by the
+    /// center-height delta: the capsule bottom cap stays anchored on the
+    /// character origin instead of sinking into or floating off the ground.
+    /// `max_penetration` is the refusal threshold, not a correction distance:
+    /// a swap that would leave the new capsule penetrating more than this is
+    /// refused (old capsule keeps running) and reports false. The debug
+    /// outline recipe follows the live shape either way.
     pub fn rigid_character_stance(
         &mut self,
         character_id_raw: u32,
@@ -3133,7 +3139,11 @@ impl JoltWorld {
         capsule_radius: f32,
         max_penetration: f32,
     ) -> bool {
-        unsafe {
+        let previous_shape = self
+            .rigid_character_shapes
+            .get(&character_id_raw)
+            .copied();
+        let swapped = unsafe {
             bjolt_rigid_character_stance(
                 self.world_ptr,
                 character_id_raw,
@@ -3141,7 +3151,25 @@ impl JoltWorld {
                 capsule_radius,
                 max_penetration,
             )
+        };
+        if swapped {
+            if let Some((previous_half_height, previous_radius)) = previous_shape {
+                let center_height_delta = (capsule_half_height + capsule_radius)
+                    - (previous_half_height + previous_radius);
+                if center_height_delta.abs() > 1e-6 {
+                    let (character_position, character_rotation, _, _) =
+                        self.rigid_character_pose(character_id_raw);
+                    self.rigid_character_set_pose(
+                        character_id_raw,
+                        character_position + Vec3::Y * center_height_delta,
+                        character_rotation,
+                    );
+                }
+            }
+            self.rigid_character_shapes
+                .insert(character_id_raw, (capsule_half_height, capsule_radius));
         }
+        swapped
     }
 
     /// Rigid ground detail: contact position, normal, surface velocity,

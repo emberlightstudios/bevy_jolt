@@ -223,6 +223,7 @@ impl Plugin for JoltPlugin {
                 crate::buoyancy::apply_buoyancy,
                 crate::character::step_jolt_characters,
                 crate::character::step_jolt_rigid_characters,
+                crate::character::apply_rigid_character_stance_changes,
                 crate::contact_events::apply_pending_sensors,
                 crate::body_sync::apply_pending_disables,
                 crate::joint_sync::apply_jolt_motor_drives,

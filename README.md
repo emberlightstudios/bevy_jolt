@@ -147,7 +147,11 @@ Impulse ≠ one-frame force: forces scale with dt, impulses don't.
   with gravity, not an overwrite. Ground state in `JoltCharacterGround`.
   Jump is yours: set upward velocity when grounded.
 - `JoltRigidCharacter` + `JoltRigidCharacterVelocity` — a real capsule body
-  in the solver: pushes and gets pushed.
+  in the solver: pushes and gets pushed. `capsule_center_height` lifts the
+  capsule so its bottom cap rests on the entity origin (feet at y = 0): the
+  Jolt `Character` centers its capsule on its position, character roots hold
+  meshes and skeletons at the origin. Edit the capsule size in place and the
+  stance swap re-anchors the feet — no sinking, no floating.
 
 Keep the velocity types separate: same field name, different machinery
 (solver overwrite vs move-and-slide). Shared components with `With`/`Without`

@@ -252,11 +252,18 @@ pub struct JoltRigidCharacter {
     pub user_data: u64,
     /// Ground counts as ground this far below the feet (meters).
     pub max_separation: f32,
+    /// Height of the capsule center above the entity origin (m). The Jolt
+    /// `Character` centers its capsule on its position, so at 0.0 the
+    /// capsule straddles the origin. Character roots hold their meshes and
+    /// skeleton at the origin with the feet on the ground, so the physics
+    /// capsule rides this far above the transform and rests its bottom cap
+    /// on the origin (feet at y = 0).
+    pub capsule_center_height: f32,
 }
 
 impl JoltRigidCharacter {
     /// Human-sized upright default on a layer: 0.5 m cylinder + 0.3 m caps,
-    /// rotation frozen so it never tips.
+    /// rotation frozen so it never tips. Capsule centered on the origin.
     pub fn new(object_layer: u16) -> Self {
         Self {
             capsule_half_height: 0.5,
@@ -268,6 +275,7 @@ impl JoltRigidCharacter {
             allowed_dofs: crate::physics_world::CharacterDofs::TRANSLATION_ONLY,
             user_data: 0,
             max_separation: 0.1,
+            capsule_center_height: 0.0,
         }
     }
 }
@@ -326,8 +334,12 @@ pub fn bake_jolt_rigid_character(
     let Ok((character, character_transform)) = character_query.get(character_entity) else {
         panic!("JoltRigidCharacter gone on {character_entity:?} before bake ran");
     };
+    // The capsule bottom rests on the entity origin, so the physics position
+    // (capsule center) sits one center-height above the transform.
+    let character_position =
+        character_transform.translation + Vec3::Y * character.capsule_center_height;
     let character_id_raw = physics_world.rigid_character_create(
-        character_transform.translation,
+        character_position,
         character_transform.rotation,
         character.capsule_half_height,
         character.capsule_radius,
@@ -385,18 +397,25 @@ pub fn apply_jolt_rigid_character_push(
 }
 
 /// Applies a triggered teleport to the target entity's rigid character.
+/// The target is the character position (feet); the body rides one
+/// center-height above it, same as the bake.
 pub fn apply_jolt_rigid_character_teleport(
     trigger: On<JoltRigidCharacterTeleport>,
     character_ids: Query<&JoltRigidCharacterId>,
+    character_specs: Query<&JoltRigidCharacter>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     let teleport = trigger.event();
     let Ok(character_id) = character_ids.get(teleport.character_entity) else {
         return;
     };
+    let center_offset = character_specs
+        .get(teleport.character_entity)
+        .map(|character_spec| Vec3::Y * character_spec.capsule_center_height)
+        .unwrap_or(Vec3::ZERO);
     physics_world.rigid_character_set_pose(
         character_id.character_id_raw,
-        teleport.target_position,
+        teleport.target_position + center_offset,
         teleport.target_rotation,
     );
 }
@@ -418,7 +437,9 @@ pub fn step_jolt_rigid_characters(
 }
 
 /// Refreshes ground state after the physics step, then copies each rigid
-/// character's pose + ground reading into Bevy.
+/// character's pose + ground reading into Bevy. The pose is the capsule
+/// center; the entity origin is the feet, so the center height comes back
+/// off the position.
 pub fn sync_rigid_character_transforms(
     mut character_query: Query<
         (
@@ -438,8 +459,33 @@ pub fn sync_rigid_character_transforms(
             .rigid_character_post(character_id.character_id_raw, character_spec.max_separation);
         let (character_position, character_rotation, _, ground_reading) =
             physics_world.rigid_character_pose(character_id.character_id_raw);
-        character_transform.translation = character_position;
+        character_transform.translation =
+            character_position - Vec3::Y * character_spec.capsule_center_height;
         character_transform.rotation = character_rotation;
         *character_ground = ground_reading;
+    }
+}
+
+/// Applies capsule size edits to the live body (fit a character to its
+/// skeleton, stand/crouch). `rigid_character_stance` keeps the capsule
+/// bottom anchored, so the feet stay where they were after the swap.
+/// `f32::MAX` for the penetration threshold: a refused resize would
+/// silently keep the old capsule, and a capsule the game just measured is
+/// the one it wants. Runs in `FixedUpdate` with the other pre-step drives,
+/// so a swap lands before the sim sees the new shape.
+pub fn apply_rigid_character_stance_changes(
+    mut characters: Query<
+        (Entity, &JoltRigidCharacterId, &JoltRigidCharacter),
+        Changed<JoltRigidCharacter>,
+    >,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    for (_, character_id, character_spec) in &mut characters {
+        physics_world.rigid_character_stance(
+            character_id.character_id_raw,
+            character_spec.capsule_half_height,
+            character_spec.capsule_radius,
+            f32::MAX,
+        );
     }
 }
