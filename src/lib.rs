@@ -45,6 +45,7 @@ pub use crate::joint_sync::{
 pub use crate::physics_world::{
     BodyMotion, BodySnapshot, CharacterDofs, CollisionLayers, CompoundGeometry, CompoundPart,
     JointSpace, JoltWorld, JoltWorldBudgets, PhysicsShape, SoftBendType, SoftBodyConfig,
+    VehicleWheelPose,
 };
 pub use crate::plugin::{
     JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupBudgets, JoltStartupGravity,

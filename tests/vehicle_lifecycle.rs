@@ -166,3 +166,71 @@ fn vehicle_despawn_destroys_chassis() {
         "vehicle entity should be gone"
     );
 }
+
+// A driven vehicle owes Bevy its chassis pose: the post-step sync must see
+// the entity, so `Transform` (and the interpolation anchor) track the
+// moving chassis. Regression: the chassis was baked without `JoltSleeping`,
+// which dropped the vehicle out of the sync query — render interpolation
+// then blended the mesh between a spawn anchor frozen at bake and the live
+// chassis, so the car teleported back toward its spawn point every frame
+// while the debug wireframe drove away.
+#[test]
+fn driven_vehicle_syncs_chassis_pose_to_entity() {
+    use bevy_jolt::{JoltBody, JoltPhysicsWorld, JoltShape, JoltStep, PreviousBodyTransform};
+    use std::time::Duration;
+
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, JoltPlugin::new().with_physics_hz(60.0)));
+    // Flat ground slab so the drive is unambiguous and the car never falls
+    // off the edge mid-run.
+    app.world_mut().spawn((
+        JoltBody::fixed(0),
+        Transform::IDENTITY,
+        JoltShape::box_shape(Vec3::new(200.0, 0.5, 200.0)),
+    ));
+    let car = spawn_car(&mut app);
+    // Real fixed ticks: advance `Time<Fixed>` so the sim actually steps.
+    for _ in 0..180 {
+        app.world_mut()
+            .resource_mut::<Time<Fixed>>()
+            .advance_by(Duration::from_secs_f32(1.0 / 60.0));
+        app.world_mut().run_schedule(FixedUpdate);
+        app.world_mut().run_schedule(JoltStep);
+    }
+    let world = app.world();
+    let vehicle_id = world
+        .get::<JoltVehicleId>(car)
+        .expect("car should own a Jolt body + constraint id");
+    let (chassis_position, chassis_rotation) = world
+        .resource::<JoltPhysicsWorld>()
+        .body_full_transform(vehicle_id.body_id_raw);
+    // The sim really moved the car: without this the pose match below could
+    // pass vacuously on a frozen world.
+    assert!(
+        chassis_position.z > 1.0,
+        "driven chassis should have driven forward, got {chassis_position}"
+    );
+    // The sync copied the chassis pose out to the entity transform.
+    let car_transform = world
+        .get::<Transform>(car)
+        .expect("car entity should still exist");
+    assert!(
+        car_transform.translation.distance(chassis_position) < 0.05,
+        "entity transform {:?} should match the chassis {chassis_position}",
+        car_transform.translation
+    );
+    assert!(
+        car_transform.rotation.angle_between(chassis_rotation) < 0.05,
+        "entity rotation should match the chassis"
+    );
+    // The interpolation anchor trails the chassis by one tick, not by the
+    // whole drive distance a frozen spawn anchor would leave behind.
+    let anchor = world
+        .get::<PreviousBodyTransform>(car)
+        .expect("car entity should carry the interpolation anchor");
+    assert!(
+        anchor.previous_position.distance(chassis_position) < 0.5,
+        "interpolation anchor {:?} should trail the chassis {chassis_position} by one tick",
+        anchor.previous_position
+    );
+}

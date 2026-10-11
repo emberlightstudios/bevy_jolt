@@ -698,13 +698,28 @@ fn insert_vehicle_id(
         vehicle_id,
         // Joins the shared transform sync + debug draw: the chassis box
         // matches the C++ shape, so the vehicle entity carries its own
-        // pose like any body.
+        // pose like any body. `JoltSleeping` is what puts the entity in
+        // the post-step sync's query: without it the sync skips the
+        // vehicle entirely, only render interpolation writes the
+        // transform, and it blends between a spawn anchor frozen at bake
+        // and the live chassis — the mesh teleports back toward spawn
+        // every frame while the debug wireframe drives away.
         crate::body_sync::JoltBodyId {
             body_id_raw: vehicle_id.body_id_raw,
         },
+        crate::body_forces::JoltSleeping { sleeping: false },
         crate::body_sync::PreviousBodyTransform {
             previous_position: spawn_transform.translation,
             previous_rotation: spawn_transform.rotation,
+        },
+        // The chassis is dynamic, so it carries the unified velocities
+        // from bake like any other non-static body: game code drives by
+        // writing, the sync writes the measured result back.
+        crate::body_forces::JoltLinearVelocity {
+            linear_velocity: Vec3::ZERO,
+        },
+        crate::body_forces::JoltAngularVelocity {
+            angular_velocity: Vec3::ZERO,
         },
     ));
     let body_id_raw = vehicle_id.body_id_raw;

@@ -8,6 +8,7 @@
 use bevy::color::palettes::basic::{BLUE, GREEN, RED, YELLOW};
 use bevy::math::Isometry3d;
 use bevy::prelude::*;
+use std::f32::consts::TAU;
 
 use crate::physics_world::{CompoundGeometry, PhysicsShape};
 use crate::plugin::JoltPhysicsWorld;
@@ -264,6 +265,70 @@ fn draw_physics_shapes(
             DYNAMIC_BODY_COLOR,
         );
     }
+    // Vehicle wheels are raycasts, not bodies, so they never enter the body
+    // table either. Draw them from the live sim poses, tinted by the
+    // chassis body's active state (the same lookup the chassis uses).
+    for (_constraint_id, chassis_body_id_raw, wheel_poses) in physics_world.vehicle_wheel_debug() {
+        let body_active = body_entities
+            .iter()
+            .find(|(_, body_id)| body_id.body_id_raw == chassis_body_id_raw)
+            .map(|(body_entity, _)| {
+                body_sleeping
+                    .get(body_entity)
+                    .map(|body_sleeping| !**body_sleeping)
+                    .unwrap_or(true)
+            })
+            .unwrap_or(true);
+        let debug_color = body_debug_color(body_active);
+        for wheel_pose in &wheel_poses {
+            draw_wheel_outline(&mut gizmos, wheel_pose, debug_color);
+        }
+    }
+}
+
+/// Wireframe of one vehicle wheel: two rims at axle +/- half width, each
+/// with a crossed pair of spokes so roll reads, plus the axle line joining
+/// them. The wheel transform's model space is X = in wheel plane,
+/// Y = axle, Z = in wheel plane; roll is a rotation about Y, so the spokes
+/// sweep visibly when the wheel spins.
+fn draw_wheel_outline(
+    gizmos: &mut Gizmos,
+    wheel_pose: &crate::physics_world::VehicleWheelPose,
+    debug_color: Color,
+) {
+    const WHEEL_RIM_SEGMENTS: usize = 16;
+    let wheel_up = wheel_pose.wheel_rotation * Vec3::X;
+    let wheel_axle = wheel_pose.wheel_rotation * Vec3::Y;
+    let wheel_forward = wheel_pose.wheel_rotation * Vec3::Z;
+    let axle_offset = wheel_axle * wheel_pose.wheel_half_width;
+    let wheel_centers = [
+        wheel_pose.wheel_position + axle_offset,
+        wheel_pose.wheel_position - axle_offset,
+    ];
+    for wheel_center in wheel_centers {
+        // Rim: circle in the wheel plane (perpendicular to the axle).
+        for segment in 0..WHEEL_RIM_SEGMENTS {
+            let angle_a = segment as f32 / WHEEL_RIM_SEGMENTS as f32 * TAU;
+            let angle_b = (segment + 1) as f32 / WHEEL_RIM_SEGMENTS as f32 * TAU;
+            let point_a = wheel_center
+                + (wheel_up * angle_a.cos() + wheel_forward * angle_a.sin())
+                    * wheel_pose.wheel_radius;
+            let point_b = wheel_center
+                + (wheel_up * angle_b.cos() + wheel_forward * angle_b.sin())
+                    * wheel_pose.wheel_radius;
+            gizmos.line(point_a, point_b, debug_color);
+        }
+        // Spokes: a cross in the wheel plane; rolling rotation about the
+        // axle sweeps them, which is how the spin reads on screen.
+        for spoke_direction in [wheel_up, wheel_forward] {
+            gizmos.line(
+                wheel_center - spoke_direction * wheel_pose.wheel_radius,
+                wheel_center + spoke_direction * wheel_pose.wheel_radius,
+                debug_color,
+            );
+        }
+    }
+    gizmos.line(wheel_centers[0], wheel_centers[1], debug_color);
 }
 fn body_debug_color(body_active: bool) -> Color {
     if body_active {

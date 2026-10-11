@@ -182,6 +182,19 @@ pub struct BodyMotion {
     pub body_spin: Vec3,
 }
 
+/// One vehicle wheel's debug pose: live world transform from the sim
+/// (steer, suspension travel, and roll baked in; model space X = in wheel
+/// plane, Y = axle, Z = in wheel plane) plus the geometry filed at
+/// creation. Wheels are raycasts, not bodies, so unlike `BodySnapshot`
+/// there is no Jolt body id here.
+#[derive(Clone, Copy, Debug)]
+pub struct VehicleWheelPose {
+    pub wheel_position: Vec3,
+    pub wheel_rotation: Quat,
+    pub wheel_radius: f32,
+    pub wheel_half_width: f32,
+}
+
 /// What a body looks like, remembered at creation so the debug visualizer
 /// can draw it. Jolt owns the real shape; this is just the outline recipe.
 /// `Clone` (not `Copy`): a compound owns a heap part list, and copying that
@@ -375,6 +388,10 @@ pub struct JoltWorld {
     rigid_character_shapes: std::collections::HashMap<u32, (f32, f32)>,
     next_ragdoll_group: u32,
     sensor_bodies: std::collections::HashSet<u32>,
+    /// Per-vehicle wheel geometry keyed by constraint id: (chassis body id,
+    /// per-wheel (radius, half width)). Wheels are raycasts, not bodies, so
+    /// no bake files their size; live poses come from the FFI per query.
+    vehicle_wheel_shapes: std::collections::HashMap<u32, (u32, Vec<(f32, f32)>)>,
     /// Sim speed multiplier: 1 = real time, 0.2 = slow motion, 2 = double
     /// speed. Every tick delta the sim consumes is multiplied by this, so
     /// the fixed step stays fixed and the world just advances less (or
@@ -431,6 +448,7 @@ impl JoltWorld {
             rigid_character_shapes: std::collections::HashMap::new(),
             next_ragdoll_group: 1,
             sensor_bodies: std::collections::HashSet::new(),
+            vehicle_wheel_shapes: std::collections::HashMap::new(),
             time_scale: 1.0,
         }
     }
@@ -917,6 +935,52 @@ impl JoltWorld {
         (body_motion.body_position, body_motion.body_rotation)
     }
 
+    /// Every live vehicle's wheels for debug draw: `(constraint id, chassis
+    /// body id, wheel poses)`. Wheels are raycasts, not bodies, so no bake
+    /// files their size — the registry filled at creation supplies radius
+    /// and half width, the sim supplies the live pose (steer, suspension
+    /// travel, and roll baked in).
+    pub fn vehicle_wheel_debug(&self) -> Vec<(u32, u32, Vec<VehicleWheelPose>)> {
+        use jolt_sys::{MAX_VEHICLE_WHEELS, bjolt_vehicle_wheel_transforms};
+        self.vehicle_wheel_shapes
+            .iter()
+            .map(|(&constraint_id, &(body_id_raw, ref wheel_shapes))| {
+                let mut wheel_positions = [0.0f32; MAX_VEHICLE_WHEELS * 3];
+                let mut wheel_rotations = [0.0f32; MAX_VEHICLE_WHEELS * 4];
+                let wheel_count = unsafe {
+                    bjolt_vehicle_wheel_transforms(
+                        self.world_ptr,
+                        constraint_id,
+                        wheel_positions.as_mut_ptr(),
+                        wheel_rotations.as_mut_ptr(),
+                        MAX_VEHICLE_WHEELS as u32,
+                    )
+                } as usize;
+                let wheel_poses = (0..wheel_count.min(wheel_shapes.len()))
+                    .map(|wheel_index| {
+                        let (wheel_radius, wheel_half_width) = wheel_shapes[wheel_index];
+                        VehicleWheelPose {
+                            wheel_position: Vec3::new(
+                                wheel_positions[wheel_index * 3],
+                                wheel_positions[wheel_index * 3 + 1],
+                                wheel_positions[wheel_index * 3 + 2],
+                            ),
+                            wheel_rotation: Quat::from_xyzw(
+                                wheel_rotations[wheel_index * 4],
+                                wheel_rotations[wheel_index * 4 + 1],
+                                wheel_rotations[wheel_index * 4 + 2],
+                                wheel_rotations[wheel_index * 4 + 3],
+                            ),
+                            wheel_radius,
+                            wheel_half_width,
+                        }
+                    })
+                    .collect();
+                (constraint_id, body_id_raw, wheel_poses)
+            })
+            .collect()
+    }
+
     /// Closest body a ray hits, if any. `ray_direction` sets both direction
     /// and reach: hits past `origin + direction` are not reported.
     pub fn cast_ray(&self, ray_origin: Vec3, ray_direction: Vec3) -> Option<RayHit> {
@@ -1056,6 +1120,7 @@ impl JoltWorld {
 
     pub fn remove_constraint(&mut self, constraint_id: u32) {
         unsafe { bjolt_remove_constraint(self.world_ptr, constraint_id) }
+        self.vehicle_wheel_shapes.remove(&constraint_id);
     }
 
     /// Ball-and-socket at an anchor point: positions locked, rotation free.
@@ -1523,9 +1588,23 @@ impl JoltWorld {
                 }
             }
         };
-        (created != 0).then_some(crate::vehicle::JoltVehicleId {
-            body_id_raw: body_raw,
-            constraint_id_raw: constraint_id,
+        (created != 0).then(|| {
+            // Wheels are raycasts, not bodies: file their geometry here so
+            // debug draw can outline them from live poses later.
+            self.vehicle_wheel_shapes.insert(
+                constraint_id,
+                (
+                    body_raw,
+                    spec.wheels
+                        .iter()
+                        .map(|wheel| (wheel.wheel_radius, wheel.wheel_width * 0.5))
+                        .collect(),
+                ),
+            );
+            crate::vehicle::JoltVehicleId {
+                body_id_raw: body_raw,
+                constraint_id_raw: constraint_id,
+            }
         })
     }
 

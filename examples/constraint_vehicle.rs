@@ -1,9 +1,8 @@
 //! Vehicle: a tuned `VehicleSpec` car with WASD driving (W gas,
 //! S brake/reverse, A/D steer) over bumpy heightfield terrain. No keys: sits
-//! still. Wheels are render-only spheres parented to the chassis at the
-//! spec's mount points: they yaw with steering and spin with throttle so the
-//! drive state reads visually (Jolt wheels are raycasts, there are no wheel
-//! bodies to follow).
+//! still. Wheels are raycasts in Jolt, not bodies, so there are no wheel
+//! entities to follow: `JoltDebugPlugin` draws wireframe wheels from the
+//! live sim poses (steer, suspension travel, roll included).
 //!
 //! Speed tuning vs `VehicleSpec::default` (see commit message for old values):
 //! higher engine torque and rev limit, later upshifts, quicker gear changes.
@@ -22,8 +21,6 @@ const TERRAIN_CELL: f32 = 2.0;
 /// Bumps fade to flat inside this radius so the car spawns on stable ground.
 const SPAWN_FLAT_RADIUS: f32 = 8.0;
 const BUMP_AMPLITUDE: f32 = 0.9;
-/// Visual wheel spin at full throttle (radians per second).
-const WHEEL_SPIN_RATE: f32 = 14.0;
 
 fn main() {
     App::new()
@@ -32,7 +29,7 @@ fn main() {
         .add_plugins(JoltDebugPlugin)
         .add_systems(Startup, spawn_scene)
         .add_systems(PreUpdate, drive_car)
-        .add_systems(Update, (spin_wheel_visuals, follow_car_camera))
+        .add_systems(Update, follow_car_camera)
         .run();
 }
 
@@ -88,68 +85,19 @@ fn spawn_scene(
     };
     car_spec.transmission.shift_up_rpm = 5200.0;
     car_spec.transmission.switch_time = 0.25;
-    let wheel_mounts: Vec<WheelMount> = car_spec
-        .wheels
-        .iter()
-        .map(|spec_wheel| WheelMount {
-            mount_position: spec_wheel.mount_position,
-            wheel_radius: spec_wheel.wheel_radius,
-            max_steer_angle: spec_wheel.max_steer_angle,
-        })
-        .collect();
-    let car_entity = commands
-        .spawn((
-            Car,
-            Mesh3d(meshes.add(Cuboid::new(1.8, 1.2, 4.4))),
-            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.15, 0.2))),
-            Transform::from_translation(CAR_SPAWN),
-            car_spec,
-            JoltVehicleDrive {
-                forward: 0.0,
-                steer: 0.0,
-                brake: 0.0,
-                hand_brake: 0.0,
-            },
-        ))
-        .id();
-    // Render-only wheel spheres parented to the chassis at the spec's mount
-    // points. Each carries a bright spoke child so the spin reads visually
-    // (a plain sphere's rotation is invisible).
-    let wheel_mesh = meshes.add(Sphere::new(1.0));
-    let tire_material = materials.add(Color::srgb(0.08, 0.08, 0.1));
-    let spoke_material = materials.add(Color::srgb(0.9, 0.85, 0.2));
-    let mut wheel_visuals = Vec::with_capacity(wheel_mounts.len());
-    for wheel_mount in &wheel_mounts {
-        let spoke_half = wheel_mount.wheel_radius * 0.8;
-        let wheel_entity = commands
-            .spawn((
-                Mesh3d(wheel_mesh.clone()),
-                MeshMaterial3d(tire_material.clone()),
-                Transform::from_translation(wheel_mount.mount_position)
-                    .with_scale(Vec3::splat(wheel_mount.wheel_radius)),
-                ChildOf(car_entity),
-            ))
-            .with_children(|wheel_children| {
-                wheel_children.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(
-                        1.3,
-                        spoke_half * 2.0,
-                        wheel_mount.wheel_radius * 0.35,
-                    ))),
-                    MeshMaterial3d(spoke_material.clone()),
-                    // Spoke sized in unit-sphere space: the parent's radius
-                    // scale brings it out to the tire tread.
-                    Transform::IDENTITY,
-                ));
-            })
-            .id();
-        wheel_visuals.push(WheelVisual {
-            wheel_entity,
-            max_steer_angle: wheel_mount.max_steer_angle,
-            spin_angle: 0.0,
-        });
-    }
-    commands.insert_resource(WheelVisuals { wheel_visuals });
+    commands.spawn((
+        Car,
+        Mesh3d(meshes.add(Cuboid::new(1.8, 1.2, 4.4))),
+        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.15, 0.2))),
+        Transform::from_translation(CAR_SPAWN),
+        car_spec,
+        JoltVehicleDrive {
+            forward: 0.0,
+            steer: 0.0,
+            brake: 0.0,
+            hand_brake: 0.0,
+        },
+    ));
 }
 
 /// Render mesh matching the heightfield samples: grid quads with computed
@@ -190,26 +138,6 @@ fn terrain_mesh(field_heights: &[f32]) -> Mesh {
 #[derive(Component)]
 struct Car;
 
-/// One wheel's chassis-space mount, copied out of the `VehicleSpec` before
-/// spawn so the visuals match the simulated wheels.
-struct WheelMount {
-    mount_position: Vec3,
-    wheel_radius: f32,
-    max_steer_angle: f32,
-}
-
-/// One render-only wheel: yaw with steering, roll with throttle.
-struct WheelVisual {
-    wheel_entity: Entity,
-    max_steer_angle: f32,
-    spin_angle: f32,
-}
-
-#[derive(Resource)]
-struct WheelVisuals {
-    wheel_visuals: Vec<WheelVisual>,
-}
-
 /// WASD driving: W gas, S brake/reverse, A/D steer. Car sits still
 /// with no keys held.
 fn drive_car(keyboard: Res<ButtonInput<KeyCode>>, mut drive_query: Query<&mut JoltVehicleDrive>) {
@@ -228,36 +156,6 @@ fn drive_car(keyboard: Res<ButtonInput<KeyCode>>, mut drive_query: Query<&mut Jo
         } else {
             0.0
         };
-    }
-}
-
-/// Yaws the wheel visuals with steering and rolls them with throttle. Reads
-/// the same drive input the physics step consumes, so the visuals never
-/// disagree with the sim.
-fn spin_wheel_visuals(
-    time: Res<Time>,
-    drive_query: Query<&JoltVehicleDrive, With<Car>>,
-    mut wheel_visuals: ResMut<WheelVisuals>,
-    mut transform_query: Query<&mut Transform>,
-) {
-    let Ok(drive) = drive_query.single() else {
-        // Car despawned mid-teardown: nothing to pose.
-        return;
-    };
-    for wheel_visual in &mut wheel_visuals.wheel_visuals {
-        wheel_visual.spin_angle += drive.forward * WHEEL_SPIN_RATE * time.delta_secs();
-        let Ok(mut wheel_transform) = transform_query.get_mut(wheel_visual.wheel_entity) else {
-            // Wheel despawned mid-teardown: skip it.
-            continue;
-        };
-        let wheel_translation = wheel_transform.translation;
-        let wheel_scale = wheel_transform.scale;
-        *wheel_transform = Transform::from_translation(wheel_translation)
-            .with_scale(wheel_scale)
-            .with_rotation(
-                Quat::from_rotation_y(drive.steer * wheel_visual.max_steer_angle)
-                    * Quat::from_rotation_x(wheel_visual.spin_angle),
-            );
     }
 }
 
