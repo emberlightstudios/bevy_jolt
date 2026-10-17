@@ -160,6 +160,11 @@ impl CharacterDofs {
     pub const ALL: Self = Self(0b111111);
     /// Upright capsule: moves freely, never tips.
     pub const TRANSLATION_ONLY: Self = Self(0b000111);
+    /// Upright capsule that can yaw: moves freely and turns around world Y,
+    /// pitch/roll locked so it never tips. For player-style bodies that face
+    /// their steering. Bit layout mirrors Jolt's `EAllowedDOFs`
+    /// (`TranslationX|Y|Z | RotationY`).
+    pub const TRANSLATION_YAW: Self = Self(0b010111);
 
     fn ffi_dofs(self) -> u8 {
         self.0
