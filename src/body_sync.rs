@@ -443,13 +443,15 @@ pub fn spawn_jolt_body(
             )
         }
     };
-    // A 0 id means Jolt refused the body: a shape that failed to cook, or the
-    // body budget is full. Every other bake asserts the same way, and without
-    // it the entity would look baked while owning no body — with a shape filed
-    // under id 0 and a despawn that reaches the destroy path with that id.
+    // A 0 id means Jolt refused the body: the body budget is full, or a shape
+    // failed to cook. Loud on purpose rather than a silent body-less entity: a
+    // baked entity that owns no body breaks what every reader and the destroy
+    // path assume, so it would panic later at despawn with no cause attached.
+    // Budget pressure is a tuning problem (`JoltWorldBudgets::max_bodies`), and
+    // the shim logs the live/max counts just before this fires.
     assert_ne!(
         body_id_raw, 0,
-        "Jolt rejected the body on {trigger_entity:?}: shape cook failed or the body budget is full"
+        "Jolt rejected the body on {trigger_entity:?}: the body budget is full (raise JoltWorldBudgets::max_bodies) or the shape failed to cook"
     );
     // One allocation for component + debug table: the entity keeps its
     // descriptor, the table shares it.

@@ -61,6 +61,11 @@ not a way to remove a body — the ragdoll owns its part bodies.
 An id that names no live body — stale, or a double destroy — is refused with a
 panic rather than handed to Jolt, which would free whatever body now owns that
 slot.
+A body the world refuses is a panic too, not a body-less entity: the body budget
+(`JoltWorldBudgets::max_bodies`) being full or a shape failing to cook is a
+tuning or spec error, and a baked entity owning no body breaks what every reader
+and the destroy path assume — deferring it to a despawn-time panic loses the
+cause. The shim logs the live/max counts first.
 
 ## Shapes
 
