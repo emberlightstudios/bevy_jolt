@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 use bevy_jolt::{
     JoltBody, JoltBodyId, JoltPhysicsWorld, JoltPlugin, JoltRigidCharacter, JoltRigidCharacterId,
-    JoltSensor, JoltShape,
+    JoltSensor, JoltShape, JoltWorldBudgets,
 };
 
 fn tick(app: &mut App) {
@@ -27,6 +27,33 @@ fn moving_tick(app: &mut App) {
         .resource_mut::<Time<Fixed>>()
         .advance_by(timestep);
     tick(app);
+}
+
+/// A body the Jolt world refuses (budget full, or a shape that failed to cook)
+/// must fail loudly at bake. Without the assert the entity would look baked
+/// while owning id 0, with a shape filed under that id and a despawn that
+/// reaches the destroy path with it.
+#[test]
+#[should_panic(expected = "Jolt rejected the body")]
+fn body_bake_fails_loudly_when_the_budget_is_full() {
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        JoltPlugin::new().with_world_budgets(JoltWorldBudgets {
+            max_bodies: 1,
+            max_body_pairs: 1,
+            max_contact_constraints: 1,
+            ..Default::default()
+        }),
+    ));
+    for _ in 0..2 {
+        app.world_mut().spawn((
+            Transform::from_xyz(0.0, 2.0, 0.0),
+            JoltBody::dynamic(0),
+            JoltShape::sphere(0.5),
+        ));
+        tick(&mut app);
+    }
 }
 
 /// A stale id must never reach Jolt's destroy path: `DestroyBodies` indexes

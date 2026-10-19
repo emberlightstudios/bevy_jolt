@@ -55,6 +55,9 @@ referring to it, and a re-add baked a second one — an insert fires no removal,
 so the id was overwritten and the first body leaked. Joints on a destroyed body
 cascade first (constraint removals are synchronous, the solver never sees a dead
 endpoint).
+A ragdoll is removed by despawning its entity or removing `JoltRagdoll`: one path,
+which frees its bodies and despawns its part entities at once. A part entity is
+not a way to remove a body — the ragdoll owns its part bodies.
 An id that names no live body — stale, or a double destroy — is refused with a
 panic rather than handed to Jolt, which would free whatever body now owns that
 slot.
@@ -269,9 +272,10 @@ places:
 `body_sync::body_entity_index` now builds the map once per system invocation
 and every lookup is O(1). It is deliberately *not* cached on `JoltWorld`: bodies
 are created in four places (body bake, ragdoll parts, vehicle chassis, soft
-body) and `remove_jolt_ragdoll` leaves part entities holding ids that are
-already dead, so a persistent index would need lifecycle rules more subtle than
-the lookup it replaces. A per-invocation map costs one pass and cannot go stale.
+body) and freed through several paths — component removal, a ragdoll teardown
+that frees a whole part list at once, vehicle and soft-body teardown — so a
+persistent index would need lifecycle rules more subtle than the lookup it
+replaces. A per-invocation map costs one pass and cannot go stale.
 
 If you add a fifth place that needs this lookup, use the helper rather than
 re-scanning. Regression coverage: `tests/body_event_index.rs`.

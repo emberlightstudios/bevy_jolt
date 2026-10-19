@@ -443,6 +443,14 @@ pub fn spawn_jolt_body(
             )
         }
     };
+    // A 0 id means Jolt refused the body: a shape that failed to cook, or the
+    // body budget is full. Every other bake asserts the same way, and without
+    // it the entity would look baked while owning no body — with a shape filed
+    // under id 0 and a despawn that reaches the destroy path with that id.
+    assert_ne!(
+        body_id_raw, 0,
+        "Jolt rejected the body on {trigger_entity:?}: shape cook failed or the body budget is full"
+    );
     // One allocation for component + debug table: the entity keeps its
     // descriptor, the table shares it.
     physics_world.file_shape(body_id_raw, std::sync::Arc::clone(&shape.0));
@@ -580,25 +588,25 @@ pub fn interpolate_body_transforms(
 /// Destroys the Jolt body when its [`JoltBodyId`] leaves the entity: on
 /// despawn, or when game code removes just the id.
 ///
-/// Ragdoll part bodies are skipped — the ragdoll owns them and
-/// `remove_jolt_ragdoll` destroys the whole set at once. The world's ownership
-/// ledger decides this, not the entity's
-/// [`RagdollPartBody`](crate::ragdoll::RagdollPartBody) marker: a `Children`
-/// despawn is deferred, so a part entity outlives the teardown that freed its
-/// body, and losing the marker must not turn that into a double destroy. The
-/// entry is consumed here, so it cannot go stale and block a recycled id.
+/// Ragdoll part bodies are skipped: the ragdoll owns them and
+/// [`remove_jolt_ragdoll`](crate::ragdoll::remove_jolt_ragdoll) frees the whole
+/// set at once, parts included. The signal is the entity's
+/// [`RagdollPartBody`](crate::ragdoll::RagdollPartBody) marker — crate-owned
+/// bookkeeping that nothing in the crate removes, and correct for every removal
+/// path because `Remove` fires for all components before any is removed.
 pub fn remove_jolt_body(
     trigger: On<Remove, JoltBodyId>,
     body_query: Query<&JoltBodyId>,
+    part_bodies: Query<(), With<crate::ragdoll::RagdollPartBody>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     let trigger_entity = trigger.event().entity;
+    if part_bodies.contains(trigger_entity) {
+        return;
+    }
     let Ok(body_id) = body_query.get(trigger_entity) else {
         panic!("JoltBodyId gone on {trigger_entity:?} before despawn ran");
     };
-    if physics_world.take_ragdoll_owned_part_body(body_id.body_id_raw) {
-        return;
-    }
     physics_world.remove_and_destroy_body(body_id.body_id_raw);
 }
 

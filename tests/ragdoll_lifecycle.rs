@@ -1,13 +1,12 @@
-// Ragdoll lifecycle: a ragdoll owns its part bodies, so nothing else may
-// destroy one. That ownership is a ledger in the world, not a marker on the
-// entity: removing `RagdollPartBody` must not turn a teardown into a per-entity
-// destroy followed by the bulk destroy (which crashes). Run single-threaded
-// (`--test-threads=1`): parallel `JoltWorld`s crash on the shared job plumbing
-// (see joint_lifecycle.rs).
+// Ragdoll lifecycle: a ragdoll owns its part bodies, so nothing else may free
+// one. There are two supported ways to remove a ragdoll — despawn its entity, or
+// remove `JoltRagdoll` — and each cleans up bodies, constraints and part
+// entities at once. Run single-threaded (`--test-threads=1`): parallel
+// `JoltWorld`s crash on the shared job plumbing (see joint_lifecycle.rs).
 use bevy::prelude::*;
 use bevy_jolt::{
     JoltBody, JoltMotion, JoltPhysicsWorld, JoltPlugin, JoltRagdoll, JoltRagdollParts, JoltShape,
-    JoltStep, RagdollJoint, RagdollPart, RagdollPartBody, RagdollShape,
+    JoltStep, RagdollJoint, RagdollPart, RagdollShape,
 };
 
 /// One tick with a real fixed timestep, so the parts actually simulate.
@@ -87,8 +86,10 @@ fn part_entities(app: &App, ragdoll_entity: Entity) -> Vec<Entity> {
         .clone()
 }
 
+/// Despawning the ragdoll entity frees its bodies and takes the part entities
+/// with it.
 #[test]
-fn ragdoll_despawn_releases_its_bodies() {
+fn ragdoll_despawn_releases_bodies_and_parts() {
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, JoltPlugin::new()));
     let baseline_bodies = live_bodies(&mut app);
@@ -96,7 +97,8 @@ fn ragdoll_despawn_releases_its_bodies() {
     for _ in 0..10 {
         moving_tick(&mut app);
     }
-    assert_eq!(part_entities(&app, ragdoll_entity).len(), 2, "spec has two parts");
+    let parts = part_entities(&app, ragdoll_entity);
+    assert_eq!(parts.len(), 2, "spec has two parts");
     assert_eq!(
         live_bodies(&mut app),
         baseline_bodies + 2,
@@ -112,14 +114,20 @@ fn ragdoll_despawn_releases_its_bodies() {
         baseline_bodies,
         "the ragdoll's bodies outlived it"
     );
+    for part_entity in parts {
+        assert!(
+            app.world().get_entity(part_entity).is_err(),
+            "the parts should be despawned with the ragdoll"
+        );
+    }
 }
 
-/// Despawning a part on its own must not destroy its body: the ragdoll owns it,
-/// and the teardown destroys the whole set (a second destroy crashes). This is
-/// the case the old marker guard could not survive — it read the entity, so a
-/// part whose marker was gone looked like an ordinary body.
+/// Removing the spec component on a live entity is the other supported trigger,
+/// and it has to leave nothing behind either: the parts are children of the
+/// entity, so nothing else would despawn them, and an entity holding an id whose
+/// body is gone is polled by the transform syncs every tick.
 #[test]
-fn part_without_its_marker_is_still_owned_by_the_ragdoll() {
+fn removing_the_spec_releases_bodies_and_parts() {
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, JoltPlugin::new()));
     let baseline_bodies = live_bodies(&mut app);
@@ -127,37 +135,35 @@ fn part_without_its_marker_is_still_owned_by_the_ragdoll() {
     for _ in 0..10 {
         moving_tick(&mut app);
     }
-    let first_part = part_entities(&app, ragdoll_entity)[0];
+    let parts = part_entities(&app, ragdoll_entity);
 
     app.world_mut()
-        .entity_mut(first_part)
-        .remove::<RagdollPartBody>();
-    app.world_mut().entity_mut(first_part).despawn();
-    for _ in 0..10 {
-        moving_tick(&mut app);
-    }
-    assert_eq!(
-        live_bodies(&mut app),
-        baseline_bodies + 2,
-        "the part's body should still be alive: the ragdoll owns it, not the entity"
-    );
-
-    app.world_mut().entity_mut(ragdoll_entity).despawn();
+        .entity_mut(ragdoll_entity)
+        .remove::<JoltRagdoll>();
     for _ in 0..10 {
         moving_tick(&mut app);
     }
     assert_eq!(
         live_bodies(&mut app),
         baseline_bodies,
-        "the teardown should free every part body, marker or not"
+        "removing JoltRagdoll leaked its part bodies"
+    );
+    for part_entity in parts {
+        assert!(
+            app.world().get_entity(part_entity).is_err(),
+            "the parts should be despawned by the teardown"
+        );
+    }
+    assert!(
+        app.world().get_entity(ragdoll_entity).is_ok(),
+        "only the spec component was removed, not the entity"
     );
 }
 
-/// Ids get recycled, so ownership has to die with the ragdoll. A stale entry
-/// would make the destroy path skip whatever body lands on that id — a silent
-/// leak, and a body the game can no longer remove.
+/// Body ids get recycled. A fresh body that lands on an id a ragdoll used to own
+/// must still be destroyable — nothing may remember that id as ragdoll-owned.
 #[test]
-fn ownership_does_not_outlive_the_ragdoll() {
+fn recycled_body_ids_are_still_destroyable() {
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, JoltPlugin::new()));
     let baseline_bodies = live_bodies(&mut app);
@@ -175,7 +181,6 @@ fn ownership_does_not_outlive_the_ragdoll() {
         "teardown should free both part bodies"
     );
 
-    // Fresh bodies most likely reuse the ids just freed.
     let body_entity = app
         .world_mut()
         .spawn((
@@ -200,6 +205,6 @@ fn ownership_does_not_outlive_the_ragdoll() {
     assert_eq!(
         live_bodies(&mut app),
         baseline_bodies,
-        "a body was left behind: a stale ownership entry made the destroy path skip it"
+        "a body was left behind: something still treated its id as ragdoll-owned"
     );
 }

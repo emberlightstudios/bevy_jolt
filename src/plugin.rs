@@ -215,7 +215,6 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::soft_body::retire_jolt_soft_body);
         app.add_observer(crate::vehicle::retire_jolt_vehicle);
         app.add_observer(crate::ragdoll::retire_jolt_ragdoll);
-        app.add_observer(crate::ragdoll::retire_jolt_ragdoll_parts);
         // Pre-step bakes: joints/vehicles resolve before any
         // drive writes. Everything in FixedUpdate precedes the JoltStep
         // schedule by construction, so no .before() needed.
