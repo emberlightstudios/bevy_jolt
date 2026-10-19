@@ -208,6 +208,28 @@ pub struct JoltBodyId {
     pub body_id_raw: u32,
 }
 
+/// Builds a `body_id -> entity` lookup for one system invocation.
+///
+/// Use this instead of scanning a `Query<(Entity, &JoltBodyId)>` inside a
+/// per-event loop. Systems that drain a queue of Jolt ids — contact pairs,
+/// sleep transitions — would otherwise rescan every body once per event, which
+/// is O(events x bodies) on the post-step path of every fixed tick.
+///
+/// Deliberately built per invocation rather than cached on
+/// [`JoltPhysicsWorld`](crate::plugin::JoltPhysicsWorld): bodies are created in
+/// four places and ragdoll teardown leaves part entities holding ids that are
+/// already dead, so a persistent index would need lifecycle rules more subtle
+/// than the lookup it replaces. A local map costs one pass over the bodies and
+/// cannot go stale.
+pub(crate) fn body_entity_index(
+    body_entities: &Query<(Entity, &JoltBodyId)>,
+) -> std::collections::HashMap<u32, Entity> {
+    body_entities
+        .iter()
+        .map(|(body_entity, body_id)| (body_id.body_id_raw, body_entity))
+        .collect()
+}
+
 /// Physics transform from the previous Fixed tick. Written by the tick sync,
 /// read by the render interpolation. Lets meshes glide between ticks instead
 /// of snapping at tick rate.

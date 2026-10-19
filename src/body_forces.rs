@@ -387,31 +387,31 @@ pub fn sync_sleep_states(
     let mut woke_ids = [0u32; crate::physics_world::JoltWorld::MAX_ACTIVATION_EVENTS];
     let slept_kept = physics_world.drain_slept(&mut slept_ids);
     let woke_kept = physics_world.drain_woke(&mut woke_ids);
-    let find_body_entity = |body_id_raw: u32| {
-        body_entities
-            .iter()
-            .find(|(_, body_id)| body_id.body_id_raw == body_id_raw)
-            .map(|(body_entity, _)| body_entity)
-    };
+    // One pass over the bodies, then O(1) per event. Scanning the query per
+    // id cost O(events x bodies) every fixed tick.
+    let entity_of_body = crate::body_sync::body_entity_index(&body_entities);
     for slept_index in 0..slept_kept as usize {
-        let Some(sleeping_entity) = find_body_entity(slept_ids[slept_index]) else {
+        // A body despawned mid-step is legitimately absent from the map.
+        let Some(sleeping_entity) = entity_of_body.get(&slept_ids[slept_index]) else {
             continue;
         };
-        let Ok(mut sleeping) = sleep_query.get_mut(sleeping_entity) else {
+        let Ok(mut sleeping) = sleep_query.get_mut(*sleeping_entity) else {
             continue;
         };
         sleeping.sleeping = true;
     }
     for woke_index in 0..woke_kept as usize {
-        let Some(waking_entity) = find_body_entity(woke_ids[woke_index]) else {
+        // Same transient case as the sleep loop above.
+        let Some(waking_entity) = entity_of_body.get(&woke_ids[woke_index]) else {
             continue;
         };
-        let Ok(mut sleeping) = sleep_query.get_mut(waking_entity) else {
+        let Ok(mut sleeping) = sleep_query.get_mut(*waking_entity) else {
             continue;
         };
         sleeping.sleeping = false;
     }
 }
+
 /// physics step. Bodies missing their id (not baked yet) are skipped for
 /// the tick, not despawned: unlike joints, a force has no endpoint to go
 /// stale on. One pass with `Option` reads: no extra loop cost for the

@@ -42,19 +42,19 @@ fn draw_physics_shapes(
     body_entities: Query<(Entity, &crate::body_sync::JoltBodyId)>,
     mut gizmos: Gizmos,
 ) {
+    // One pass over the bodies, then O(1) per body drawn. The old code
+    // rescanned the whole query once per body in `body_shapes()`, which is
+    // O(bodies^2) in a system that runs every frame.
+    let entity_of_body = crate::body_sync::body_entity_index(&body_entities);
     for (body_id_raw, body_shape) in physics_world.body_shapes().iter() {
         let (body_position, body_rotation) = physics_world.body_full_transform(*body_id_raw);
         // Sleep color from the state the activation drain maintains: no
-        // per-body FFI poll for a debug tint.
-        let body_active = body_entities
-            .iter()
-            .find(|(_, body_id)| body_id.body_id_raw == *body_id_raw)
-            .map(|(body_entity, _)| {
-                body_sleeping
-                    .get(body_entity)
-                    .map(|body_sleeping| !**body_sleeping)
-                    .unwrap_or(true)
-            })
+        // per-body FFI poll for a debug tint. A body with no entity here was
+        // despawned but not yet torn down, so it reads as active.
+        let body_active = entity_of_body
+            .get(body_id_raw)
+            .and_then(|body_entity| body_sleeping.get(*body_entity).ok())
+            .map(|body_sleeping| !**body_sleeping)
             .unwrap_or(true);
         match body_shape.as_ref() {
             PhysicsShape::Box { half_extents } => {
@@ -273,15 +273,12 @@ fn draw_physics_shapes(
     // table either. Draw them from the live sim poses, tinted by the
     // chassis body's active state (the same lookup the chassis uses).
     for (_constraint_id, chassis_body_id_raw, wheel_poses) in physics_world.vehicle_wheel_debug() {
-        let body_active = body_entities
-            .iter()
-            .find(|(_, body_id)| body_id.body_id_raw == chassis_body_id_raw)
-            .map(|(body_entity, _)| {
-                body_sleeping
-                    .get(body_entity)
-                    .map(|body_sleeping| !**body_sleeping)
-                    .unwrap_or(true)
-            })
+        // Reuses the index built above, so this is a lookup rather than a
+        // rescan of every body per vehicle.
+        let body_active = entity_of_body
+            .get(&chassis_body_id_raw)
+            .and_then(|body_entity| body_sleeping.get(*body_entity).ok())
+            .map(|body_sleeping| !**body_sleeping)
             .unwrap_or(true);
         let debug_color = body_debug_color(body_active);
         for wheel_pose in &wheel_poses {

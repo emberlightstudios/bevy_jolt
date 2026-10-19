@@ -78,7 +78,7 @@ pub fn apply_pending_sensors(
 }
 
 /// Drains Jolt's contact queues after the physics step and fires Bevy
-/// events. Entity lookup is a hash scan per pair — fine at this cap.
+/// events.
 pub fn drain_contact_events(
     mut commands: Commands,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -86,42 +86,36 @@ pub fn drain_contact_events(
 ) {
     let mut pair_a = [0u32; MAX_CONTACT_EVENTS];
     let mut pair_b = [0u32; MAX_CONTACT_EVENTS];
+    // One pass over the bodies, then O(1) per pair. Each pair needs two ids,
+    // so the old per-id scan of the whole query cost up to 2 * 2 *
+    // MAX_CONTACT_EVENTS full scans of every body each fixed tick.
+    let entity_of_body = crate::body_sync::body_entity_index(&body_entities);
     let added_kept = physics_world.drain_contact_added(&mut pair_a, &mut pair_b);
     for pair_index in 0..added_kept as usize {
-        let Some((first_entity, _)) = body_entities
-            .iter()
-            .find(|(_, body_id)| body_id.body_id_raw == pair_a[pair_index])
-        else {
-            continue;
-        };
-        let Some((second_entity, _)) = body_entities
-            .iter()
-            .find(|(_, body_id)| body_id.body_id_raw == pair_b[pair_index])
-        else {
+        // A body despawned between the step and this drain is legitimately
+        // absent; skip the pair rather than reporting half of it.
+        let (Some(first_entity), Some(second_entity)) = (
+            entity_of_body.get(&pair_a[pair_index]),
+            entity_of_body.get(&pair_b[pair_index]),
+        ) else {
             continue;
         };
         commands.trigger(JoltContactAdded {
-            first_entity,
-            second_entity,
+            first_entity: *first_entity,
+            second_entity: *second_entity,
         });
     }
     let removed_kept = physics_world.drain_contact_removed(&mut pair_a, &mut pair_b);
     for pair_index in 0..removed_kept as usize {
-        let Some((first_entity, _)) = body_entities
-            .iter()
-            .find(|(_, body_id)| body_id.body_id_raw == pair_a[pair_index])
-        else {
-            continue;
-        };
-        let Some((second_entity, _)) = body_entities
-            .iter()
-            .find(|(_, body_id)| body_id.body_id_raw == pair_b[pair_index])
-        else {
+        let (Some(first_entity), Some(second_entity)) = (
+            entity_of_body.get(&pair_a[pair_index]),
+            entity_of_body.get(&pair_b[pair_index]),
+        ) else {
             continue;
         };
         commands.trigger(JoltContactRemoved {
-            first_entity,
-            second_entity,
+            first_entity: *first_entity,
+            second_entity: *second_entity,
         });
     }
 }
