@@ -391,6 +391,10 @@ impl JoltSoftBodyConfig {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct JoltSoftBodyId {
     pub body_id_raw: u32,
+    /// Shared-settings handle this body was baked from, freed with the body.
+    /// The shim holds those settings in a process-global registry, so a handle
+    /// nobody frees leaks for the rest of the process.
+    pub shared_handle: u64,
 }
 
 /// Opt-in auto mesh: the sync builds a Bevy mesh from the shared settings'
@@ -450,7 +454,10 @@ pub fn bake_jolt_soft_body(
     assert_ne!(body_id_raw, 0, "Jolt rejected the soft body");
     commands
         .entity(soft_entity)
-        .insert(JoltSoftBodyId { body_id_raw });
+        .insert(JoltSoftBodyId {
+            body_id_raw,
+            shared_handle,
+        });
     let Some(mesh_request) = mesh_request else {
         return;
     };
@@ -535,9 +542,11 @@ pub fn sync_soft_body_meshes(
     }
 }
 
-/// Destroys the Jolt soft body when its entity goes. Order-independent:
-/// the soft registry never touches rigid bodies.
-pub fn despawn_jolt_soft_body(
+/// Destroys the Jolt soft body when its [`JoltSoftBodyId`] leaves the entity:
+/// on despawn, or when game code removes just the id. Frees the shared settings
+/// with it — that handle lives in a process-global registry, so nothing else
+/// can. Order-independent: the soft registry never touches rigid bodies.
+pub fn remove_jolt_soft_body(
     trigger: On<Remove, JoltSoftBodyId>,
     soft_query: Query<&JoltSoftBodyId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -547,4 +556,20 @@ pub fn despawn_jolt_soft_body(
         panic!("JoltSoftBodyId gone on {trigger_entity:?} before despawn ran");
     };
     physics_world.soft_destroy(soft_id.body_id_raw);
+    physics_world.destroy_soft_shared(soft_id.shared_handle);
+}
+
+/// Destroys the soft body when [`JoltSoftSharedSettings`] leaves a live entity.
+/// The settings own the body *and* the process-global shared-settings handle:
+/// without this observer, removing them left both alive with nothing referring
+/// to them. Cascade, so [`remove_jolt_soft_body`] stays the single destroy site.
+/// An entity whose settings left before the bake ran has no id (the bake also
+/// needs [`JoltSoftBodyConfig`]), so `try_remove` no-ops there.
+pub fn retire_jolt_soft_body(
+    trigger: On<Remove, JoltSoftSharedSettings>,
+    mut commands: Commands,
+) {
+    commands
+        .entity(trigger.event().entity)
+        .try_remove::<JoltSoftBodyId>();
 }

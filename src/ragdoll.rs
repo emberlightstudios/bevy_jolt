@@ -119,10 +119,11 @@ pub struct JoltRagdollParts {
     pub body_ids: Vec<u32>,
 }
 
-/// Marker on ragdoll part entities: their `JoltBodyId` is owned by the
-/// ragdoll teardown, so `despawn_jolt_body` must skip them (double destroy
-/// crashes). The whole ragdoll — bodies and constraints — dies with the
-/// `JoltRagdollHandle`.
+/// Marker on ragdoll part entities: identification only. Their `JoltBodyId` is
+/// owned by the ragdoll teardown, and the destroy observer decides from the
+/// world's ownership ledger (`JoltWorld::body_is_ragdoll_owned`), not from this
+/// marker — removing it cannot turn a teardown into a double destroy. The whole
+/// ragdoll — bodies and constraints — dies with the `JoltRagdollHandle`.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct RagdollPartBody;
 
@@ -282,6 +283,9 @@ pub fn bake_jolt_ragdoll(
     let mut body_ids = vec![0u32; body_count];
     let written = world.ragdoll_body_ids(ragdoll_id, &mut body_ids);
     assert_eq!(written as usize, body_count, "ragdoll body ids short");
+    // The ragdoll owns these bodies from here on: `remove_jolt_body` must not
+    // destroy one per entity, the teardown destroys the whole set at once.
+    world.register_ragdoll_part_bodies(&body_ids);
     let mut part_entities = Vec::with_capacity(body_count);
     for (part_index, body_id_raw) in body_ids.iter().enumerate() {
         let part_pose = Transform {
@@ -332,20 +336,73 @@ pub fn bake_jolt_ragdoll(
         JoltRagdollHandle { ragdoll_id },
     ));
 }
-/// Tears the whole ragdoll (bodies + constraints) out of Jolt when the
-/// handle leaves. Part entities keep their `JoltBodyId`s but the ids are
-/// dead — the ragdoll entity's despawn takes the parts with it.
-pub fn despawn_jolt_ragdoll(
+/// Tears the whole ragdoll (bodies + constraints) out of Jolt when the handle
+/// leaves the entity: on despawn, or when game code removes just the handle.
+/// Part entities keep their `JoltBodyId`s but the ids are dead — a ragdoll
+/// entity's despawn takes the parts with it, and [`retire_jolt_ragdoll`] /
+/// [`retire_jolt_ragdoll_parts`] despawn them when the spec leaves on its own.
+///
+/// The part list is optional: game code can remove it first, and the ragdoll
+/// still dies inside Jolt (the object owns its bodies) — only the per-id
+/// bookkeeping, the shape table and the sensor flags, is skipped then.
+pub fn remove_jolt_ragdoll(
     trigger: On<Remove, JoltRagdollHandle>,
-    handle_query: Query<(&JoltRagdollHandle, &JoltRagdollParts)>,
+    handle_query: Query<(&JoltRagdollHandle, Option<&JoltRagdollParts>)>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     let trigger_entity = trigger.event().entity;
     let Ok((handle, baked)) = handle_query.get(trigger_entity) else {
         panic!("JoltRagdollHandle gone on {trigger_entity:?} before despawn ran");
     };
-    for body_id_raw in &baked.body_ids {
+    let part_body_ids: &[u32] = baked.map_or(&[], |baked| baked.body_ids.as_slice());
+    for body_id_raw in part_body_ids {
         physics_world.unfile_shape(*body_id_raw);
     }
-    physics_world.ragdoll_destroy(handle.ragdoll_id, &baked.body_ids);
+    physics_world.ragdoll_destroy(handle.ragdoll_id, part_body_ids);
+}
+
+/// Tears the ragdoll out when [`JoltRagdoll`] leaves a live entity. The spec
+/// owns the handle: without this observer, removing it left the whole ragdoll —
+/// bodies, constraints, part entities — running with nothing referring to it.
+///
+/// The parts go with it. They carry ids that die with the ragdoll, and leaving
+/// them alive would keep dead ids on a polled archetype (`&JoltBodyId` reaches
+/// every part entity). `try_despawn` because a despawn of the spec entity has
+/// already taken them.
+pub fn retire_jolt_ragdoll(
+    trigger: On<Remove, JoltRagdoll>,
+    baked: Query<&JoltRagdollParts>,
+    mut commands: Commands,
+) {
+    let ragdoll_entity = trigger.event().entity;
+    if let Ok(parts) = baked.get(ragdoll_entity) {
+        for part_entity in &parts.part_entities {
+            commands.entity(*part_entity).try_despawn();
+        }
+    }
+    commands
+        .entity(ragdoll_entity)
+        .try_remove::<JoltRagdollHandle>();
+}
+
+/// Teardown for the part list leaving a live entity first: the handle can no
+/// longer unfile or flag those ids, so the parts are despawned (ids dead with
+/// the ragdoll) and the handle follows, which destroys the ragdoll in Jolt.
+/// Without this the ragdoll kept running with nothing able to reach it, and a
+/// later handle removal had no ids to clean up.
+pub fn retire_jolt_ragdoll_parts(
+    trigger: On<Remove, JoltRagdollParts>,
+    baked: Query<&JoltRagdollParts>,
+    mut commands: Commands,
+) {
+    let ragdoll_entity = trigger.event().entity;
+    // `Remove` fires before the component goes, so the list still reads.
+    if let Ok(parts) = baked.get(ragdoll_entity) {
+        for part_entity in &parts.part_entities {
+            commands.entity(*part_entity).try_despawn();
+        }
+    }
+    commands
+        .entity(ragdoll_entity)
+        .try_remove::<JoltRagdollHandle>();
 }

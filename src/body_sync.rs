@@ -223,7 +223,7 @@ pub struct JoltBodyId {
 /// cannot go stale.
 pub(crate) fn body_entity_index(
     body_entities: &Query<(Entity, &JoltBodyId)>,
-) -> std::collections::HashMap<u32, Entity> {
+) -> bevy::platform::collections::HashMap<u32, Entity> {
     body_entities
         .iter()
         .map(|(body_entity, body_id)| (body_id.body_id_raw, body_entity))
@@ -577,21 +577,44 @@ pub fn interpolate_body_transforms(
     }
 }
 
-/// Destroys the Jolt body when its entity is despawned. Skips ragdoll parts:
-/// their ids die with the whole ragdoll in `despawn_jolt_ragdoll`
-/// (double destroy crashes).
-pub fn despawn_jolt_body(
+/// Destroys the Jolt body when its [`JoltBodyId`] leaves the entity: on
+/// despawn, or when game code removes just the id.
+///
+/// Ragdoll part bodies are skipped — the ragdoll owns them and
+/// `remove_jolt_ragdoll` destroys the whole set at once. The world's ownership
+/// ledger decides this, not the entity's
+/// [`RagdollPartBody`](crate::ragdoll::RagdollPartBody) marker: a `Children`
+/// despawn is deferred, so a part entity outlives the teardown that freed its
+/// body, and losing the marker must not turn that into a double destroy. The
+/// entry is consumed here, so it cannot go stale and block a recycled id.
+pub fn remove_jolt_body(
     trigger: On<Remove, JoltBodyId>,
     body_query: Query<&JoltBodyId>,
-    part_bodies: Query<(), With<crate::ragdoll::RagdollPartBody>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     let trigger_entity = trigger.event().entity;
-    if part_bodies.contains(trigger_entity) {
+    let Ok(body_id) = body_query.get(trigger_entity) else {
+        panic!("JoltBodyId gone on {trigger_entity:?} before despawn ran");
+    };
+    if physics_world.take_ragdoll_owned_part_body(body_id.body_id_raw) {
         return;
     }
-    let Ok(body_id) = body_query.get(trigger_entity) else {
-        panic!("JoltBodyId gone on {:?} before despawn ran", trigger_entity);
-    };
     physics_world.remove_and_destroy_body(body_id.body_id_raw);
+}
+
+/// Frees the Jolt body when [`JoltBody`] leaves a live entity, not only when
+/// the entity despawns. `JoltBody` owns the body: without this observer,
+/// `remove::<JoltBody>()` did nothing, and a later re-add baked a second body
+/// and overwrote the id — an insert fires no removal, so the first body stayed
+/// in the world, colliding and consuming budget with nothing able to reach it.
+///
+/// A cascade on purpose: it queues the id removal and leaves
+/// [`remove_jolt_body`] the single destroy site, so a despawn that drops both
+/// components destroys exactly once whichever order Bevy runs the hooks in.
+/// `try_remove` because on that despawn path the entity can already be gone
+/// when the command applies.
+pub fn retire_jolt_body(trigger: On<Remove, JoltBody>, mut commands: Commands) {
+    commands
+        .entity(trigger.event().entity)
+        .try_remove::<JoltBodyId>();
 }

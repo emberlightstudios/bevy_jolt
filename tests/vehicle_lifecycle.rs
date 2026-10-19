@@ -234,3 +234,49 @@ fn driven_vehicle_syncs_chassis_pose_to_entity() {
         anchor.previous_position
     );
 }
+
+/// `VehicleSpec` owns the constraint *and* the chassis body creation built, so
+/// removing the spec frees both — not only despawning the entity. Before this,
+/// removal fired no observer: the vehicle kept driving with nothing referring
+/// to it, and a re-add built a second chassis while overwriting the id.
+#[test]
+fn vehicle_spec_removal_frees_constraint_and_chassis() {
+    use bevy_jolt::{JoltBodyId, JoltPhysicsWorld};
+
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, JoltPlugin::new()));
+    let baseline_bodies = app
+        .world_mut()
+        .resource_mut::<JoltPhysicsWorld>()
+        .body_stats()
+        .0;
+    let car = spawn_car(&mut app);
+    for _ in 0..10 {
+        tick(&mut app);
+    }
+    assert!(
+        app.world().get::<JoltVehicleId>(car).is_some(),
+        "vehicle should bake before the spec leaves"
+    );
+
+    app.world_mut().entity_mut(car).remove::<VehicleSpec>();
+    for _ in 0..10 {
+        tick(&mut app);
+    }
+    assert!(
+        app.world().get::<JoltVehicleId>(car).is_none(),
+        "the constraint id should leave with the spec that owns it"
+    );
+    assert!(
+        app.world().get::<JoltBodyId>(car).is_none(),
+        "the chassis id should leave with the spec that owns it"
+    );
+    assert_eq!(
+        app.world_mut()
+            .resource_mut::<JoltPhysicsWorld>()
+            .body_stats()
+            .0,
+        baseline_bodies,
+        "removing VehicleSpec leaked its chassis body"
+    );
+}

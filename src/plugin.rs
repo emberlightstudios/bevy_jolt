@@ -173,6 +173,7 @@ impl Plugin for JoltPlugin {
             world_budgets: self.world_budgets,
         });
         app.init_resource::<JoltPhysicsWorld>();
+        app.init_resource::<crate::joint_sync::JointBodyIndex>();
         app.insert_resource(Time::<Fixed>::from_hz(self.physics_hz));
         app.insert_resource(JoltStepConfig {
             physics_hz: self.physics_hz,
@@ -190,18 +191,31 @@ impl Plugin for JoltPlugin {
         app.add_observer(crate::character::apply_jolt_rigid_character_push);
         app.add_observer(crate::character::apply_jolt_rigid_character_teleport);
         app.add_observer(crate::contact_events::bake_jolt_sensor);
+        app.add_observer(crate::contact_events::remove_jolt_sensor);
         app.add_observer(crate::body_sync::bake_jolt_disabled);
         app.add_observer(crate::body_sync::remove_jolt_disabled);
-        app.add_observer(crate::joint_sync::despawn_jolt_joint);
+        app.add_observer(crate::joint_sync::remove_jolt_joint);
         // Joint cascade before body destroy: constraint removals here are
         // synchronous, so the solver never sees a constraint on a dead body.
         app.add_observer(crate::joint_sync::cascade_body_remove_to_joints);
-        app.add_observer(crate::body_sync::despawn_jolt_body);
-        app.add_observer(crate::character::despawn_jolt_character);
-        app.add_observer(crate::character::despawn_jolt_rigid_character);
-        app.add_observer(crate::soft_body::despawn_jolt_soft_body);
-        app.add_observer(crate::vehicle::despawn_jolt_vehicle);
-        app.add_observer(crate::ragdoll::despawn_jolt_ragdoll);
+        app.add_observer(crate::body_sync::remove_jolt_body);
+        app.add_observer(crate::character::remove_jolt_character);
+        app.add_observer(crate::character::remove_jolt_rigid_character);
+        app.add_observer(crate::soft_body::remove_jolt_soft_body);
+        app.add_observer(crate::vehicle::remove_jolt_vehicle);
+        app.add_observer(crate::ragdoll::remove_jolt_ragdoll);
+        // Spec removal is the other half of the same rule: the component that
+        // created a Jolt object frees it when it leaves, not only when the
+        // entity despawns. Each retire observer queues the id removal above,
+        // which stays the single destroy site.
+        app.add_observer(crate::body_sync::retire_jolt_body);
+        app.add_observer(crate::character::retire_jolt_character);
+        app.add_observer(crate::character::retire_jolt_rigid_character);
+        app.add_observer(crate::joint_sync::retire_jolt_joint);
+        app.add_observer(crate::soft_body::retire_jolt_soft_body);
+        app.add_observer(crate::vehicle::retire_jolt_vehicle);
+        app.add_observer(crate::ragdoll::retire_jolt_ragdoll);
+        app.add_observer(crate::ragdoll::retire_jolt_ragdoll_parts);
         // Pre-step bakes: joints/vehicles resolve before any
         // drive writes. Everything in FixedUpdate precedes the JoltStep
         // schedule by construction, so no .before() needed.

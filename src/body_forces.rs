@@ -387,6 +387,10 @@ pub fn sync_sleep_states(
     let mut woke_ids = [0u32; crate::physics_world::JoltWorld::MAX_ACTIVATION_EVENTS];
     let slept_kept = physics_world.drain_slept(&mut slept_ids);
     let woke_kept = physics_world.drain_woke(&mut woke_ids);
+    // A settled world changes nothing: skip the body pass and its map.
+    if slept_kept == 0 && woke_kept == 0 {
+        return;
+    }
     // One pass over the bodies, then O(1) per event. Scanning the query per
     // id cost O(events x bodies) every fixed tick.
     let entity_of_body = crate::body_sync::body_entity_index(&body_entities);

@@ -5,7 +5,7 @@ crate owns world lifetime, the safe body API, and the Bevy schedule wiring.
 
 ## Schedules: where your game code goes
 
-Put game logic in `PreFixedUpdate`, `FixedUpdate`, and/or `PostFixedUpdate`.
+Put game logic in `FixedPreUpdate`, `FixedUpdate`, and/or `FixedPostUpdate`.
 The crate guarantees this ordering every tick:
 
 1. Your `FixedUpdate` systems are guaranteed to finish before the simulation steps. Nothing physics-side runs
@@ -13,10 +13,10 @@ The crate guarantees this ordering every tick:
 2. `JoltStep` runs next: change-detection pushes first (motion, sleep, driven
    velocities), then the sim steps, then all readbacks (poses, measured
    velocities, contacts, sleep states).
-3. Your `PostFixedUpdate` systems run last. The step and every readback are already
+3. Your `FixedPostUpdate` systems run last. The step and every readback are already
    done, so what you read is this tick's result.
 
-So: write drives in `FixedUpdate`, read results in `PostFixedUpdate` (or
+So: write drives in `FixedUpdate`, read results in `FixedPostUpdate` (or
 later). No manual ordering needed — the schedules already run in that
 sequence, so a write can never be missed by ordering. (Tests drive schedules
 by hand, so they run `FixedUpdate` then `JoltStep` explicitly — see the
@@ -46,8 +46,18 @@ commands.spawn((
 - Post-step, the sync copies pose into `Transform` and writes measured
   velocities (below). Sleeping bodies are skipped — frozen means frozen.
 
-Despawn the entity and the Jolt body is destroyed. Joints on it cascade first
-(constraint removals are synchronous, the solver never sees a dead endpoint).
+Despawn the entity and the Jolt body is destroyed — and so is removing the
+component that created it. Every Jolt object (body, character, joint, soft body,
+vehicle, ragdoll) is freed when its spec component leaves the entity, not only
+when the entity despawns: cleanup hangs off component *removal*. Without that,
+`remove::<JoltBody>()` on a live entity left a body in the world with nothing
+referring to it, and a re-add baked a second one — an insert fires no removal,
+so the id was overwritten and the first body leaked. Joints on a destroyed body
+cascade first (constraint removals are synchronous, the solver never sees a dead
+endpoint).
+An id that names no live body — stale, or a double destroy — is refused with a
+panic rather than handed to Jolt, which would free whatever body now owns that
+slot.
 
 ## Shapes
 
@@ -166,8 +176,8 @@ filters would make misuse silent instead of a compile error.
   motor speed targets, applied by `apply_jolt_motor_drives`. Ping-pong by
   rewriting the value.
 - Vehicles (`JoltVehicleDrive`, tracked/wheeled), ragdolls (`JoltRagdoll`),
-  soft bodies (`JoltSoftBodyConfig`, cloth/balloon/skinned), buoyancy
-  (`JoltWater` resource + `JoltBuoyant` tag; flat surface, per-tick push).
+  soft bodies (`JoltSoftBodyConfig`, cloth/balloon/skinned; their shared
+  settings are freed with the body), buoyancy (`JoltWater` resource + `JoltBuoyant` tag; flat surface, per-tick push).
 - Sensors: `JoltSensor` flags the Jolt body so overlaps report without
   pushing. Add it before bake and it lands then; add it after and a retry
   marker (`PendingSensor`) applies it next tick, before the step, so the
@@ -259,12 +269,16 @@ places:
 `body_sync::body_entity_index` now builds the map once per system invocation
 and every lookup is O(1). It is deliberately *not* cached on `JoltWorld`: bodies
 are created in four places (body bake, ragdoll parts, vehicle chassis, soft
-body) and `despawn_jolt_ragdoll` leaves part entities holding ids that are
+body) and `remove_jolt_ragdoll` leaves part entities holding ids that are
 already dead, so a persistent index would need lifecycle rules more subtle than
 the lookup it replaces. A per-invocation map costs one pass and cannot go stale.
 
 If you add a fifth place that needs this lookup, use the helper rather than
 re-scanning. Regression coverage: `tests/body_event_index.rs`.
+
+Joint teardown uses the same discipline in the other direction: `JointBodyIndex`
+maps a body to the joints linking it, built where the constraint is created, so
+despawning a body unlinks its joints without walking every joint in the world.
 
 ## What this crate is not
 

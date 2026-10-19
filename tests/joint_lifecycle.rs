@@ -40,6 +40,17 @@ fn tick(app: &mut App) {
     app.world_mut().run_schedule(FixedUpdate);
     app.world_mut().run_schedule(bevy_jolt::JoltStep);
 }
+
+/// One tick with a real fixed timestep: running the schedules by hand leaves the
+/// step delta at ~0, so a test that needs bodies to move advances the clock
+/// first. Same helper as `sleep_motion.rs`.
+fn moving_tick(app: &mut App) {
+    let timestep = app.world().resource::<Time<Fixed>>().timestep();
+    app.world_mut()
+        .resource_mut::<Time<Fixed>>()
+        .advance_by(timestep);
+    tick(app);
+}
 #[test]
 fn joint_gains_id_once_bodies_bake() {
     let mut app = App::new();
@@ -81,5 +92,48 @@ fn body_despawn_cascades_to_joint() {
         body_ids.iter(app.world()).count(),
         1,
         "only the dead body should be gone"
+    );
+}
+
+/// `JoltJoint` owns the constraint, so removing the spec has to remove the
+/// constraint — not only despawning the entity. The body index is unlinked in
+/// that path too, because the id observer runs after the endpoints are gone.
+#[test]
+fn joint_spec_removal_removes_the_constraint() {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, JoltPlugin::new()));
+    let (_, body_b, joint) = spawn_pair(&mut app);
+    for _ in 0..10 {
+        tick(&mut app);
+    }
+    assert!(
+        app.world().get::<JoltJointId>(joint).is_some(),
+        "joint should own a constraint before the spec leaves"
+    );
+    let welded_height = app
+        .world()
+        .get::<Transform>(body_b)
+        .expect("body_b should exist")
+        .translation
+        .y;
+
+    app.world_mut().entity_mut(joint).remove::<JoltJoint>();
+    for _ in 0..30 {
+        moving_tick(&mut app);
+    }
+    assert!(
+        app.world().get::<JoltJointId>(joint).is_none(),
+        "the id should leave with the spec that owns it"
+    );
+    let unwelded_height = app
+        .world()
+        .get::<Transform>(body_b)
+        .expect("body_b should exist")
+        .translation
+        .y;
+    assert!(
+        unwelded_height < welded_height - 0.5,
+        "the joint still holds the bodies together ({welded_height} m -> {unwelded_height} m): \
+         removing JoltJoint did not remove the constraint"
     );
 }

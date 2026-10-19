@@ -393,6 +393,15 @@ pub struct JoltWorld {
     rigid_character_shapes: std::collections::HashMap<u32, (f32, f32)>,
     next_ragdoll_group: u32,
     sensor_bodies: std::collections::HashSet<u32>,
+    /// Part-body ids owned by a live ragdoll. A ragdoll owns its part bodies:
+    /// the parts carry `JoltBodyId` for world calls, but the entity destroy path
+    /// must not free one — the bulk teardown does, and a second destroy crashes.
+    /// The ledger lives here rather than on the entities so the decision cannot
+    /// depend on which components a despawn has already removed. Entries are
+    /// *consumed* as each part's id leaves: a `Children` despawn is deferred
+    /// (`relationship/mod.rs:329`), so part entities outlive the teardown that
+    /// freed their bodies and must still be recognized when their ids go.
+    ragdoll_part_body_ids: std::collections::HashSet<u32>,
     /// Per-vehicle wheel geometry keyed by constraint id: (chassis body id,
     /// per-wheel (radius, half width)). Wheels are raycasts, not bodies, so
     /// no bake files their size; live poses come from the FFI per query.
@@ -453,6 +462,7 @@ impl JoltWorld {
             rigid_character_shapes: std::collections::HashMap::new(),
             next_ragdoll_group: 1,
             sensor_bodies: std::collections::HashSet::new(),
+            ragdoll_part_body_ids: std::collections::HashSet::new(),
             vehicle_wheel_shapes: std::collections::HashMap::new(),
             time_scale: 1.0,
         }
@@ -2285,8 +2295,16 @@ impl JoltWorld {
         }
     }
 
+    /// Panics when the id names no live body — a stale id whose slot was
+    /// recycled, or a double destroy. Jolt would take that as an instruction to
+    /// free whatever body now owns the slot, so a caller bug has to stop here
+    /// rather than become memory corruption.
     pub fn remove_and_destroy_body(&mut self, body_id_raw: u32) {
-        unsafe { bjolt_body_remove_destroy(self.world_ptr, body_id_raw) }
+        let destroyed = unsafe { bjolt_body_remove_destroy(self.world_ptr, body_id_raw) };
+        assert!(
+            destroyed,
+            "Jolt has no live body {body_id_raw}: stale id or double destroy"
+        );
         self.body_shapes.remove(&body_id_raw);
         self.sensor_bodies.remove(&body_id_raw);
     }
@@ -2544,6 +2562,27 @@ impl JoltWorld {
         for destroyed_body in destroyed_body_ids {
             self.sensor_bodies.remove(destroyed_body);
         }
+        // The ownership ledger is deliberately NOT cleared here: a `Children`
+        // despawn is deferred, so the part entities are still alive (holding
+        // these dead ids) when this runs, and they must recognize themselves as
+        // ragdoll-owned when their ids leave. `take_ragdoll_owned_part_body`
+        // consumes the entries at that point instead.
+    }
+
+    /// Files every part body of a freshly baked ragdoll as owned by it. Called
+    /// from the bake observer, before any part entity can leave.
+    pub fn register_ragdoll_part_bodies(&mut self, part_body_ids: &[u32]) {
+        self.ragdoll_part_body_ids
+            .extend(part_body_ids.iter().copied());
+    }
+
+    /// Takes a part body out of the ledger. True when it was ragdoll-owned, i.e.
+    /// when this id's entity must not destroy it — the teardown already did.
+    /// Consuming the entry is what keeps the ledger from outliving the ids: ids
+    /// get recycled, and a stale entry would make a later body on that id
+    /// undestroyable.
+    pub fn take_ragdoll_owned_part_body(&mut self, body_id_raw: u32) -> bool {
+        self.ragdoll_part_body_ids.remove(&body_id_raw)
     }
 
     /// Flags every body in the ragdoll as sensor-quiet (or restores

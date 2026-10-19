@@ -59,6 +59,23 @@ pub fn bake_jolt_sensor(
     }
 }
 
+/// Un-flags the body when [`JoltSensor`] leaves it: on despawn, or when game
+/// code removes just the marker. The flag lives on the Jolt body, not on the
+/// marker, so nothing else clears it and the body would stay non-colliding for
+/// good. Mirror of `remove_jolt_disabled`; a body that never baked is skipped
+/// (removal means gone), and the parked `PendingSensor` is dropped by the retry
+/// below without ever flagging.
+pub fn remove_jolt_sensor(
+    trigger: On<Remove, JoltSensor>,
+    sensor_query: Query<&JoltBodyId>,
+    mut physics_world: ResMut<JoltPhysicsWorld>,
+) {
+    let unsensored_entity = trigger.event().entity;
+    if let Ok(body_id) = sensor_query.get(unsensored_entity) {
+        physics_world.set_body_sensor(body_id.body_id_raw, false);
+    }
+}
+
 /// Retry marker for sensors added before their body baked. Removed once the
 /// flag lands.
 #[derive(Component, Clone, Copy, Debug, Default)]
@@ -68,11 +85,16 @@ pub struct PendingSensor;
 /// physics step so triggers never miss their first overlap.
 pub fn apply_pending_sensors(
     pending_query: Query<(Entity, &JoltBodyId), With<PendingSensor>>,
+    sensor_query: Query<(), With<JoltSensor>>,
     mut commands: Commands,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     for (sensor_entity, body_id) in &pending_query {
-        physics_world.set_body_sensor(body_id.body_id_raw, true);
+        // Marker removed while waiting: stale park, clear it without touching
+        // Jolt. Same guard as `apply_pending_disables`.
+        if sensor_query.contains(sensor_entity) {
+            physics_world.set_body_sensor(body_id.body_id_raw, true);
+        }
         commands.entity(sensor_entity).remove::<PendingSensor>();
     }
 }
@@ -84,19 +106,27 @@ pub fn drain_contact_events(
     mut physics_world: ResMut<JoltPhysicsWorld>,
     body_entities: Query<(Entity, &JoltBodyId)>,
 ) {
-    let mut pair_a = [0u32; MAX_CONTACT_EVENTS];
-    let mut pair_b = [0u32; MAX_CONTACT_EVENTS];
+    let mut added_ids_first = [0u32; MAX_CONTACT_EVENTS];
+    let mut added_ids_second = [0u32; MAX_CONTACT_EVENTS];
+    let mut removed_ids_first = [0u32; MAX_CONTACT_EVENTS];
+    let mut removed_ids_second = [0u32; MAX_CONTACT_EVENTS];
+    let added_kept = physics_world.drain_contact_added(&mut added_ids_first, &mut added_ids_second);
+    let removed_kept =
+        physics_world.drain_contact_removed(&mut removed_ids_first, &mut removed_ids_second);
+    // Most ticks touch nothing: skip the body pass and its map entirely.
+    if added_kept == 0 && removed_kept == 0 {
+        return;
+    }
     // One pass over the bodies, then O(1) per pair. Each pair needs two ids,
     // so the old per-id scan of the whole query cost up to 2 * 2 *
     // MAX_CONTACT_EVENTS full scans of every body each fixed tick.
     let entity_of_body = crate::body_sync::body_entity_index(&body_entities);
-    let added_kept = physics_world.drain_contact_added(&mut pair_a, &mut pair_b);
     for pair_index in 0..added_kept as usize {
         // A body despawned between the step and this drain is legitimately
         // absent; skip the pair rather than reporting half of it.
         let (Some(first_entity), Some(second_entity)) = (
-            entity_of_body.get(&pair_a[pair_index]),
-            entity_of_body.get(&pair_b[pair_index]),
+            entity_of_body.get(&added_ids_first[pair_index]),
+            entity_of_body.get(&added_ids_second[pair_index]),
         ) else {
             continue;
         };
@@ -105,11 +135,10 @@ pub fn drain_contact_events(
             second_entity: *second_entity,
         });
     }
-    let removed_kept = physics_world.drain_contact_removed(&mut pair_a, &mut pair_b);
     for pair_index in 0..removed_kept as usize {
         let (Some(first_entity), Some(second_entity)) = (
-            entity_of_body.get(&pair_a[pair_index]),
-            entity_of_body.get(&pair_b[pair_index]),
+            entity_of_body.get(&removed_ids_first[pair_index]),
+            entity_of_body.get(&removed_ids_second[pair_index]),
         ) else {
             continue;
         };

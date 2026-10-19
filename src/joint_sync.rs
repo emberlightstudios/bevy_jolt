@@ -668,6 +668,7 @@ pub fn create_jolt_joints(
     joint_ids: Query<&JoltJointId>,
     body_ids: Query<&JoltBodyId>,
     bodies: Query<(), With<JoltBody>>,
+    mut joint_body_index: ResMut<JointBodyIndex>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     let body_raw = |entity: Entity| body_ids.get(entity).ok().map(|body_id| body_id.body_id_raw);
@@ -896,6 +897,10 @@ pub fn create_jolt_joints(
         commands.entity(joint_entity).insert(JoltJointId {
             constraint_id_raw: constraint_id,
         });
+        // Indexed here, not at spawn: a joint has nothing to unlink until its
+        // constraint exists in Jolt.
+        joint_body_index.link(joint.body_a, joint_entity);
+        joint_body_index.link(joint.body_b, joint_entity);
     }
 }
 
@@ -918,13 +923,47 @@ pub fn apply_jolt_motor_drives(
     }
 }
 
-/// Removes the Jolt constraint when its joint entity is despawned, and drops
-/// gear-style joints whose sub-joint died with it.
-pub fn despawn_jolt_joint(
+/// Body entity -> joint entities whose constraint links that body.
+///
+/// Written where the constraint is created and where the joint goes away, so it
+/// holds exactly the joints that exist in Jolt — the only ones a body teardown
+/// has to unlink. Without it [`cascade_body_remove_to_joints`] scans every joint
+/// once per removed body, which is O(bodies x joints) in a teardown burst.
+#[derive(Resource, Default)]
+pub(crate) struct JointBodyIndex(std::collections::HashMap<Entity, Vec<Entity>>);
+
+impl JointBodyIndex {
+    fn link(&mut self, body_entity: Entity, joint_entity: Entity) {
+        self.0.entry(body_entity).or_default().push(joint_entity);
+    }
+
+    fn unlink(&mut self, body_entity: Entity, joint_entity: Entity) {
+        let Some(joint_entities) = self.0.get_mut(&body_entity) else {
+            return;
+        };
+        joint_entities.retain(|indexed_joint| *indexed_joint != joint_entity);
+        if joint_entities.is_empty() {
+            self.0.remove(&body_entity);
+        }
+    }
+
+    fn joints_of(&self, body_entity: Entity) -> &[Entity] {
+        self.0
+            .get(&body_entity)
+            .map_or(&[], |joint_entities| joint_entities.as_slice())
+    }
+}
+
+/// Removes the Jolt constraint when the joint entity's [`JoltJointId`] leaves
+/// it — a despawn, or game code removing just the id — and drops gear-style
+/// joints whose sub-joint died with it.
+pub fn remove_jolt_joint(
     trigger: On<Remove, JoltJointId>,
     mut commands: Commands,
     joint_query: Query<&JoltJointId>,
+    endpoints: Query<&JoltJoint>,
     dependents: Query<(Entity, &JoltJoint)>,
+    mut joint_body_index: ResMut<JointBodyIndex>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     let trigger_entity = trigger.event().entity;
@@ -935,6 +974,10 @@ pub fn despawn_jolt_joint(
         );
     };
     physics_world.remove_constraint(joint_id.constraint_id_raw);
+    if let Ok(joint) = endpoints.get(trigger_entity) {
+        joint_body_index.unlink(joint.body_a, trigger_entity);
+        joint_body_index.unlink(joint.body_b, trigger_entity);
+    }
     for (entity, joint) in &dependents {
         if entity != trigger_entity && joint.depends_on_joint(trigger_entity) {
             commands.entity(entity).despawn();
@@ -942,25 +985,45 @@ pub fn despawn_jolt_joint(
     }
 }
 
+/// Removes the constraint when [`JoltJoint`] leaves a live entity. The spec
+/// owns the constraint: without this observer, removing it left the constraint
+/// pulling an endpoint the game no longer considers jointed, and nothing
+/// re-created it (`create_jolt_joints` skips entities that already carry an id).
+///
+/// The body index is unlinked here, not in [`remove_jolt_joint`]: that observer
+/// runs after the component is gone and can no longer read the endpoints. A
+/// despawn fires both, and `unlink` is a `retain`, so unlinking twice is safe.
+pub fn retire_jolt_joint(
+    trigger: On<Remove, JoltJoint>,
+    endpoint_joint: Query<&JoltJoint>,
+    mut joint_body_index: ResMut<JointBodyIndex>,
+    mut commands: Commands,
+) {
+    let joint_entity = trigger.event().entity;
+    if let Ok(joint) = endpoint_joint.get(joint_entity) {
+        joint_body_index.unlink(joint.body_a, joint_entity);
+        joint_body_index.unlink(joint.body_b, joint_entity);
+    }
+    commands.entity(joint_entity).try_remove::<JoltJointId>();
+}
+
 /// Destroys joints attached to a body before the body itself goes away.
-/// Registered before `despawn_jolt_body`: the constraint removal here is
+/// Registered before `remove_jolt_body`: the constraint removal here is
 /// synchronous, while the joint-entity despawn is deferred, so the solver
 /// never sees a constraint pointing at a destroyed body. `remove_constraint`
 /// is idempotent, making the later joint-despawn observer a safe no-op.
 pub fn cascade_body_remove_to_joints(
     trigger: On<Remove, JoltBodyId>,
-    joints: Query<(Entity, &JoltJoint)>,
+    joint_body_index: Res<JointBodyIndex>,
     joint_ids: Query<&JoltJointId>,
     mut commands: Commands,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
     let dead_body = trigger.event().entity;
-    for (joint_entity, joint) in &joints {
-        if joint.body_a == dead_body || joint.body_b == dead_body {
-            if let Ok(joint_id) = joint_ids.get(joint_entity) {
-                physics_world.remove_constraint(joint_id.constraint_id_raw);
-            }
-            commands.entity(joint_entity).despawn();
+    for joint_entity in joint_body_index.joints_of(dead_body) {
+        if let Ok(joint_id) = joint_ids.get(*joint_entity) {
+            physics_world.remove_constraint(joint_id.constraint_id_raw);
         }
+        commands.entity(*joint_entity).despawn();
     }
 }

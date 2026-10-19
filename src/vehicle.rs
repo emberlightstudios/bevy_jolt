@@ -768,12 +768,12 @@ pub fn apply_jolt_vehicle_drives(
     }
 }
 
-/// Removes the Jolt vehicle constraint when its entity is despawned. The
-/// chassis body is owned by `despawn_jolt_body` via the shared `JoltBodyId`:
-/// splitting ownership this way keeps teardown order-independent
-/// (constraint removal never touches the body, body destroy never touches
-/// the constraint registry).
-pub fn despawn_jolt_vehicle(
+/// Removes the Jolt vehicle constraint when its [`JoltVehicleId`] leaves the
+/// entity: on despawn, or when game code removes just the id. The chassis body
+/// is owned by `remove_jolt_body` via the shared `JoltBodyId`: splitting
+/// ownership this way keeps teardown order-independent (constraint removal never
+/// touches the body, body destroy never touches the constraint registry).
+pub fn remove_jolt_vehicle(
     trigger: On<Remove, JoltVehicleId>,
     vehicle_query: Query<&JoltVehicleId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -783,6 +783,25 @@ pub fn despawn_jolt_vehicle(
         panic!("JoltVehicleId gone on {trigger_entity:?} before despawn ran");
     };
     physics_world.remove_constraint(vehicle_id.constraint_id_raw);
+}
+
+/// Frees the vehicle when [`VehicleSpec`] leaves a live entity, not only when
+/// the entity despawns. Creation built the constraint *and* the chassis body, so
+/// the spec owns both: removing just the spec left a vehicle driving with
+/// nothing referring to it, and a re-add built a second chassis while
+/// overwriting the id — an insert fires no removal, so the first leaked.
+///
+/// Both ids go, each to its own observer. Order does not matter: constraint
+/// removal never touches the body, body destroy never touches the constraint
+/// registry.
+pub fn retire_jolt_vehicle(trigger: On<Remove, VehicleSpec>, mut commands: Commands) {
+    let vehicle_entity = trigger.event().entity;
+    commands
+        .entity(vehicle_entity)
+        .try_remove::<JoltVehicleId>();
+    commands
+        .entity(vehicle_entity)
+        .try_remove::<crate::body_sync::JoltBodyId>();
 }
 
 /// Max pitch/roll angle with PI turning the anti-flip cone off.

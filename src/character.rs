@@ -150,9 +150,10 @@ pub fn bake_jolt_character(
     ));
 }
 
-/// Destroys the Jolt character when its entity goes. Order-independent:
-/// the character registry never touches bodies.
-pub fn despawn_jolt_character(
+/// Destroys the Jolt character when its [`JoltCharacterId`] leaves the entity:
+/// on despawn, or when game code removes just the id. Order-independent: the
+/// character registry never touches bodies.
+pub fn remove_jolt_character(
     trigger: On<Remove, JoltCharacterId>,
     character_query: Query<&JoltCharacterId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -162,6 +163,17 @@ pub fn despawn_jolt_character(
         panic!("JoltCharacterId gone on {trigger_entity:?} before despawn ran");
     };
     physics_world.character_destroy(character_id.character_id_raw);
+}
+
+/// Destroys the Jolt character when [`JoltCharacter`] leaves a live entity.
+/// The spec owns the controller: without this observer, removing it left the
+/// character in Jolt with nothing driving it, and a re-add created a second one
+/// while overwriting the id — an insert fires no removal, so the first leaked.
+/// Cascade, so [`remove_jolt_character`] stays the single destroy site.
+pub fn retire_jolt_character(trigger: On<Remove, JoltCharacter>, mut commands: Commands) {
+    commands
+        .entity(trigger.event().entity)
+        .try_remove::<JoltCharacterId>();
 }
 
 /// Applies a triggered teleport to the target entity's Jolt character.
@@ -357,8 +369,9 @@ pub fn bake_jolt_rigid_character(
     ));
 }
 
-/// Destroys the rigid character when its entity goes (removes its body).
-pub fn despawn_jolt_rigid_character(
+/// Destroys the rigid character when its [`JoltRigidCharacterId`] leaves the
+/// entity: on despawn, or when game code removes just the id (removes its body).
+pub fn remove_jolt_rigid_character(
     trigger: On<Remove, JoltRigidCharacterId>,
     character_query: Query<&JoltRigidCharacterId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -368,6 +381,17 @@ pub fn despawn_jolt_rigid_character(
         panic!("JoltRigidCharacterId gone on {trigger_entity:?} before despawn ran");
     };
     physics_world.rigid_character_destroy(character_id.character_id_raw);
+}
+
+/// Rigid-character counterpart of [`retire_jolt_character`]: the spec owns the
+/// body, so its removal takes the body with it.
+pub fn retire_jolt_rigid_character(
+    trigger: On<Remove, JoltRigidCharacter>,
+    mut commands: Commands,
+) {
+    commands
+        .entity(trigger.event().entity)
+        .try_remove::<JoltRigidCharacterId>();
 }
 
 /// Applies a triggered impulse to the target entity's rigid character.
