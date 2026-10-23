@@ -8,18 +8,16 @@ use crate::ragdoll::RagdollDriveAxis;
 use crate::spatial_queries::RayHit;
 use bevy::prelude::{Dir3, Quat, Vec3};
 use jolt_sys::{
-    BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi, VehicleLeanFfi, VehicleRollBarFfi,
-    VehicleTransmissionFfi, VehicleWheelFfi, bjolt_apply_buoyancy, bjolt_apply_force,
-    bjolt_apply_impulse, bjolt_bodies_no_collide, bjolt_body_is_active, bjolt_body_remove_destroy,
-    bjolt_body_set_damping, bjolt_body_set_density, bjolt_body_set_sensor, bjolt_body_state,
-    bjolt_body_transform, bjolt_character_can_walk_stairs, bjolt_character_create,
-    bjolt_character_destroy, bjolt_character_ground, bjolt_character_move,
-    bjolt_character_refresh_contacts, bjolt_character_rotation, bjolt_character_set_mass,
-    bjolt_character_set_padding, bjolt_character_set_rotation, bjolt_character_set_shape_offset,
-    bjolt_character_set_up, bjolt_character_set_user_data, bjolt_character_stance,
-    bjolt_character_stick_to_floor, bjolt_character_teleport, bjolt_character_update,
-    bjolt_character_walk_stairs, bjolt_constraint_drive_at,
-    bjolt_constraint_drive_swing_twist, bjolt_constraint_path_fraction,
+    bjolt_apply_buoyancy, bjolt_apply_force, bjolt_apply_impulse, bjolt_bodies_no_collide,
+    bjolt_body_is_active, bjolt_body_remove_destroy, bjolt_body_set_damping,
+    bjolt_body_set_density, bjolt_body_set_sensor, bjolt_body_state, bjolt_body_transform,
+    bjolt_character_can_walk_stairs, bjolt_character_create, bjolt_character_destroy,
+    bjolt_character_ground, bjolt_character_move, bjolt_character_refresh_contacts,
+    bjolt_character_rotation, bjolt_character_set_mass, bjolt_character_set_padding,
+    bjolt_character_set_rotation, bjolt_character_set_shape_offset, bjolt_character_set_up,
+    bjolt_character_set_user_data, bjolt_character_stance, bjolt_character_stick_to_floor,
+    bjolt_character_teleport, bjolt_character_update, bjolt_character_walk_stairs,
+    bjolt_constraint_drive_at, bjolt_constraint_drive_swing_twist, bjolt_constraint_path_fraction,
     bjolt_constraint_path_looping, bjolt_create_box, bjolt_create_capsule,
     bjolt_create_cloth_settings, bjolt_create_compound, bjolt_create_cone_constraint,
     bjolt_create_cube_settings, bjolt_create_cylinder, bjolt_create_distance_constraint,
@@ -38,11 +36,10 @@ use jolt_sys::{
     bjolt_ragdoll_build_finalize, bjolt_ragdoll_build_set_hinge,
     bjolt_ragdoll_build_set_swing_twist, bjolt_ragdoll_build_stabilize, bjolt_ragdoll_create,
     bjolt_ragdoll_destroy, bjolt_ragdoll_drive, bjolt_ragdoll_motor_off, bjolt_ragdoll_set_layer,
-    bjolt_ragdoll_set_motion,
-    bjolt_remove_constraint, bjolt_rigid_character_add_impulse, bjolt_rigid_character_add_velocity,
-    bjolt_rigid_character_body, bjolt_rigid_character_create, bjolt_rigid_character_destroy,
-    bjolt_rigid_character_ground, bjolt_rigid_character_pose, bjolt_rigid_character_post,
-    bjolt_rigid_character_set_layer, bjolt_rigid_character_set_pose,
+    bjolt_ragdoll_set_motion, bjolt_remove_constraint, bjolt_rigid_character_add_impulse,
+    bjolt_rigid_character_add_velocity, bjolt_rigid_character_body, bjolt_rigid_character_create,
+    bjolt_rigid_character_destroy, bjolt_rigid_character_ground, bjolt_rigid_character_pose,
+    bjolt_rigid_character_post, bjolt_rigid_character_set_layer, bjolt_rigid_character_set_pose,
     bjolt_rigid_character_set_velocity, bjolt_rigid_character_stance, bjolt_set_angular_velocity,
     bjolt_set_ccd, bjolt_set_friction, bjolt_set_gravity, bjolt_set_gravity_factor,
     bjolt_set_linear_velocity, bjolt_set_motion_type, bjolt_set_position,
@@ -53,8 +50,9 @@ use jolt_sys::{
     bjolt_soft_set_pressure, bjolt_soft_set_vertex_radius, bjolt_soft_velocities,
     bjolt_soft_vertex_count, bjolt_soft_vertex_radius, bjolt_soft_vertices, bjolt_soft_volume,
     bjolt_tracked_drive, bjolt_vehicle_drive, bjolt_vehicle_shift, bjolt_wake_body,
-    bjolt_world_body_count, bjolt_world_create_with_layers, bjolt_world_destroy, bjolt_world_gravity,
-    bjolt_world_update,
+    bjolt_world_body_count, bjolt_world_create_with_layers, bjolt_world_destroy,
+    bjolt_world_gravity, bjolt_world_update, BJoltWorld, VehicleDifferentialFfi, VehicleEngineFfi,
+    VehicleLeanFfi, VehicleRollBarFfi, VehicleTransmissionFfi, VehicleWheelFfi,
 };
 
 /// Which frame joint anchors/axes live in. `World` takes global positions
@@ -462,8 +460,7 @@ impl JoltWorld {
     /// (see [`JoltWorldBudgets`]); bodies are the ones you can watch.
     pub fn body_stats(&mut self) -> (u32, u32) {
         let mut max_bodies = 0u32;
-        let live_bodies =
-            unsafe { bjolt_world_body_count(self.world_ptr, &mut max_bodies) };
+        let live_bodies = unsafe { bjolt_world_body_count(self.world_ptr, &mut max_bodies) };
         (live_bodies, max_bodies)
     }
 
@@ -946,7 +943,7 @@ impl JoltWorld {
     /// and half width, the sim supplies the live pose (steer, suspension
     /// travel, and roll baked in).
     pub fn vehicle_wheel_debug(&self) -> Vec<(u32, u32, Vec<VehicleWheelPose>)> {
-        use jolt_sys::{MAX_VEHICLE_WHEELS, bjolt_vehicle_wheel_transforms};
+        use jolt_sys::{bjolt_vehicle_wheel_transforms, MAX_VEHICLE_WHEELS};
         self.vehicle_wheel_shapes
             .iter()
             .map(|(&constraint_id, &(body_id_raw, ref wheel_shapes))| {
@@ -1443,7 +1440,7 @@ impl JoltWorld {
         motor: crate::joint_sync::JointMotor,
         cart_rotation: crate::joint_sync::PathRotation,
     ) -> u32 {
-        use jolt_sys::{MAX_PATH_POINTS, PathPointFfi};
+        use jolt_sys::{PathPointFfi, MAX_PATH_POINTS};
         let points: Vec<PathPointFfi> = track_knots
             .iter()
             .map(|knot| PathPointFfi {
@@ -2558,7 +2555,11 @@ impl JoltWorld {
     /// collision). Disable path for settled ragdolls: the bodies stay in
     /// the broadphase but never wake on contact. Reads ids from
     /// `JoltRagdollParts.body_ids`, so callers pass ids, not entities.
-    pub fn ragdoll_set_disabled(&mut self, ragdoll_disabled_body_ids: &[u32], ragdoll_disabled: bool) {
+    pub fn ragdoll_set_disabled(
+        &mut self,
+        ragdoll_disabled_body_ids: &[u32],
+        ragdoll_disabled: bool,
+    ) {
         for ragdoll_body in ragdoll_disabled_body_ids {
             unsafe { bjolt_body_set_sensor(self.world_ptr, *ragdoll_body, ragdoll_disabled) }
             if ragdoll_disabled {
@@ -3152,10 +3153,7 @@ impl JoltWorld {
         capsule_radius: f32,
         max_penetration: f32,
     ) -> bool {
-        let previous_shape = self
-            .rigid_character_shapes
-            .get(&character_id_raw)
-            .copied();
+        let previous_shape = self.rigid_character_shapes.get(&character_id_raw).copied();
         let swapped = unsafe {
             bjolt_rigid_character_stance(
                 self.world_ptr,

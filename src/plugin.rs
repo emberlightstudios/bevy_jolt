@@ -56,8 +56,7 @@ impl FromWorld for JoltPhysicsWorld {
             .get_resource::<JoltStartupBudgets>()
             .map(|budgets_resource| budgets_resource.world_budgets)
             .unwrap_or_default();
-        let mut physics_world =
-            JoltWorld::with_layers_and_budgets(collision_layers, world_budgets);
+        let mut physics_world = JoltWorld::with_layers_and_budgets(collision_layers, world_budgets);
         // The plugin builder owns the startup gravity: Jolt itself always
         // starts at Earth-like (0, -9.81, 0), so overwrite with whatever the
         // builder carries (default = same value, no visible change).

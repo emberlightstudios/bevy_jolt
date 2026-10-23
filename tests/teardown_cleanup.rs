@@ -105,7 +105,11 @@ fn removing_jolt_body_frees_the_body_and_a_re_add_bakes_one() {
         .resource_mut::<JoltPhysicsWorld>()
         .body_stats()
         .0;
-    let baseline_shapes = app.world().resource::<JoltPhysicsWorld>().body_shapes().len();
+    let baseline_shapes = app
+        .world()
+        .resource::<JoltPhysicsWorld>()
+        .body_shapes()
+        .len();
 
     let body_entity = app
         .world_mut()
@@ -144,7 +148,10 @@ fn removing_jolt_body_frees_the_body_and_a_re_add_bakes_one() {
         "removing JoltBody leaked its Jolt body"
     );
     assert_eq!(
-        app.world().resource::<JoltPhysicsWorld>().body_shapes().len(),
+        app.world()
+            .resource::<JoltPhysicsWorld>()
+            .body_shapes()
+            .len(),
         baseline_shapes,
         "the shape table kept the retired body"
     );
@@ -191,7 +198,9 @@ fn removing_jolt_rigid_character_frees_its_body() {
         tick(&mut app);
     }
     assert!(
-        app.world().get::<JoltRigidCharacterId>(character_entity).is_some(),
+        app.world()
+            .get::<JoltRigidCharacterId>(character_entity)
+            .is_some(),
         "rigid character should bake"
     );
 
@@ -202,7 +211,9 @@ fn removing_jolt_rigid_character_frees_its_body() {
         tick(&mut app);
     }
     assert!(
-        app.world().get::<JoltRigidCharacterId>(character_entity).is_none(),
+        app.world()
+            .get::<JoltRigidCharacterId>(character_entity)
+            .is_none(),
         "the id should leave with the spec that owns it"
     );
     assert_eq!(
@@ -242,7 +253,9 @@ fn removing_jolt_sensor_restores_collision_response() {
         moving_tick(&mut app);
     }
 
-    app.world_mut().entity_mut(ball_entity).remove::<JoltSensor>();
+    app.world_mut()
+        .entity_mut(ball_entity)
+        .remove::<JoltSensor>();
     for _ in 0..90 {
         moving_tick(&mut app);
     }

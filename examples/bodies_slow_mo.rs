@@ -93,11 +93,7 @@ fn toggle_slow_mo(
 struct SlowMoText;
 
 fn spawn_overlay(mut commands: Commands) {
-    commands.spawn((
-        Text::new(""),
-        TextFont::from_font_size(18.0),
-        SlowMoText,
-    ));
+    commands.spawn((Text::new(""), TextFont::from_font_size(18.0), SlowMoText));
 }
 
 fn update_overlay(

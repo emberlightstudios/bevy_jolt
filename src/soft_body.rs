@@ -452,12 +452,10 @@ pub fn bake_jolt_soft_body(
     assert_ne!(shared_handle, 0, "Jolt rejected the soft shared settings");
     let body_id_raw = physics_world.create_soft_body(shared_handle, &body_config.as_world_config());
     assert_ne!(body_id_raw, 0, "Jolt rejected the soft body");
-    commands
-        .entity(soft_entity)
-        .insert(JoltSoftBodyId {
-            body_id_raw,
-            shared_handle,
-        });
+    commands.entity(soft_entity).insert(JoltSoftBodyId {
+        body_id_raw,
+        shared_handle,
+    });
     let Some(mesh_request) = mesh_request else {
         return;
     };
@@ -565,10 +563,7 @@ pub fn remove_jolt_soft_body(
 /// to them. Cascade, so [`remove_jolt_soft_body`] stays the single destroy site.
 /// An entity whose settings left before the bake ran has no id (the bake also
 /// needs [`JoltSoftBodyConfig`]), so `try_remove` no-ops there.
-pub fn retire_jolt_soft_body(
-    trigger: On<Remove, JoltSoftSharedSettings>,
-    mut commands: Commands,
-) {
+pub fn retire_jolt_soft_body(trigger: On<Remove, JoltSoftSharedSettings>, mut commands: Commands) {
     commands
         .entity(trigger.event().entity)
         .try_remove::<JoltSoftBodyId>();

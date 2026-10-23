@@ -23,8 +23,8 @@ pub use crate::body_forces::{
     JoltRestitution, JoltSleeping, JoltTeleport,
 };
 pub use crate::body_sync::{
-     JoltBody, JoltBodyId, JoltDisabled, JoltMotion, JoltShape, PreviousBodyTransform,
-     apply_pending_disables, bake_jolt_disabled, remove_jolt_disabled,
+    apply_pending_disables, bake_jolt_disabled, remove_jolt_disabled, JoltBody, JoltBodyId,
+    JoltDisabled, JoltMotion, JoltShape, PreviousBodyTransform,
 };
 pub use crate::buoyancy::{JoltBuoyant, JoltWater};
 pub use crate::character::{
@@ -37,19 +37,19 @@ pub use crate::contact_events::{
     JoltContactAdded, JoltContactRemoved, JoltSensor, MAX_CONTACT_EVENTS,
 };
 pub use crate::debug_draw::JoltDebugPlugin;
-pub use crate::joint_sync::{JointKind, JointMotor, JoltJoint, JoltJointId, JoltMotorDrive};
 pub use crate::joint_sync::{
-    MAX_PATH_KNOTS, PathKnot, PathRotation, SixDofAxis, SixDofFrame, SixDofLimits,
-    path_knots_from_waypoints,
+    path_knots_from_waypoints, PathKnot, PathRotation, SixDofAxis, SixDofFrame, SixDofLimits,
+    MAX_PATH_KNOTS,
 };
+pub use crate::joint_sync::{JointKind, JointMotor, JoltJoint, JoltJointId, JoltMotorDrive};
 pub use crate::physics_world::{
     BodyMotion, BodySnapshot, CharacterDofs, CollisionLayers, CompoundGeometry, CompoundPart,
     JointSpace, JoltWorld, JoltWorldBudgets, PhysicsShape, SoftBendType, SoftBodyConfig,
     VehicleWheelPose,
 };
 pub use crate::plugin::{
-    JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupBudgets, JoltStartupGravity,
-    JoltStep, JoltStepConfig, step_physics_world,
+    step_physics_world, JoltCollisionLayers, JoltPhysicsWorld, JoltPlugin, JoltStartupBudgets,
+    JoltStartupGravity, JoltStep, JoltStepConfig,
 };
 pub use crate::ragdoll::{
     JoltRagdoll, JoltRagdollHandle, JoltRagdollParts, RagdollDriveAxis, RagdollJoint, RagdollPart,
@@ -58,12 +58,12 @@ pub use crate::ragdoll::{
 pub use crate::soft_body::{
     JoltSoftBodyConfig, JoltSoftBodyId, JoltSoftBodyMesh, JoltSoftSharedSettings,
 };
-pub use crate::spatial_queries::{MAX_QUERY_HITS, OverlapHit, QueryProbe, RayHit};
+pub use crate::spatial_queries::{OverlapHit, QueryProbe, RayHit, MAX_QUERY_HITS};
 pub use crate::vehicle::{
     CurveKnot, JoltTrackedDrive, JoltVehicleDrive, JoltVehicleId, JoltVehicleShift,
-    STOCK_ENGINE_TORQUE, STOCK_TIRE_LATERAL, STOCK_TIRE_LONGITUDINAL, VehicleDifferential,
-    VehicleEngine, VehicleKind, VehicleLean, VehicleRollBar, VehicleSpec, VehicleTrack,
-    VehicleTransmission, VehicleWheel,
+    VehicleDifferential, VehicleEngine, VehicleKind, VehicleLean, VehicleRollBar, VehicleSpec,
+    VehicleTrack, VehicleTransmission, VehicleWheel, STOCK_ENGINE_TORQUE, STOCK_TIRE_LATERAL,
+    STOCK_TIRE_LONGITUDINAL,
 };
 pub use jolt_sys::MAX_OBJECT_LAYERS;
 

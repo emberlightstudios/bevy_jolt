@@ -11,8 +11,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy_jolt::{
-    JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape, JoltVehicleDrive, VehicleEngine,
-    VehicleSpec,
+    JoltBody, JoltDebugPlugin, JoltPlugin, JoltShape, JoltVehicleDrive, VehicleEngine, VehicleSpec,
 };
 
 const CAR_SPAWN: Vec3 = Vec3::new(0.0, 1.2, 0.0);
@@ -36,8 +35,8 @@ fn main() {
 /// Rolling bumps, flat near the origin so the car spawns on stable ground.
 fn terrain_height(world_x: f32, world_z: f32) -> f32 {
     let spawn_distance = world_x.hypot(world_z);
-    let blend = ((spawn_distance - SPAWN_FLAT_RADIUS * 0.5) / (SPAWN_FLAT_RADIUS * 0.5))
-        .clamp(0.0, 1.0);
+    let blend =
+        ((spawn_distance - SPAWN_FLAT_RADIUS * 0.5) / (SPAWN_FLAT_RADIUS * 0.5)).clamp(0.0, 1.0);
     let smooth_blend = blend * blend * (3.0 - 2.0 * blend);
     ((world_x * 0.35).sin() + (world_z * 0.3).cos()) * BUMP_AMPLITUDE * smooth_blend
 }

@@ -76,7 +76,9 @@ fn contact_events_name_the_two_bodies_in_the_pair() {
 
     for box_entity in &boxes {
         assert!(
-            app.world().get::<bevy_jolt::JoltBodyId>(*box_entity).is_some(),
+            app.world()
+                .get::<bevy_jolt::JoltBodyId>(*box_entity)
+                .is_some(),
             "every dynamic box should bake a JoltBodyId"
         );
     }
@@ -98,7 +100,10 @@ fn contact_events_name_the_two_bodies_in_the_pair() {
             app.world().get::<bevy_jolt::JoltBodyId>(second).is_some(),
             "reported second entity {second:?} carries no JoltBodyId"
         );
-        assert!(first != second, "a contact pair must name two distinct bodies");
+        assert!(
+            first != second,
+            "a contact pair must name two distinct bodies"
+        );
         // With one floor and well-separated boxes, every pair is box+floor.
         // This is what catches an index that maps ids to the wrong entity:
         // two boxes or two floors would both fail it.
