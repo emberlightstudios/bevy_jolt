@@ -150,7 +150,7 @@ impl JoltRagdollHandle {
 /// create → part entities. Runs on add; panics on invalid specs or failed
 /// creates because a half-built ragdoll is never useful.
 pub fn bake_jolt_ragdoll(
-    trigger: On<Add, JoltRagdoll>,
+    trigger: On<Add<JoltRagdoll>>,
     ragdoll_query: Query<(&JoltRagdoll, Option<&Transform>)>,
     mut commands: Commands,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -341,7 +341,7 @@ pub fn bake_jolt_ragdoll(
 /// ragdoll — despawn its entity, or remove [`JoltRagdoll`] — and both land here
 /// and clean up everything at once. A part entity is not a way to remove a body.
 pub fn remove_jolt_ragdoll(
-    trigger: On<Remove, JoltRagdollHandle>,
+    trigger: On<Remove<JoltRagdollHandle>>,
     handle_query: Query<(&JoltRagdollHandle, &JoltRagdollParts)>,
     mut commands: Commands,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -368,7 +368,7 @@ pub fn remove_jolt_ragdoll(
 /// the handle, so removing it removes the ragdoll — bodies, constraints and part
 /// entities. Without this observer the whole ragdoll kept running with nothing
 /// referring to it.
-pub fn retire_jolt_ragdoll(trigger: On<Remove, JoltRagdoll>, mut commands: Commands) {
+pub fn retire_jolt_ragdoll(trigger: On<Remove<JoltRagdoll>>, mut commands: Commands) {
     commands
         .entity(trigger.event().entity)
         .try_remove::<JoltRagdollHandle>();

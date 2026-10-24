@@ -418,7 +418,7 @@ impl JoltSoftBodyMesh {
 /// builds the Bevy mesh from the settings' faces (world-space verts, so
 /// the entity sits at origin).
 pub fn bake_jolt_soft_body(
-    trigger: On<Add, JoltSoftSharedSettings>,
+    trigger: On<Add<JoltSoftSharedSettings>>,
     mut commands: Commands,
     soft_query: Query<(
         &JoltSoftSharedSettings,
@@ -545,7 +545,7 @@ pub fn sync_soft_body_meshes(
 /// with it — that handle lives in a process-global registry, so nothing else
 /// can. Order-independent: the soft registry never touches rigid bodies.
 pub fn remove_jolt_soft_body(
-    trigger: On<Remove, JoltSoftBodyId>,
+    trigger: On<Remove<JoltSoftBodyId>>,
     soft_query: Query<&JoltSoftBodyId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
@@ -563,7 +563,7 @@ pub fn remove_jolt_soft_body(
 /// to them. Cascade, so [`remove_jolt_soft_body`] stays the single destroy site.
 /// An entity whose settings left before the bake ran has no id (the bake also
 /// needs [`JoltSoftBodyConfig`]), so `try_remove` no-ops there.
-pub fn retire_jolt_soft_body(trigger: On<Remove, JoltSoftSharedSettings>, mut commands: Commands) {
+pub fn retire_jolt_soft_body(trigger: On<Remove<JoltSoftSharedSettings>>, mut commands: Commands) {
     commands
         .entity(trigger.event().entity)
         .try_remove::<JoltSoftBodyId>();

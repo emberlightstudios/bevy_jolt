@@ -122,7 +122,7 @@ pub struct JoltCharacterTeleport {
 /// Creates the Jolt character from the spawn `Transform` and files the id.
 /// Bodies missing nothing: a character needs only its spec + pose.
 pub fn bake_jolt_character(
-    trigger: On<Add, JoltCharacter>,
+    trigger: On<Add<JoltCharacter>>,
     character_query: Query<(&JoltCharacter, &Transform)>,
     mut commands: Commands,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -154,7 +154,7 @@ pub fn bake_jolt_character(
 /// on despawn, or when game code removes just the id. Order-independent: the
 /// character registry never touches bodies.
 pub fn remove_jolt_character(
-    trigger: On<Remove, JoltCharacterId>,
+    trigger: On<Remove<JoltCharacterId>>,
     character_query: Query<&JoltCharacterId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
@@ -170,7 +170,7 @@ pub fn remove_jolt_character(
 /// character in Jolt with nothing driving it, and a re-add created a second one
 /// while overwriting the id — an insert fires no removal, so the first leaked.
 /// Cascade, so [`remove_jolt_character`] stays the single destroy site.
-pub fn retire_jolt_character(trigger: On<Remove, JoltCharacter>, mut commands: Commands) {
+pub fn retire_jolt_character(trigger: On<Remove<JoltCharacter>>, mut commands: Commands) {
     commands
         .entity(trigger.event().entity)
         .try_remove::<JoltCharacterId>();
@@ -337,7 +337,7 @@ pub struct JoltRigidCharacterId {
 /// Creates the rigid character body from the spawn `Transform` + spec and
 /// files the id.
 pub fn bake_jolt_rigid_character(
-    trigger: On<Add, JoltRigidCharacter>,
+    trigger: On<Add<JoltRigidCharacter>>,
     character_query: Query<(&JoltRigidCharacter, &Transform)>,
     mut commands: Commands,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -372,7 +372,7 @@ pub fn bake_jolt_rigid_character(
 /// Destroys the rigid character when its [`JoltRigidCharacterId`] leaves the
 /// entity: on despawn, or when game code removes just the id (removes its body).
 pub fn remove_jolt_rigid_character(
-    trigger: On<Remove, JoltRigidCharacterId>,
+    trigger: On<Remove<JoltRigidCharacterId>>,
     character_query: Query<&JoltRigidCharacterId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
@@ -386,7 +386,7 @@ pub fn remove_jolt_rigid_character(
 /// Rigid-character counterpart of [`retire_jolt_character`]: the spec owns the
 /// body, so its removal takes the body with it.
 pub fn retire_jolt_rigid_character(
-    trigger: On<Remove, JoltRigidCharacter>,
+    trigger: On<Remove<JoltRigidCharacter>>,
     mut commands: Commands,
 ) {
     commands

@@ -11,4 +11,4 @@ path = "src/lib.rs"
 
 [dependencies]
 jolt_sys = { path = "../jolt_sys" }
-bevy = { version = "=0.19.1", features = ["pbr_clustered_decals", "bevy_dev_tools"] }
+bevy = { version = "=0.20.0", features = ["pbr_clustered_decals", "bevy_dev_tools", "render_dev_tools"] }

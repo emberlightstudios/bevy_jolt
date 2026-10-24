@@ -774,7 +774,7 @@ pub fn apply_jolt_vehicle_drives(
 /// ownership this way keeps teardown order-independent (constraint removal never
 /// touches the body, body destroy never touches the constraint registry).
 pub fn remove_jolt_vehicle(
-    trigger: On<Remove, JoltVehicleId>,
+    trigger: On<Remove<JoltVehicleId>>,
     vehicle_query: Query<&JoltVehicleId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
@@ -794,7 +794,7 @@ pub fn remove_jolt_vehicle(
 /// Both ids go, each to its own observer. Order does not matter: constraint
 /// removal never touches the body, body destroy never touches the constraint
 /// registry.
-pub fn retire_jolt_vehicle(trigger: On<Remove, VehicleSpec>, mut commands: Commands) {
+pub fn retire_jolt_vehicle(trigger: On<Remove<VehicleSpec>>, mut commands: Commands) {
     let vehicle_entity = trigger.event().entity;
     commands
         .entity(vehicle_entity)

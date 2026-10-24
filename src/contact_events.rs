@@ -46,7 +46,7 @@ pub struct JoltContactRemoved {
 /// without pushing. Bodies missing their id (not baked yet) keep the marker
 /// and retry next tick via the poll below... (see `apply_pending_sensors`).
 pub fn bake_jolt_sensor(
-    trigger: On<Add, JoltSensor>,
+    trigger: On<Add<JoltSensor>>,
     sensor_query: Query<&JoltBodyId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
     mut commands: Commands,
@@ -66,7 +66,7 @@ pub fn bake_jolt_sensor(
 /// (removal means gone), and the parked `PendingSensor` is dropped by the retry
 /// below without ever flagging.
 pub fn remove_jolt_sensor(
-    trigger: On<Remove, JoltSensor>,
+    trigger: On<Remove<JoltSensor>>,
     sensor_query: Query<&JoltBodyId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {

@@ -38,7 +38,7 @@ pub struct PendingDisable;
 /// through contact events but apply no collision response. Bodies missing
 /// their id (not baked yet) park on `PendingDisable` and retry pre-step.
 pub fn bake_jolt_disabled(
-    trigger: On<Add, JoltDisabled>,
+    trigger: On<Add<JoltDisabled>>,
     body_ids: Query<&JoltBodyId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
     mut commands: Commands,
@@ -54,7 +54,7 @@ pub fn bake_jolt_disabled(
 /// Re-enables a body when `JoltDisabled` leaves: collision response back on.
 /// Missing bodies (despawned mid-frame) are skipped: removal means gone.
 pub fn remove_jolt_disabled(
-    trigger: On<Remove, JoltDisabled>,
+    trigger: On<Remove<JoltDisabled>>,
     body_ids: Query<&JoltBodyId>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
@@ -250,7 +250,7 @@ pub struct PreviousBodyTransform {
 /// same tick: density + gravity ride the creation call, the rest apply right
 /// after. Later writes flow through the pre-step `Changed` pushes.
 pub fn spawn_jolt_body(
-    trigger: On<Add, JoltBody>,
+    trigger: On<Add<JoltBody>>,
     mut commands: Commands,
     body_query: Query<(
         &JoltBody,
@@ -597,7 +597,7 @@ pub fn interpolate_body_transforms(
 /// bookkeeping that nothing in the crate removes, and correct for every removal
 /// path because `Remove` fires for all components before any is removed.
 pub fn remove_jolt_body(
-    trigger: On<Remove, JoltBodyId>,
+    trigger: On<Remove<JoltBodyId>>,
     body_query: Query<&JoltBodyId>,
     part_bodies: Query<(), With<crate::ragdoll::RagdollPartBody>>,
     mut physics_world: ResMut<JoltPhysicsWorld>,
@@ -623,7 +623,7 @@ pub fn remove_jolt_body(
 /// components destroys exactly once whichever order Bevy runs the hooks in.
 /// `try_remove` because on that despawn path the entity can already be gone
 /// when the command applies.
-pub fn retire_jolt_body(trigger: On<Remove, JoltBody>, mut commands: Commands) {
+pub fn retire_jolt_body(trigger: On<Remove<JoltBody>>, mut commands: Commands) {
     commands
         .entity(trigger.event().entity)
         .try_remove::<JoltBodyId>();

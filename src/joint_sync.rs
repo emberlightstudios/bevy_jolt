@@ -958,7 +958,7 @@ impl JointBodyIndex {
 /// it — a despawn, or game code removing just the id — and drops gear-style
 /// joints whose sub-joint died with it.
 pub fn remove_jolt_joint(
-    trigger: On<Remove, JoltJointId>,
+    trigger: On<Remove<JoltJointId>>,
     mut commands: Commands,
     joint_query: Query<&JoltJointId>,
     endpoints: Query<&JoltJoint>,
@@ -994,7 +994,7 @@ pub fn remove_jolt_joint(
 /// runs after the component is gone and can no longer read the endpoints. A
 /// despawn fires both, and `unlink` is a `retain`, so unlinking twice is safe.
 pub fn retire_jolt_joint(
-    trigger: On<Remove, JoltJoint>,
+    trigger: On<Remove<JoltJoint>>,
     endpoint_joint: Query<&JoltJoint>,
     mut joint_body_index: ResMut<JointBodyIndex>,
     mut commands: Commands,
@@ -1013,7 +1013,7 @@ pub fn retire_jolt_joint(
 /// never sees a constraint pointing at a destroyed body. `remove_constraint`
 /// is idempotent, making the later joint-despawn observer a safe no-op.
 pub fn cascade_body_remove_to_joints(
-    trigger: On<Remove, JoltBodyId>,
+    trigger: On<Remove<JoltBodyId>>,
     joint_body_index: Res<JointBodyIndex>,
     joint_ids: Query<&JoltJointId>,
     mut commands: Commands,
