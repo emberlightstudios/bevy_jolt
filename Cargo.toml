@@ -10,5 +10,5 @@ name = "bevy_jolt"
 path = "src/lib.rs"
 
 [dependencies]
-jolt_sys = { path = "../jolt_sys" }
+jolt_sys = { git = "https://github.com/emberlightstudios/jolt_sys", rev = "683e3400e6700266cee4c0703e1637548cef8867" }
 bevy = { version = "=0.20.0", features = ["pbr_clustered_decals", "bevy_dev_tools", "render_dev_tools"] }
