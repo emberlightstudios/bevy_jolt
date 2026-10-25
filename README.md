@@ -2,6 +2,8 @@
 
 Safe Bevy integration for Jolt Physics. Raw FFI lives in `jolt_sys`; this
 crate owns world lifetime, the safe body API, and the Bevy schedule wiring.
+Both crates are workspace members of this repo (`jolt_sys/`), and `jolt_sys`
+builds the vendored Jolt from `jolt_sys/vendor/JoltPhysics` — clone recursively.
 
 ## Schedules: where your game code goes
 
