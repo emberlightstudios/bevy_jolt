@@ -263,27 +263,18 @@ other.
 
 ## Body-id → entity lookup
 
-**Fixed 2026-10-18.** Resolving a Jolt body id to a Bevy `Entity` used to be a
-linear scan of `Query<(Entity, &JoltBodyId)>` repeated once per event, in four
-places:
+`body_sync::body_entity_index` resolves a `JoltBodyId` from an event or the
+shape table to an `Entity` in O(1). `sync_sleep_states`,
+`drain_contact_events` and `debug_draw` all build it once per system
+invocation; any new code doing the same lookup uses it rather than scanning
+`Query<(Entity, &JoltBodyId)>`.
 
-- `src/body_forces.rs` — `sync_sleep_states`, up to `2 * MAX_ACTIVATION_EVENTS`
-  (64) lookups per tick.
-- `src/contact_events.rs` — `drain_contact_events`, **two** ids per pair over
-  up to `2 * MAX_CONTACT_EVENTS` (128), so as many as 256 full scans every tick.
-- `src/debug_draw.rs` — twice: once per body in the shape table, and again per
-  vehicle's wheels. That one was O(bodies²) in a system running every frame.
-
-`body_sync::body_entity_index` now builds the map once per system invocation
-and every lookup is O(1). It is deliberately *not* cached on `JoltWorld`: bodies
-are created in four places (body bake, ragdoll parts, vehicle chassis, soft
-body) and freed through several paths — component removal, a ragdoll teardown
-that frees a whole part list at once, vehicle and soft-body teardown — so a
-persistent index would need lifecycle rules more subtle than the lookup it
-replaces. A per-invocation map costs one pass and cannot go stale.
-
-If you add a fifth place that needs this lookup, use the helper rather than
-re-scanning. Regression coverage: `tests/body_event_index.rs`.
+It is deliberately not cached on `JoltWorld`: bodies are created in four places
+(body bake, ragdoll parts, vehicle chassis, soft body) and freed through
+several paths (component removal, a ragdoll teardown that frees a whole part
+list, vehicle and soft-body teardown), so a persistent index would need
+lifecycle rules more subtle than the lookup it replaces. A per-invocation map
+costs one pass and cannot go stale. Coverage: `tests/body_event_index.rs`.
 
 Joint teardown uses the same discipline in the other direction: `JointBodyIndex`
 maps a body to the joints linking it, built where the constraint is created, so
