@@ -57,7 +57,8 @@ fn spawn_character_scene(mut commands: Commands) {
         ))
         .id();
     // Rigid twin: a real capsule body on the next lane, driven by velocity.
-    // Same stairs, same march: proves the rigid path climbs and grounds.
+    // Same stairs, same march: proves the rigid path climbs and grounds. The ground
+    // component is what asks for the post-step ground query on a rigid character.
     let rigid_walker = commands
         .spawn((
             Transform::from_xyz(-6.0, start_height, 3.0),
@@ -66,6 +67,7 @@ fn spawn_character_scene(mut commands: Commands) {
                 linear_velocity: Vec3::ZERO,
                 angular_velocity: Vec3::ZERO,
             },
+            JoltCharacterGround::default(),
         ))
         .id();
     commands.insert_resource(CharacterDemo {

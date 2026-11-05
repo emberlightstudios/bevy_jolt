@@ -6,6 +6,14 @@
 //! included); [`step_jolt_characters`] runs the move before the physics
 //! step and writes the result back to `Transform`. Grounded state lands in
 //! [`JoltCharacterGround`] for jumps and footsteps.
+//!
+//! The rigid side ([`JoltRigidCharacter`]) is a real capsule body, so its
+//! ground reading is opt-in: a virtual character's move has to know about
+//! the floor anyway and reports it for free, while a rigid character's is a
+//! separate world query per tick (`Character::PostSimulation`). Add
+//! [`JoltCharacterGround`] to a rigid character to ask for it; leave it off
+//! and the character still moves, held up by contacts and gravity, and pays
+//! nothing to find out.
 
 use bevy::prelude::*;
 
@@ -363,10 +371,13 @@ pub fn bake_jolt_rigid_character(
         character.user_data,
     );
     assert_ne!(character_id_raw, 0, "Jolt rejected the rigid character");
-    commands.entity(character_entity).insert((
-        JoltRigidCharacterId { character_id_raw },
-        JoltCharacterGround::default(),
-    ));
+    // Ground is opt-in for a rigid character: adding [`JoltCharacterGround`] is what
+    // asks for the post-step ground query. A rigid body is held up by its contacts
+    // and gravity anyway, so a character that never asks "am I standing on
+    // something" pays nothing to find out.
+    commands
+        .entity(character_entity)
+        .insert(JoltRigidCharacterId { character_id_raw });
 }
 
 /// Destroys the rigid character when its [`JoltRigidCharacterId`] leaves the
@@ -460,33 +471,49 @@ pub fn step_jolt_rigid_characters(
     }
 }
 
-/// Refreshes ground state after the physics step, then copies each rigid
-/// character's pose + ground reading into Bevy. The pose is the capsule
-/// center; the entity origin is the feet, so the center height comes back
+/// Copies each rigid character's pose into Bevy, and — for characters that carry
+/// [`JoltCharacterGround`] — refreshes their ground reading first. The pose is the
+/// capsule center; the entity origin is the feet, so the center height comes back
 /// off the position.
+///
+/// The ground refresh (`Character::PostSimulation`) is a world query per character,
+/// so it runs only where the answer is asked for: the component's presence is the
+/// opt-in, and the pose copy — a read of fields Jolt has cached — stays unconditional
+/// so a character without it still moves on screen.
 pub fn sync_rigid_character_transforms(
     mut character_query: Query<
         (
             &JoltRigidCharacterId,
             &JoltRigidCharacter,
             &mut Transform,
-            &mut JoltCharacterGround,
+            Option<&mut JoltCharacterGround>,
         ),
         Without<JoltCharacterId>,
     >,
     mut physics_world: ResMut<JoltPhysicsWorld>,
 ) {
-    for (character_id, character_spec, mut character_transform, mut character_ground) in
+    for (character_id, character_spec, mut character_transform, character_ground) in
         &mut character_query
     {
-        physics_world
-            .rigid_character_post(character_id.character_id_raw, character_spec.max_separation);
+        // Asked without consuming the option: the copy below needs it intact.
+        if character_ground.is_some() {
+            physics_world.rigid_character_post(
+                character_id.character_id_raw,
+                character_spec.max_separation,
+            );
+        }
+
         let (character_position, character_rotation, _, ground_reading) =
             physics_world.rigid_character_pose(character_id.character_id_raw);
         character_transform.translation =
             character_position - Vec3::Y * character_spec.capsule_center_height;
         character_transform.rotation = character_rotation;
-        *character_ground = ground_reading;
+
+        // No component means nobody asked, and without the refresh above the reading
+        // is whatever the last refresh left: writing it would be inventing an answer.
+        if let Some(mut character_ground) = character_ground {
+            *character_ground = ground_reading;
+        }
     }
 }
 
