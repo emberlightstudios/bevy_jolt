@@ -171,7 +171,13 @@ Impulse ≠ one-frame force: forces scale with dt, impulses don't.
   capsule so its bottom cap rests on the entity origin (feet at y = 0): the
   Jolt `Character` centers its capsule on its position, character roots hold
   meshes and skeletons at the origin. Edit the capsule size in place and the
-  stance swap re-anchors the feet — no sinking, no floating.
+  stance swap re-anchors the feet — no sinking, no floating. **Ground is
+  opt-in here**: add `JoltCharacterGround` and the crate refreshes it after
+  every step, which costs a collide-shape query per character per tick
+  (`Character::PostSimulation`). Leave it off and the character still gets
+  its pose and is still held up by contacts and gravity, for one query per
+  character per tick less. The virtual character reports ground
+  unconditionally — its move has to look at the floor anyway.
 
 Keep the velocity types separate: same field name, different machinery
 (solver overwrite vs move-and-slide). Shared components with `With`/`Without`
